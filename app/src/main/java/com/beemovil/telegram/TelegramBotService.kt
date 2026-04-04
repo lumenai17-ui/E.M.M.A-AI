@@ -8,18 +8,14 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.beemovil.MainActivity
-import com.beemovil.R
 import com.beemovil.agent.AgentConfig
 import com.beemovil.agent.BeeAgent
-import com.beemovil.agent.DefaultAgents
 import com.beemovil.llm.LlmFactory
 import com.beemovil.memory.BeeMemoryDB
-import com.beemovil.skills.BeeSkill
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
-import java.io.IOException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -82,8 +78,23 @@ class TelegramBotService : Service() {
                     return START_NOT_STICKY
                 }
 
-                setupAgent(provider, model, apiKey)
-                startBot()
+                // Must call startForeground IMMEDIATELY before any async work
+                val notification = buildNotification("🐝 Telegram Bot iniciando...")
+                try {
+                    startForeground(NOTIFICATION_ID, notification)
+                } catch (e: Exception) {
+                    Log.e(TAG, "startForeground failed: ${e.message}")
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
+
+                try {
+                    setupAgent(provider, model, apiKey)
+                    startPolling()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Setup failed: ${e.message}", e)
+                    stopBot()
+                }
             }
         }
         return START_STICKY
@@ -91,11 +102,6 @@ class TelegramBotService : Service() {
 
     private fun setupAgent(providerType: String, model: String, apiKey: String) {
         val llmProvider = LlmFactory.createProvider(providerType, apiKey, model)
-        val skills = (applicationContext as? MainActivity)?.let { emptyMap<String, BeeSkill>() }
-            ?: emptyMap()
-
-        // Use shared prefs to get skills reference
-        val prefs = getSharedPreferences("beemovil", Context.MODE_PRIVATE)
         val memoryDB = try { BeeMemoryDB(this) } catch (e: Exception) { null }
 
         val config = AgentConfig(
@@ -115,38 +121,39 @@ class TelegramBotService : Service() {
             model = model
         )
 
-        // Get skills from the app's skill registry
         val skillMap = BeeMovilSkillRegistry.getSkills(this)
         agent = BeeAgent(config, llmProvider, skillMap, memoryDB)
         Log.d(TAG, "Agent ready: $providerType/$model with ${skillMap.size} skills")
     }
 
-    private fun startBot() {
+    private fun startPolling() {
         shouldRun.set(true)
         isRunning.set(true)
 
-        val notification = buildNotification("🐝 Telegram Bot activo — esperando mensajes...")
-        startForeground(NOTIFICATION_ID, notification)
-
         pollingThread = Thread {
-            Log.i(TAG, "Polling started for bot token: ${botToken.take(10)}...")
+            Log.i(TAG, "Polling started")
 
-            // Get bot info first
+            // Get bot info
             val botName = getBotInfo()
             if (botName != null) {
-                updateNotification("🐝 @$botName — activo y escuchando")
+                updateNotification("🐝 @$botName activo")
                 Log.i(TAG, "Bot: @$botName")
+            } else {
+                updateNotification("🐝 Bot activo (verificando token...)")
             }
 
             while (shouldRun.get()) {
                 try {
                     pollUpdates()
+                } catch (e: InterruptedException) {
+                    break
                 } catch (e: Exception) {
                     Log.e(TAG, "Poll error: ${e.message}")
-                    if (shouldRun.get()) Thread.sleep(5000)
+                    if (shouldRun.get()) {
+                        try { Thread.sleep(5000) } catch (_: InterruptedException) { break }
+                    }
                 }
             }
-
             Log.i(TAG, "Polling stopped")
         }.apply {
             name = "TelegramPolling"
@@ -160,7 +167,7 @@ class TelegramBotService : Service() {
         isRunning.set(false)
         pollingThread?.interrupt()
         pollingThread = null
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        try { stopForeground(STOP_FOREGROUND_REMOVE) } catch (_: Exception) {}
         stopSelf()
         Log.i(TAG, "Bot stopped")
     }
@@ -171,10 +178,11 @@ class TelegramBotService : Service() {
 
         val response = client.newCall(request).execute()
         val body = response.body?.string() ?: return
+        response.close()
         val json = JSONObject(body)
 
         if (!json.optBoolean("ok", false)) {
-            Log.e(TAG, "Telegram API error: $body")
+            Log.e(TAG, "API error: $body")
             Thread.sleep(5000)
             return
         }
@@ -188,18 +196,18 @@ class TelegramBotService : Service() {
 
             val message = update.optJSONObject("message") ?: continue
             val text = message.optString("text", "")
-            val chatId = message.optJSONObject("chat")?.optLong("chat_id", 0) ?: 0
+            val chat = message.optJSONObject("chat")
+            val chatId = chat?.optLong("chat_id") ?: chat?.optLong("id") ?: 0L
             val fromUser = message.optJSONObject("from")?.optString("first_name", "User") ?: "User"
 
             if (text.isBlank() || chatId == 0L) continue
 
-            Log.d(TAG, "Message from $fromUser: $text")
+            Log.d(TAG, "From $fromUser ($chatId): $text")
             handleMessage(chatId, text, fromUser)
         }
     }
 
     private fun handleMessage(chatId: Long, text: String, fromUser: String) {
-        // Send typing action
         sendChatAction(chatId, "typing")
 
         Thread {
@@ -209,83 +217,81 @@ class TelegramBotService : Service() {
 
                 sendMessage(chatId, reply)
                 messagesHandled++
-                updateNotification("🐝 Telegram Bot — $messagesHandled mensajes procesados")
-                Log.d(TAG, "Replied to $fromUser: ${reply.take(100)}...")
+                updateNotification("🐝 Telegram Bot — $messagesHandled msgs")
             } catch (e: Exception) {
-                Log.e(TAG, "Handler error: ${e.message}")
-                sendMessage(chatId, "❌ Error procesando mensaje: ${e.message}")
+                Log.e(TAG, "Handle error: ${e.message}", e)
+                sendMessage(chatId, "❌ Error: ${e.message?.take(200)}")
             }
         }.start()
     }
 
     private fun sendMessage(chatId: Long, text: String) {
         val url = "https://api.telegram.org/bot$botToken/sendMessage"
-        val jsonBody = JSONObject().apply {
-            put("chat_id", chatId)
-            put("text", text)
-            put("parse_mode", "Markdown")
-        }
-        val body = jsonBody.toString().toRequestBody("application/json".toMediaType())
-        val request = Request.Builder().url(url).post(body).build()
-
+        // Try with Markdown first, fallback to plain
         try {
-            client.newCall(request).execute().close()
+            val body = JSONObject().apply {
+                put("chat_id", chatId)
+                put("text", text)
+                put("parse_mode", "Markdown")
+            }.toString().toRequestBody("application/json".toMediaType())
+            val resp = client.newCall(Request.Builder().url(url).post(body).build()).execute()
+            val respBody = resp.body?.string() ?: ""
+            resp.close()
+            if (JSONObject(respBody).optBoolean("ok", false)) return
+        } catch (_: Exception) {}
+
+        // Fallback: plain text
+        try {
+            val body = JSONObject().apply {
+                put("chat_id", chatId)
+                put("text", text)
+            }.toString().toRequestBody("application/json".toMediaType())
+            client.newCall(Request.Builder().url(url).post(body).build()).execute().close()
         } catch (e: Exception) {
-            Log.e(TAG, "Send error: ${e.message}")
-            // Retry without markdown
-            try {
-                val plainBody = JSONObject().apply {
-                    put("chat_id", chatId)
-                    put("text", text)
-                }.toString().toRequestBody("application/json".toMediaType())
-                client.newCall(Request.Builder().url(url).post(plainBody).build()).execute().close()
-            } catch (_: Exception) {}
+            Log.e(TAG, "Send failed: ${e.message}")
         }
     }
 
     private fun sendChatAction(chatId: Long, action: String) {
-        val url = "https://api.telegram.org/bot$botToken/sendChatAction"
-        val body = JSONObject().apply {
-            put("chat_id", chatId)
-            put("action", action)
-        }.toString().toRequestBody("application/json".toMediaType())
-
         try {
+            val url = "https://api.telegram.org/bot$botToken/sendChatAction"
+            val body = JSONObject().apply {
+                put("chat_id", chatId)
+                put("action", action)
+            }.toString().toRequestBody("application/json".toMediaType())
             client.newCall(Request.Builder().url(url).post(body).build()).execute().close()
         } catch (_: Exception) {}
     }
 
     private fun getBotInfo(): String? {
         return try {
-            val url = "https://api.telegram.org/bot$botToken/getMe"
-            val response = client.newCall(Request.Builder().url(url).build()).execute()
-            val json = JSONObject(response.body?.string() ?: "")
-            json.optJSONObject("result")?.optString("username")
+            val resp = client.newCall(
+                Request.Builder().url("https://api.telegram.org/bot$botToken/getMe").build()
+            ).execute()
+            val body = resp.body?.string() ?: ""
+            resp.close()
+            JSONObject(body).optJSONObject("result")?.optString("username")
         } catch (_: Exception) { null }
     }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Telegram Bot",
-                NotificationManager.IMPORTANCE_LOW
+                CHANNEL_ID, "Telegram Bot", NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Bee-Movil Telegram Bot Service"
+                description = "Bee-Movil Telegram Bot"
                 setShowBadge(false)
             }
-            val nm = getSystemService(NotificationManager::class.java)
-            nm.createNotificationChannel(channel)
+            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
     }
 
     private fun buildNotification(text: String): Notification {
         val intent = Intent(this, MainActivity::class.java)
-        val pi = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
+        val pi = PendingIntent.getActivity(this, 0, intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
 
-        val stopIntent = Intent(this, TelegramBotService::class.java).apply {
-            action = ACTION_STOP
-        }
+        val stopIntent = Intent(this, TelegramBotService::class.java).apply { action = ACTION_STOP }
         val stopPi = PendingIntent.getService(this, 1, stopIntent, PendingIntent.FLAG_IMMUTABLE)
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
@@ -299,8 +305,10 @@ class TelegramBotService : Service() {
     }
 
     private fun updateNotification(text: String) {
-        val nm = getSystemService(NotificationManager::class.java)
-        nm.notify(NOTIFICATION_ID, buildNotification(text))
+        try {
+            getSystemService(NotificationManager::class.java)
+                .notify(NOTIFICATION_ID, buildNotification(text))
+        } catch (_: Exception) {}
     }
 
     override fun onDestroy() {
