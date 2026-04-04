@@ -119,11 +119,33 @@ fun ChatScreen(viewModel: ChatViewModel, onSettingsClick: () -> Unit = {}) {
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.Bottom
                 ) {
+                    // Mic button
+                    if (viewModel.voiceManager != null) {
+                        val isRecording = viewModel.isRecording.value
+                        IconButton(
+                            onClick = { viewModel.toggleVoiceInput { inputText = it } },
+                            modifier = Modifier.size(42.dp)
+                        ) {
+                            Icon(
+                                if (isRecording) Icons.Filled.Stop else Icons.Filled.Mic,
+                                contentDescription = "Voice",
+                                tint = if (isRecording) Color(0xFFFF4444) else BeeYellow,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+
                     TextField(
                         value = inputText,
                         onValueChange = { inputText = it },
                         modifier = Modifier.weight(1f),
-                        placeholder = { Text("Escribe un mensaje...", color = BeeGrayLight) },
+                        placeholder = {
+                            Text(
+                                if (viewModel.isRecording.value) "🎙️ Escuchando..." else "Escribe un mensaje...",
+                                color = if (viewModel.isRecording.value) Color(0xFFFF6666) else BeeGrayLight
+                            )
+                        },
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = BeeGray,
                             unfocusedContainerColor = BeeGray,

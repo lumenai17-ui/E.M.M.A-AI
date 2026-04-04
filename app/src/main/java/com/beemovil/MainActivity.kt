@@ -62,6 +62,18 @@ class MainActivity : ComponentActivity() {
         viewModel.currentProvider.value = savedProvider
         viewModel.currentModel.value = savedModel
 
+        // Init voice input
+        val voiceManager = com.beemovil.skills.VoiceInputManager(this)
+        voiceManager.initialize()
+        viewModel.voiceManager = voiceManager
+
+        // Request mic permission
+        if (!voiceManager.hasPermission) {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 1001)
+            }
+        }
+
         val hasKey = when (savedProvider) {
             "ollama" -> olKey.isNotBlank()
             else -> orKey.isNotBlank()

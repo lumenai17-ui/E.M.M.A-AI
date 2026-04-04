@@ -46,6 +46,37 @@ class ChatViewModel : ViewModel() {
     var memoryDB: BeeMemoryDB? = null
         private set
 
+    // Voice input
+    var voiceManager: com.beemovil.skills.VoiceInputManager? = null
+    val isRecording = mutableStateOf(false)
+
+    fun toggleVoiceInput(onText: (String) -> Unit) {
+        val vm = voiceManager ?: return
+        if (isRecording.value) {
+            vm.stopListening()
+            isRecording.value = false
+        } else {
+            vm.startListening(
+                onPartialResult = { partial -> mainHandler.post { onText(partial) } },
+                onListeningState = { state -> mainHandler.post { isRecording.value = state } },
+                onErrorCallback = { error ->
+                    mainHandler.post {
+                        isRecording.value = false
+                        messages.add(ChatUiMessage("🎙️ $error", isUser = false, agentIcon = "⚠️", isError = true))
+                    }
+                },
+                onFinalResult = { text ->
+                    mainHandler.post {
+                        isRecording.value = false
+                        onText(text)
+                        // Auto-send voice input
+                        sendMessage(text)
+                    }
+                }
+            )
+        }
+    }
+
     fun initialize(skillMap: Map<String, BeeSkill>, openRouterKey: String, ollamaKey: String = "", memory: BeeMemoryDB? = null) {
         this.skills = skillMap
         this.memoryDB = memory
