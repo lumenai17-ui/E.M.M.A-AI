@@ -47,6 +47,10 @@ class MainActivity : ComponentActivity() {
         try { skills["share"] = ShareSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "ShareSkill: ${e.message}") }
         try { skills["file"] = FileSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "FileSkill: ${e.message}") }
 
+        // Init memory system
+        val memoryDB = com.beemovil.memory.BeeMemoryDB(this)
+        try { skills["memory"] = com.beemovil.skills.MemorySkill(memoryDB) } catch (e: Throwable) { Log.e("BeeMovil", "MemorySkill: ${e.message}") }
+
         // Load saved preferences
         val prefs = getSharedPreferences("beemovil", Context.MODE_PRIVATE)
         val orKey = prefs.getString("openrouter_api_key", "") ?: ""
@@ -54,7 +58,7 @@ class MainActivity : ComponentActivity() {
         val savedProvider = prefs.getString("selected_provider", "openrouter") ?: "openrouter"
         val savedModel = prefs.getString("selected_model", "qwen/qwen3.6-plus:free") ?: "qwen/qwen3.6-plus:free"
 
-        viewModel.initialize(skills, orKey, olKey)
+        viewModel.initialize(skills, orKey, olKey, memoryDB)
         viewModel.currentProvider.value = savedProvider
         viewModel.currentModel.value = savedModel
 

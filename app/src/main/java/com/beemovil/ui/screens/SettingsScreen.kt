@@ -131,7 +131,7 @@ fun SettingsScreen(
         // === SKILLS INFO ===
         Card(colors = CardDefaults.cardColors(containerColor = BeeBlackLight), shape = RoundedCornerShape(16.dp)) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("🔧 Skills Nativos (7)", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = BeeYellow)
+                Text("🔧 Skills Nativos (8)", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = BeeYellow)
                 Spacer(modifier = Modifier.height(8.dp))
                 SkillRow("📱", "device_info", "Info del dispositivo")
                 SkillRow("📋", "clipboard", "Copiar/leer clipboard")
@@ -140,6 +140,7 @@ fun SettingsScreen(
                 SkillRow("🌐", "browser", "Abrir URLs")
                 SkillRow("📤", "share", "Compartir contenido")
                 SkillRow("📁", "file", "Archivos (leer/escribir)")
+                SkillRow("🧠", "memory", "RAG Memory (recuerda/olvida)")
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     "⚠️ Skills solo funcionan con modelos que soporten function calling (Ollama Cloud, modelos de pago)",

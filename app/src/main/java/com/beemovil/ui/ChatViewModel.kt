@@ -10,6 +10,7 @@ import com.beemovil.agent.AgentConfig
 import com.beemovil.agent.BeeAgent
 import com.beemovil.agent.DefaultAgents
 import com.beemovil.llm.LlmFactory
+import com.beemovil.memory.BeeMemoryDB
 import com.beemovil.skills.BeeSkill
 
 data class ChatUiMessage(
@@ -33,26 +34,34 @@ class ChatViewModel : ViewModel() {
     val availableAgents = DefaultAgents.ALL
 
     // Provider configuration
-    val currentProvider = mutableStateOf("openrouter")  // "openrouter" or "ollama"
+    val currentProvider = mutableStateOf("openrouter")
     val currentModel = mutableStateOf("qwen/qwen3.6-plus:free")
 
     private var agents = mutableMapOf<String, BeeAgent>()
     private var skills = mapOf<String, BeeSkill>()
-    private var apiKeys = mutableMapOf<String, String>()  // provider -> key
+    private var apiKeys = mutableMapOf<String, String>()
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    fun initialize(skillMap: Map<String, BeeSkill>, openRouterKey: String, ollamaKey: String = "") {
+    // Memory system
+    var memoryDB: BeeMemoryDB? = null
+        private set
+
+    fun initialize(skillMap: Map<String, BeeSkill>, openRouterKey: String, ollamaKey: String = "", memory: BeeMemoryDB? = null) {
         this.skills = skillMap
+        this.memoryDB = memory
         if (openRouterKey.isNotBlank()) apiKeys["openrouter"] = openRouterKey
         if (ollamaKey.isNotBlank()) apiKeys["ollama"] = ollamaKey
 
         if (messages.isEmpty()) {
             val skillCount = skillMap.size
+            val memCount = memory?.getMemoryCount() ?: 0
+            val memInfo = if (memCount > 0) "\n🧠 **$memCount memorias** almacenadas" else ""
+
             messages.add(ChatUiMessage(
                 text = "¡Hola! Soy Bee-Movil 🐝\n\n" +
                         "Tengo **$skillCount skills nativos** listos.\n" +
-                        "Proveedor: **${getProviderDisplayName()}**\n\n" +
-                        "¿En qué te puedo ayudar?",
+                        "Proveedor: **${getProviderDisplayName()}**" +
+                        memInfo + "\n\n¿En qué te puedo ayudar?",
                 isUser = false, agentIcon = "🐝"
             ))
         }
@@ -85,7 +94,6 @@ class ChatViewModel : ViewModel() {
     }
 
     private fun getOrCreateAgent(config: AgentConfig): BeeAgent {
-        // Invalidate agent if provider/model changed
         val key = "${config.id}_${currentProvider.value}_${currentModel.value}"
         return agents.getOrPut(key) {
             val apiKey = apiKeys[currentProvider.value] ?: ""
@@ -94,8 +102,8 @@ class ChatViewModel : ViewModel() {
                 apiKey = apiKey,
                 model = currentModel.value
             )
-            Log.d(TAG, "Created agent: ${config.id} on ${currentProvider.value}/$currentModel")
-            BeeAgent(config, provider, skills)
+            Log.d(TAG, "Created agent: ${config.id} on ${currentProvider.value}/${currentModel.value}")
+            BeeAgent(config, provider, skills, memoryDB)
         }
     }
 
@@ -156,8 +164,9 @@ class ChatViewModel : ViewModel() {
         val config = currentAgentConfig.value
         agents.values.forEach { try { it.clearMemory() } catch (_: Throwable) {} }
         messages.clear()
+        val memCount = memoryDB?.getMemoryCount() ?: 0
         messages.add(ChatUiMessage(
-            text = "Chat limpiado ${config.icon}",
+            text = "Chat limpiado ${config.icon}\n🧠 $memCount memorias persisten",
             isUser = false, agentIcon = config.icon
         ))
     }

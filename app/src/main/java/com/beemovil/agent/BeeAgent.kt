@@ -2,17 +2,27 @@ package com.beemovil.agent
 
 import android.util.Log
 import com.beemovil.llm.*
+import com.beemovil.memory.BeeMemoryDB
 import com.beemovil.skills.BeeSkill
 import org.json.JSONObject
 
 /**
- * BeeAgent — SYNCHRONOUS agentic loop. No coroutines.
+ * BeeAgent — SYNCHRONOUS agentic loop with RAG memory.
  * Must be called from a background thread.
+ *
+ * RAG Flow:
+ * 1. User sends message
+ * 2. Agent retrieves relevant memories from local DB
+ * 3. Memories injected into system prompt as context
+ * 4. LLM responds with awareness of past interactions
+ * 5. Conversation saved to local DB
  */
 class BeeAgent(
     val config: AgentConfig,
     private val llm: LlmProvider,
-    private val skills: Map<String, BeeSkill>
+    private val skills: Map<String, BeeSkill>,
+    private val memoryDB: BeeMemoryDB? = null,
+    private val sessionId: String = "session_${System.currentTimeMillis()}"
 ) {
     companion object {
         private const val TAG = "BeeAgent"
@@ -38,11 +48,25 @@ class BeeAgent(
     }
 
     /**
-     * SYNCHRONOUS chat — no suspend, no coroutines.
+     * SYNCHRONOUS chat with RAG memory injection.
      */
     fun chat(userMessage: String): AgentResponse {
+        // ── RAG: Inject relevant memories into context ──
+        if (memoryDB != null) {
+            val ragContext = memoryDB.buildRagContext(userMessage)
+            if (ragContext.isNotBlank()) {
+                // Update system prompt with RAG context
+                val enhancedPrompt = config.systemPrompt + "\n\n" + ragContext
+                messages[0] = ChatMessage(role = "system", content = enhancedPrompt)
+                Log.d(TAG, "[${config.id}] RAG context injected (${ragContext.length} chars)")
+            }
+        }
+
         messages.add(ChatMessage(role = "user", content = userMessage))
         Log.i(TAG, "[${config.id}] User: ${userMessage.take(80)}")
+
+        // Save user message to DB
+        memoryDB?.saveMessage(sessionId, "user", userMessage, config.id)
 
         val toolResults = mutableListOf<ToolExecution>()
 
@@ -70,6 +94,10 @@ class BeeAgent(
                 } else {
                     val text = response.text ?: "..."
                     messages.add(ChatMessage(role = "assistant", content = text))
+
+                    // Save assistant response to DB
+                    memoryDB?.saveMessage(sessionId, "assistant", text, config.id)
+
                     Log.i(TAG, "[${config.id}] Response: ${text.take(80)}")
                     return AgentResponse(text = text, toolExecutions = toolResults, agentId = config.id)
                 }
