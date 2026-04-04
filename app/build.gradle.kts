@@ -93,5 +93,8 @@ dependencies {
     implementation("com.sun.mail:android-mail:1.6.7")
     implementation("com.sun.mail:android-activation:1.6.7")
 
+    // Google Sign-In (Phase 8 - pending Cloud setup)
+    // implementation("com.google.android.gms:play-services-auth:21.0.0")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
