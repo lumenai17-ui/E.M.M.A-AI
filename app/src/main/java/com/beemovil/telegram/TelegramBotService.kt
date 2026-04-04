@@ -38,6 +38,8 @@ class TelegramBotService : Service() {
         const val EXTRA_PROVIDER = "provider"
         const val EXTRA_MODEL = "model"
         const val EXTRA_API_KEY = "api_key"
+        const val PREF_ALLOWED_CHATS = "telegram_allowed_chats"
+        const val PREF_ALLOW_ALL = "telegram_allow_all"
 
         // Status callback for UI
         var onStatusChange: ((status: String, botName: String, msgCount: Int) -> Unit)? = null
@@ -51,6 +53,9 @@ class TelegramBotService : Service() {
     private var agent: BeeAgent? = null
     private var messagesHandled = 0
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var allowedChatIds = mutableSetOf<Long>()
+    private var allowAll = false
+    private var ownerSet = false
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(35, TimeUnit.SECONDS)
@@ -94,6 +99,7 @@ class TelegramBotService : Service() {
                 startForeground(NOTIFICATION_ID, buildNotification("🐝 Conectando a Telegram..."))
                 reportStatus("connecting", "", 0)
                 showToast("🐝 Conectando a Telegram...")
+                loadAllowedChats()
 
                 // Setup async to not block
                 Thread {
@@ -219,13 +225,66 @@ class TelegramBotService : Service() {
             val message = update.optJSONObject("message") ?: continue
             val text = message.optString("text", "")
             val chat = message.optJSONObject("chat")
-            val chatId = chat?.optLong("chat_id") ?: chat?.optLong("id") ?: 0L
+
+            // Telegram API: chat.id is the correct field (not chat_id)
+            val chatId = chat?.getLong("id") ?: 0L
             val fromUser = message.optJSONObject("from")?.optString("first_name", "User") ?: "User"
 
-            if (text.isBlank() || chatId == 0L) continue
-            Log.d(TAG, "From $fromUser ($chatId): $text")
+            Log.d(TAG, "Update ${update.getLong("update_id")}: chat=$chat, chatId=$chatId, text='$text', from=$fromUser")
+
+            if (text.isBlank() || chatId == 0L) {
+                Log.d(TAG, "Skipping: text blank=${text.isBlank()}, chatId=$chatId")
+                continue
+            }
+
+            // Guardrail: check allowlist
+            if (!isAllowed(chatId, fromUser)) {
+                Log.w(TAG, "Blocked message from $fromUser ($chatId) - not in allowlist")
+                sendMessage(chatId, "🔒 No tienes acceso a este bot. Contacta al dueño.")
+                continue
+            }
+
+            Log.i(TAG, "Processing message from $fromUser ($chatId): $text")
             handleMessage(chatId, text, fromUser)
         }
+    }
+
+    /**
+     * Allowlist guardrail. First user is auto-added as owner.
+     */
+    private fun isAllowed(chatId: Long, userName: String): Boolean {
+        if (allowAll) return true
+        if (allowedChatIds.contains(chatId)) return true
+
+        // First user to message becomes the owner (auto-pair)
+        if (!ownerSet && allowedChatIds.isEmpty()) {
+            allowedChatIds.add(chatId)
+            ownerSet = true
+            saveAllowedChats()
+            Log.i(TAG, "Owner auto-paired: $userName ($chatId)")
+            mainHandler.post { showToast("👤 Dueño registrado: $userName") }
+            return true
+        }
+        return false
+    }
+
+    private fun saveAllowedChats() {
+        val prefs = getSharedPreferences("bee_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putString(PREF_ALLOWED_CHATS, allowedChatIds.joinToString(",")).apply()
+    }
+
+    private fun loadAllowedChats() {
+        val prefs = getSharedPreferences("bee_prefs", Context.MODE_PRIVATE)
+        allowAll = prefs.getBoolean(PREF_ALLOW_ALL, false)
+        val saved = prefs.getString(PREF_ALLOWED_CHATS, "") ?: ""
+        allowedChatIds.clear()
+        if (saved.isNotBlank()) {
+            saved.split(",").forEach { id ->
+                try { allowedChatIds.add(id.trim().toLong()) } catch (_: Exception) {}
+            }
+            ownerSet = true
+        }
+        Log.d(TAG, "Allowlist loaded: $allowedChatIds, allowAll=$allowAll")
     }
 
     private fun handleMessage(chatId: Long, text: String, fromUser: String) {
