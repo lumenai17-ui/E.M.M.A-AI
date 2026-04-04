@@ -52,6 +52,11 @@ class ChatViewModel : ViewModel() {
     var chatHistoryDB: ChatHistoryDB? = null
         private set
 
+    // Telegram bot state (observable by Compose)
+    val telegramBotStatus = mutableStateOf("offline") // "offline" | "connecting" | "online" | "error"
+    val telegramBotName = mutableStateOf("")
+    val telegramBotMessages = mutableStateOf(0)
+
     // Voice input
     var voiceManager: com.beemovil.skills.VoiceInputManager? = null
     val isRecording = mutableStateOf(false)

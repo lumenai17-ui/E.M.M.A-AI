@@ -192,12 +192,73 @@ fun SettingsScreen(
 
                 var telegramToken by remember { mutableStateOf(prefs.getString("telegram_bot_token", "") ?: "") }
                 var showToken by remember { mutableStateOf(false) }
-                val botRunning = com.beemovil.telegram.TelegramBotService.isRunning.get()
+                val botStatus = viewModel.telegramBotStatus.value
+                val botName = viewModel.telegramBotName.value
+
+                // Register status callback
+                DisposableEffect(Unit) {
+                    com.beemovil.telegram.TelegramBotService.onStatusChange = { status, name, count ->
+                        viewModel.telegramBotStatus.value = status
+                        if (name.isNotBlank()) viewModel.telegramBotName.value = name
+                        viewModel.telegramBotMessages.value = count
+                    }
+                    onDispose {
+                        com.beemovil.telegram.TelegramBotService.onStatusChange = null
+                    }
+                }
+
+                // Status indicator
+                if (botStatus != "offline") {
+                    Surface(
+                        color = when (botStatus) {
+                            "online" -> BeeYellow.copy(alpha = 0.15f)
+                            "connecting" -> BeeGrayLight.copy(alpha = 0.15f)
+                            else -> androidx.compose.ui.graphics.Color.Red.copy(alpha = 0.15f)
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                when (botStatus) {
+                                    "online" -> "🟢"
+                                    "connecting" -> "🟡"
+                                    else -> "🔴"
+                                },
+                                fontSize = 16.sp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    when (botStatus) {
+                                        "online" -> if (botName.isNotBlank()) "@$botName conectado" else "Bot conectado"
+                                        "connecting" -> "Conectando..."
+                                        else -> "Error de conexión"
+                                    },
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = BeeWhite
+                                )
+                                if (botStatus == "online" && viewModel.telegramBotMessages.value > 0) {
+                                    Text(
+                                        "${viewModel.telegramBotMessages.value} mensajes procesados",
+                                        fontSize = 11.sp, color = BeeGrayLight
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
 
                 OutlinedTextField(
                     value = telegramToken,
                     onValueChange = { telegramToken = it },
                     label = { Text("Bot Token (@BotFather)") },
+                    placeholder = { Text("123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11", color = BeeGray) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     visualTransformation = if (showToken) VisualTransformation.None else PasswordVisualTransformation(),
@@ -223,6 +284,7 @@ fun SettingsScreen(
                     Button(
                         onClick = {
                             prefs.edit().putString("telegram_bot_token", telegramToken).apply()
+                            viewModel.telegramBotStatus.value = "connecting"
                             val intent = android.content.Intent(context, com.beemovil.telegram.TelegramBotService::class.java).apply {
                                 action = com.beemovil.telegram.TelegramBotService.ACTION_START
                                 putExtra(com.beemovil.telegram.TelegramBotService.EXTRA_BOT_TOKEN, telegramToken)
@@ -237,20 +299,25 @@ fun SettingsScreen(
                                 context.startService(intent)
                             }
                         },
-                        enabled = telegramToken.isNotBlank() && !botRunning,
+                        enabled = telegramToken.isNotBlank() && botStatus != "online" && botStatus != "connecting",
                         colors = ButtonDefaults.buttonColors(containerColor = BeeYellow, contentColor = BeeBlack),
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text(if (botRunning) "✅ Activo" else "▶️ Iniciar Bot")
+                        Text(when (botStatus) {
+                            "online" -> "✅ Conectado"
+                            "connecting" -> "⏳ Conectando..."
+                            else -> "▶️ Conectar Bot"
+                        })
                     }
 
-                    if (botRunning) {
+                    if (botStatus == "online" || botStatus == "connecting") {
                         Button(
                             onClick = {
-                                val intent = android.content.Intent(context, com.beemovil.telegram.TelegramBotService::class.java).apply {
-                                    action = com.beemovil.telegram.TelegramBotService.ACTION_STOP
-                                }
-                                context.startService(intent)
+                                context.startService(
+                                    android.content.Intent(context, com.beemovil.telegram.TelegramBotService::class.java)
+                                        .apply { action = com.beemovil.telegram.TelegramBotService.ACTION_STOP }
+                                )
+                                viewModel.telegramBotStatus.value = "offline"
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = BeeGray, contentColor = BeeWhite),
                             modifier = Modifier.weight(1f)
@@ -262,7 +329,7 @@ fun SettingsScreen(
 
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    "1. Abre @BotFather en Telegram\n2. /newbot → copia el token\n3. Pega aquí → Iniciar Bot",
+                    "1. Abre Telegram → busca @BotFather\n2. Escribe /newbot → elige nombre\n3. Copia el token → pega aquí → Conectar",
                     fontSize = 11.sp, color = BeeGrayLight
                 )
             }
