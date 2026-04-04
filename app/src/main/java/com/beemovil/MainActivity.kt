@@ -67,6 +67,15 @@ class MainActivity : ComponentActivity() {
         try { skills["datetime"] = DateTimeSkill() } catch (e: Throwable) { Log.e("BeeMovil", "DateTimeSkill: ${e.message}") }
         try { skills["calculator"] = CalculatorSkill() } catch (e: Throwable) { Log.e("BeeMovil", "CalculatorSkill: ${e.message}") }
 
+        // Phase 6 skills (Production Ready — high value)
+        try { skills["calendar"] = CalendarSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "CalendarSkill: ${e.message}") }
+        try { skills["email"] = EmailSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "EmailSkill: ${e.message}") }
+        try { skills["music_control"] = MusicControlSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "MusicControlSkill: ${e.message}") }
+        try { skills["weather"] = WeatherSkill() } catch (e: Throwable) { Log.e("BeeMovil", "WeatherSkill: ${e.message}") }
+        try { skills["web_search"] = WebSearchSkill() } catch (e: Throwable) { Log.e("BeeMovil", "WebSearchSkill: ${e.message}") }
+        try { skills["brightness"] = BrightnessSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "BrightnessSkill: ${e.message}") }
+        try { skills["battery_saver"] = BatterySaverSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "BatterySaverSkill: ${e.message}") }
+        try { skills["qr_generator"] = QrGeneratorSkill() } catch (e: Throwable) { Log.e("BeeMovil", "QrGeneratorSkill: ${e.message}") }
 
         // Load saved preferences
         val prefs = getSharedPreferences("beemovil", Context.MODE_PRIVATE)
@@ -84,7 +93,7 @@ class MainActivity : ComponentActivity() {
         voiceManager.initialize()
         viewModel.voiceManager = voiceManager
 
-        // Request permissions (mic, location, contacts)
+        // Request permissions (mic, location, contacts, calendar)
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
             val perms = mutableListOf<String>()
             if (!voiceManager.hasPermission) perms.add(android.Manifest.permission.RECORD_AUDIO)
@@ -92,6 +101,8 @@ class MainActivity : ComponentActivity() {
                 perms.add(android.Manifest.permission.ACCESS_FINE_LOCATION)
             if (checkSelfPermission(android.Manifest.permission.READ_CONTACTS) != android.content.pm.PackageManager.PERMISSION_GRANTED)
                 perms.add(android.Manifest.permission.READ_CONTACTS)
+            if (checkSelfPermission(android.Manifest.permission.READ_CALENDAR) != android.content.pm.PackageManager.PERMISSION_GRANTED)
+                perms.add(android.Manifest.permission.READ_CALENDAR)
             if (perms.isNotEmpty()) requestPermissions(perms.toTypedArray(), 1001)
         }
 
