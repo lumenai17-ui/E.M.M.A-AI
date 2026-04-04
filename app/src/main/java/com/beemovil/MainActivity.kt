@@ -82,6 +82,12 @@ class MainActivity : ComponentActivity() {
         try { skills["battery_saver"] = BatterySaverSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "BatterySaverSkill: ${e.message}") }
         try { skills["qr_generator"] = QrGeneratorSkill() } catch (e: Throwable) { Log.e("BeeMovil", "QrGeneratorSkill: ${e.message}") }
 
+        // Phase 9 skills (Productivity)
+        try { skills["web_fetch"] = WebFetchSkill() } catch (e: Throwable) { Log.e("BeeMovil", "WebFetchSkill: ${e.message}") }
+        try { skills["generate_pdf"] = PdfGeneratorSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "PdfGenSkill: ${e.message}") }
+        try { skills["generate_html"] = HtmlGeneratorSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "HtmlGenSkill: ${e.message}") }
+        try { skills["generate_spreadsheet"] = SpreadsheetSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "SpreadsheetSkill: ${e.message}") }
+
         // Load saved preferences
         val prefs = getSharedPreferences("beemovil", Context.MODE_PRIVATE)
         val orKey = prefs.getString("openrouter_api_key", "") ?: ""
