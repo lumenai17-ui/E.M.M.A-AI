@@ -110,17 +110,8 @@ class OpenRouterProvider(
     }
 
     override fun complete(messages: List<ChatMessage>, tools: List<ToolDefinition>): LlmResponse {
-        // For free models: inject tools into system prompt text
-        val effectiveMessages = if (isFreeModel && tools.isNotEmpty()) {
-            messages.map { msg ->
-                if (msg.role == "system") {
-                    ChatMessage(
-                        role = "system",
-                        content = (msg.content ?: "") + buildToolPrompt(tools)
-                    )
-                } else msg
-            }
-        } else messages
+        // For free models: skip tools entirely (rate limit is token-based)
+        val effectiveMessages = messages
 
         val body = JSONObject().apply {
             put("model", model)
