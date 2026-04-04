@@ -1,9 +1,13 @@
 package com.beemovil.ui.screens
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -11,63 +15,129 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.beemovil.ui.ChatUiMessage
 import com.beemovil.ui.ChatViewModel
 import com.beemovil.ui.theme.*
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(viewModel: ChatViewModel, onSettingsClick: () -> Unit = {}) {
     var inputText by remember { mutableStateOf("") }
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    var showAgentPicker by remember { mutableStateOf(false) }
+
+    // Auto-scroll on new messages
+    LaunchedEffect(viewModel.messages.size) {
+        if (viewModel.messages.isNotEmpty()) {
+            listState.animateScrollToItem(viewModel.messages.size - 1)
+        }
+    }
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("🐝 Bee-Movil", fontWeight = FontWeight.Bold) },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = BeeBlack,
-                    titleContentColor = BeeWhite
-                ),
-                actions = {
-                    IconButton(onClick = onSettingsClick) {
-                        Icon(Icons.Filled.Settings, "Settings", tint = BeeYellow)
+            Surface(
+                color = Color.Transparent,
+                modifier = Modifier.background(
+                    Brush.verticalGradient(
+                        colors = listOf(BeeBlack, BeeBlack.copy(alpha = 0.95f))
+                    )
+                )
+            ) {
+                TopAppBar(
+                    title = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        ) {
+                            // Agent avatar
+                            Surface(
+                                onClick = { showAgentPicker = true },
+                                color = BeeYellow.copy(alpha = 0.15f),
+                                shape = CircleShape,
+                                modifier = Modifier.size(38.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(
+                                        viewModel.currentAgentConfig.value.icon,
+                                        fontSize = 20.sp
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    viewModel.currentAgentConfig.value.name,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 17.sp,
+                                    color = BeeWhite
+                                )
+                                Text(
+                                    "${viewModel.currentProvider.value} · ${viewModel.currentModel.value.substringAfterLast("/")}",
+                                    fontSize = 11.sp,
+                                    color = BeeGrayLight
+                                )
+                            }
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        titleContentColor = BeeWhite
+                    ),
+                    actions = {
+                        IconButton(onClick = onSettingsClick) {
+                            Icon(Icons.Filled.Settings, "Settings", tint = BeeYellow)
+                        }
+                        IconButton(onClick = { viewModel.clearChat() }) {
+                            Icon(Icons.Filled.Delete, "Clear", tint = BeeGrayLight)
+                        }
                     }
-                    IconButton(onClick = { viewModel.clearChat() }) {
-                        Icon(Icons.Filled.Delete, "Clear", tint = BeeGrayLight)
-                    }
-                }
-            )
+                )
+            }
         },
         bottomBar = {
-            Surface(color = BeeBlackLight) {
+            Surface(
+                color = BeeBlackLight,
+                shadowElevation = 8.dp
+            ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(8.dp)
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
                         .navigationBarsPadding(),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.Bottom
                 ) {
                     TextField(
                         value = inputText,
                         onValueChange = { inputText = it },
                         modifier = Modifier.weight(1f),
-                        placeholder = { Text("Escribe un mensaje...") },
+                        placeholder = { Text("Escribe un mensaje...", color = BeeGrayLight) },
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = BeeGray,
                             unfocusedContainerColor = BeeGray,
                             focusedTextColor = BeeWhite,
                             unfocusedTextColor = BeeWhite,
-                            cursorColor = BeeYellow
+                            cursorColor = BeeYellow,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent
                         ),
                         shape = RoundedCornerShape(24.dp),
-                        singleLine = true
+                        singleLine = false,
+                        maxLines = 4
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Button(
+                    FloatingActionButton(
                         onClick = {
                             val msg = inputText.trim()
                             if (msg.isNotEmpty()) {
@@ -75,13 +145,14 @@ fun ChatScreen(viewModel: ChatViewModel, onSettingsClick: () -> Unit = {}) {
                                 viewModel.sendMessage(msg)
                             }
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = BeeYellow),
-                        enabled = !viewModel.isLoading.value
+                        containerColor = if (viewModel.isLoading.value) BeeGray else BeeYellow,
+                        contentColor = BeeBlack,
+                        modifier = Modifier.size(48.dp)
                     ) {
                         if (viewModel.isLoading.value) {
-                            Text("⏳", fontSize = 18.sp)
+                            TypingDots()
                         } else {
-                            Text("➤", fontSize = 18.sp, color = BeeBlack)
+                            Icon(Icons.Filled.Send, "Send", modifier = Modifier.size(20.dp))
                         }
                     }
                 }
@@ -89,57 +160,316 @@ fun ChatScreen(viewModel: ChatViewModel, onSettingsClick: () -> Unit = {}) {
         }
     ) { padding ->
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .background(BeeBlack),
-            contentPadding = PaddingValues(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             items(
-                items = viewModel.messages.toList(),
-                key = null
+                items = viewModel.messages.toList()
             ) { message ->
-                SimpleBubble(message)
+                MessageBubble(message)
+            }
+
+            // Typing indicator
+            if (viewModel.isLoading.value) {
+                item {
+                    TypingIndicator(viewModel.currentAgentConfig.value.icon)
+                }
+            }
+        }
+    }
+
+    // Agent Picker Dialog
+    if (showAgentPicker) {
+        AgentPickerDialog(
+            agents = viewModel.availableAgents,
+            currentId = viewModel.currentAgentConfig.value.id,
+            onSelect = { config ->
+                viewModel.switchAgent(config)
+                showAgentPicker = false
+            },
+            onDismiss = { showAgentPicker = false }
+        )
+    }
+}
+
+@Composable
+fun MessageBubble(message: ChatUiMessage) {
+    val isUser = message.isUser
+
+    val bubbleGradient = when {
+        message.isError -> Brush.linearGradient(listOf(Color(0xFF4A1A1A), Color(0xFF3A1515)))
+        isUser -> Brush.linearGradient(listOf(Color(0xFF2D3250), Color(0xFF424669)))
+        else -> Brush.linearGradient(listOf(Color(0xFF1A1A2E), Color(0xFF16213E)))
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
+    ) {
+        // Agent icon for non-user messages
+        if (!isUser) {
+            Text(
+                message.agentIcon,
+                fontSize = 14.sp,
+                modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
+            )
+        }
+
+        // Bubble
+        Surface(
+            color = Color.Transparent,
+            shape = RoundedCornerShape(
+                topStart = if (isUser) 16.dp else 4.dp,
+                topEnd = if (isUser) 4.dp else 16.dp,
+                bottomStart = 16.dp,
+                bottomEnd = 16.dp
+            ),
+            modifier = Modifier.widthIn(max = 320.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .background(bubbleGradient)
+                    .padding(12.dp)
+            ) {
+                Column {
+                    // Tool badges
+                    if (message.toolsUsed.isNotEmpty()) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.padding(bottom = 6.dp)
+                        ) {
+                            message.toolsUsed.forEach { tool ->
+                                Surface(
+                                    color = BeeYellow.copy(alpha = 0.2f),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text(
+                                        "🔧 $tool",
+                                        fontSize = 10.sp,
+                                        color = BeeYellow,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Message content with basic markdown
+                    RenderMarkdown(message.text, isUser)
+                }
             }
         }
     }
 }
 
+/**
+ * Simple markdown renderer: bold, code, lists, headers
+ */
 @Composable
-fun SimpleBubble(message: ChatUiMessage) {
-    val isUser = message.isUser
-    val bgColor = when {
-        message.isError -> Color(0xFF4A1A1A)
-        isUser -> Color(0xFF2D3250)
-        else -> Color(0xFF1A1A2E)
-    }
+fun RenderMarkdown(text: String, isUser: Boolean) {
+    val textColor = if (isUser) Color(0xFFE0E0E0) else Color.White
 
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
-    ) {
-        if (!isUser) {
-            Text(message.agentIcon, fontSize = 16.sp, modifier = Modifier.padding(start = 4.dp))
-        }
-        Surface(
-            color = bgColor,
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.widthIn(max = 300.dp)
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                if (message.toolsUsed.isNotEmpty()) {
-                    Text(
-                        "🔧 ${message.toolsUsed.joinToString(", ")}",
-                        fontSize = 11.sp, color = BeeYellow
-                    )
+    val annotated = buildAnnotatedString {
+        var i = 0
+        val src = text
+
+        while (i < src.length) {
+            when {
+                // **bold**
+                i + 1 < src.length && src[i] == '*' && src[i + 1] == '*' -> {
+                    val end = src.indexOf("**", i + 2)
+                    if (end > 0) {
+                        withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = BeeYellow)) {
+                            append(src.substring(i + 2, end))
+                        }
+                        i = end + 2
+                    } else {
+                        append(src[i])
+                        i++
+                    }
                 }
-                if (message.isLoading) {
-                    Text("⏳ ${message.text}", color = BeeGrayLight, fontSize = 14.sp)
-                } else {
-                    Text(message.text, color = Color.White, fontSize = 15.sp)
+                // `code`
+                src[i] == '`' && !(i + 2 < src.length && src[i+1] == '`' && src[i+2] == '`') -> {
+                    val end = src.indexOf('`', i + 1)
+                    if (end > 0) {
+                        withStyle(SpanStyle(
+                            fontFamily = FontFamily.Monospace,
+                            color = Color(0xFF7DFFB3),
+                            background = Color(0xFF1A2A1A)
+                        )) {
+                            append(src.substring(i + 1, end))
+                        }
+                        i = end + 1
+                    } else {
+                        append(src[i])
+                        i++
+                    }
+                }
+                // _italic_
+                src[i] == '_' && (i == 0 || src[i-1] == ' ' || src[i-1] == '\n') -> {
+                    val end = src.indexOf('_', i + 1)
+                    if (end > 0) {
+                        withStyle(SpanStyle(color = BeeGrayLight)) {
+                            append(src.substring(i + 1, end))
+                        }
+                        i = end + 1
+                    } else {
+                        append(src[i])
+                        i++
+                    }
+                }
+                // Bullet points
+                (src[i] == '-' || src[i] == '•') && (i == 0 || src[i-1] == '\n') && i + 1 < src.length && src[i+1] == ' ' -> {
+                    append("  • ")
+                    i += 2
+                }
+                else -> {
+                    append(src[i])
+                    i++
                 }
             }
         }
     }
+
+    Text(
+        text = annotated,
+        color = textColor,
+        fontSize = 15.sp,
+        lineHeight = 21.sp
+    )
+}
+
+/**
+ * Animated typing dots
+ */
+@Composable
+fun TypingDots() {
+    val infiniteTransition = rememberInfiniteTransition(label = "dots")
+    val dotAlpha1 by infiniteTransition.animateFloat(
+        initialValue = 0.3f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(600), repeatMode = RepeatMode.Reverse
+        ), label = "d1"
+    )
+    val dotAlpha2 by infiniteTransition.animateFloat(
+        initialValue = 0.3f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(600, delayMillis = 200), repeatMode = RepeatMode.Reverse
+        ), label = "d2"
+    )
+    val dotAlpha3 by infiniteTransition.animateFloat(
+        initialValue = 0.3f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(600, delayMillis = 400), repeatMode = RepeatMode.Reverse
+        ), label = "d3"
+    )
+
+    Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        Box(Modifier.size(6.dp).clip(CircleShape).background(BeeBlack.copy(alpha = dotAlpha1)))
+        Box(Modifier.size(6.dp).clip(CircleShape).background(BeeBlack.copy(alpha = dotAlpha2)))
+        Box(Modifier.size(6.dp).clip(CircleShape).background(BeeBlack.copy(alpha = dotAlpha3)))
+    }
+}
+
+/**
+ * Typing indicator bubble
+ */
+@Composable
+fun TypingIndicator(agentIcon: String) {
+    val infiniteTransition = rememberInfiniteTransition(label = "typing")
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.4f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(800), repeatMode = RepeatMode.Reverse
+        ), label = "pulse"
+    )
+
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        horizontalAlignment = Alignment.Start
+    ) {
+        Text(agentIcon, fontSize = 14.sp, modifier = Modifier.padding(start = 4.dp, bottom = 2.dp))
+        Surface(
+            color = Color(0xFF1A1A2E).copy(alpha = alpha),
+            shape = RoundedCornerShape(topStart = 4.dp, topEnd = 16.dp, bottomStart = 16.dp, bottomEnd = 16.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                repeat(3) { i ->
+                    val dotAlpha by infiniteTransition.animateFloat(
+                        initialValue = 0.3f, targetValue = 1f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(500, delayMillis = i * 150),
+                            repeatMode = RepeatMode.Reverse
+                        ), label = "dot$i"
+                    )
+                    Box(
+                        Modifier.size(8.dp).clip(CircleShape)
+                            .background(BeeYellow.copy(alpha = dotAlpha))
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Agent picker dialog
+ */
+@Composable
+fun AgentPickerDialog(
+    agents: List<com.beemovil.agent.AgentConfig>,
+    currentId: String,
+    onSelect: (com.beemovil.agent.AgentConfig) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = BeeBlackLight,
+        title = {
+            Text("Cambiar Agente", color = BeeYellow, fontWeight = FontWeight.Bold)
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                agents.forEach { agent ->
+                    val isSelected = agent.id == currentId
+                    Surface(
+                        onClick = { onSelect(agent) },
+                        color = if (isSelected) BeeYellow.copy(alpha = 0.15f) else BeeGray.copy(alpha = 0.3f),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(agent.icon, fontSize = 24.sp)
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(agent.name, color = BeeWhite, fontWeight = FontWeight.Bold)
+                                Text(agent.description, color = BeeGrayLight, fontSize = 12.sp)
+                            }
+                            if (isSelected) {
+                                Text("✓", color = BeeYellow, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cerrar", color = BeeYellow)
+            }
+        }
+    )
 }
