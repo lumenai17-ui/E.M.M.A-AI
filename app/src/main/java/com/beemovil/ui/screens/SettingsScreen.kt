@@ -131,7 +131,7 @@ fun SettingsScreen(
         // === SKILLS INFO ===
         Card(colors = CardDefaults.cardColors(containerColor = BeeBlackLight), shape = RoundedCornerShape(16.dp)) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("🔧 Skills Nativos (17)", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = BeeYellow)
+                Text("🔧 Skills Nativos (25)", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = BeeYellow)
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text("Core", fontSize = 12.sp, color = BeeGrayLight)
@@ -145,27 +145,124 @@ fun SettingsScreen(
 
                 Spacer(modifier = Modifier.height(4.dp))
                 Text("Inteligencia", fontSize = 12.sp, color = BeeGrayLight)
-                SkillRow("🧠", "memory", "RAG Memory (recordar/olvidar)")
-                SkillRow("🧮", "calculator", "Calculadora matemática")
-                SkillRow("📅", "datetime", "Fecha, hora, calendario")
+                SkillRow("🧠", "memory", "RAG Memory")
+                SkillRow("🧮", "calculator", "Calculadora")
+                SkillRow("📅", "datetime", "Fecha/hora")
 
                 Spacer(modifier = Modifier.height(4.dp))
                 Text("Multimedia", fontSize = 12.sp, color = BeeGrayLight)
                 SkillRow("📸", "camera", "Cámara / fotos")
-                SkillRow("🎨", "image_gen", "Generación de imágenes IA")
+                SkillRow("🎨", "image_gen", "Generación IA")
 
                 Spacer(modifier = Modifier.height(4.dp))
                 Text("Sistema", fontSize = 12.sp, color = BeeGrayLight)
-                SkillRow("🔦", "flashlight", "Linterna on/off")
+                SkillRow("🔦", "flashlight", "Linterna")
                 SkillRow("🔉", "volume", "Volumen / vibración")
                 SkillRow("⏰", "alarm", "Alarmas y timers")
                 SkillRow("📱", "app_launcher", "Abrir apps")
                 SkillRow("📞", "contacts", "Contactos / llamar / SMS")
-                SkillRow("📡", "connectivity", "WiFi / red / GPS")
+                SkillRow("📡", "connectivity", "WiFi / GPS")
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("Productividad", fontSize = 12.sp, color = BeeGrayLight)
+                SkillRow("📅", "calendar", "Calendario nativo")
+                SkillRow("📧", "email", "Enviar emails")
+                SkillRow("🎵", "music_control", "Control de música")
+                SkillRow("🌤️", "weather", "Clima actual")
+                SkillRow("🔍", "web_search", "Buscar en internet")
+                SkillRow("🔆", "brightness", "Brillo pantalla")
+                SkillRow("🔋", "battery_saver", "Estado batería")
+                SkillRow("📱", "qr_generator", "Generar QR")
 
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    "🎙️ Voice Input integrado en la barra de chat\n⚠️ Skills activos con function calling (Ollama Cloud, modelos de pago)",
+                    "🎙️ Voice Input · 💬 Multi-agente WhatsApp-style",
+                    fontSize = 11.sp, color = BeeGrayLight
+                )
+            }
+        }
+
+        // === TELEGRAM BOT ===
+        Card(colors = CardDefaults.cardColors(containerColor = BeeBlackLight), shape = RoundedCornerShape(16.dp)) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("🤖 Telegram Bot", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = BeeYellow)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("Conecta un bot de Telegram a tu agente (sin VPS)", fontSize = 12.sp, color = BeeGrayLight)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                var telegramToken by remember { mutableStateOf(prefs.getString("telegram_bot_token", "") ?: "") }
+                var showToken by remember { mutableStateOf(false) }
+                val botRunning = com.beemovil.telegram.TelegramBotService.isRunning.get()
+
+                OutlinedTextField(
+                    value = telegramToken,
+                    onValueChange = { telegramToken = it },
+                    label = { Text("Bot Token (@BotFather)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    visualTransformation = if (showToken) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { showToken = !showToken }) {
+                            Icon(if (showToken) Icons.Filled.Lock else Icons.Filled.Lock, "Toggle", tint = BeeGrayLight)
+                        }
+                    },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = BeeYellow,
+                        unfocusedBorderColor = BeeGray,
+                        focusedTextColor = BeeWhite,
+                        unfocusedTextColor = BeeWhite,
+                        focusedLabelColor = BeeYellow,
+                        unfocusedLabelColor = BeeGrayLight,
+                        cursorColor = BeeYellow
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            prefs.edit().putString("telegram_bot_token", telegramToken).apply()
+                            val intent = android.content.Intent(context, com.beemovil.telegram.TelegramBotService::class.java).apply {
+                                action = com.beemovil.telegram.TelegramBotService.ACTION_START
+                                putExtra(com.beemovil.telegram.TelegramBotService.EXTRA_BOT_TOKEN, telegramToken)
+                                putExtra(com.beemovil.telegram.TelegramBotService.EXTRA_PROVIDER, selectedProvider)
+                                putExtra(com.beemovil.telegram.TelegramBotService.EXTRA_MODEL, selectedModel)
+                                putExtra(com.beemovil.telegram.TelegramBotService.EXTRA_API_KEY,
+                                    if (selectedProvider == "ollama") ollamaKey else openRouterKey)
+                            }
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                                context.startForegroundService(intent)
+                            } else {
+                                context.startService(intent)
+                            }
+                        },
+                        enabled = telegramToken.isNotBlank() && !botRunning,
+                        colors = ButtonDefaults.buttonColors(containerColor = BeeYellow, contentColor = BeeBlack),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(if (botRunning) "✅ Activo" else "▶️ Iniciar Bot")
+                    }
+
+                    if (botRunning) {
+                        Button(
+                            onClick = {
+                                val intent = android.content.Intent(context, com.beemovil.telegram.TelegramBotService::class.java).apply {
+                                    action = com.beemovil.telegram.TelegramBotService.ACTION_STOP
+                                }
+                                context.startService(intent)
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = BeeGray, contentColor = BeeWhite),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("⏹️ Detener")
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "1. Abre @BotFather en Telegram\n2. /newbot → copia el token\n3. Pega aquí → Iniciar Bot",
                     fontSize = 11.sp, color = BeeGrayLight
                 )
             }
