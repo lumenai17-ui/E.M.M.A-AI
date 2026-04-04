@@ -38,10 +38,28 @@ class MainActivity : ComponentActivity() {
             crashFile.delete()
         }
 
-        // Init skills safely
+        // Init all native skills
         val skills = mutableMapOf<String, BeeSkill>()
         try { skills["device_info"] = DeviceSkill(this) } catch (e: Throwable) {
-            Log.e("BeeMovil", "DeviceSkill init failed: ${e.message}")
+            Log.e("BeeMovil", "DeviceSkill failed: ${e.message}")
+        }
+        try { skills["clipboard"] = ClipboardSkill(this) } catch (e: Throwable) {
+            Log.e("BeeMovil", "ClipboardSkill failed: ${e.message}")
+        }
+        try { skills["notify"] = NotifySkill(this) } catch (e: Throwable) {
+            Log.e("BeeMovil", "NotifySkill failed: ${e.message}")
+        }
+        try { skills["tts"] = TtsSkill(this) } catch (e: Throwable) {
+            Log.e("BeeMovil", "TtsSkill failed: ${e.message}")
+        }
+        try { skills["browser"] = BrowserSkill(this) } catch (e: Throwable) {
+            Log.e("BeeMovil", "BrowserSkill failed: ${e.message}")
+        }
+        try { skills["share"] = ShareSkill(this) } catch (e: Throwable) {
+            Log.e("BeeMovil", "ShareSkill failed: ${e.message}")
+        }
+        try { skills["file"] = FileSkill(this) } catch (e: Throwable) {
+            Log.e("BeeMovil", "FileSkill failed: ${e.message}")
         }
 
         val prefs = getSharedPreferences("beemovil", Context.MODE_PRIVATE)
