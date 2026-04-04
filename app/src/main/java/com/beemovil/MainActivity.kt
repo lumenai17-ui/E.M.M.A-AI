@@ -84,11 +84,15 @@ class MainActivity : ComponentActivity() {
         voiceManager.initialize()
         viewModel.voiceManager = voiceManager
 
-        // Request mic permission
-        if (!voiceManager.hasPermission) {
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 1001)
-            }
+        // Request permissions (mic, location, contacts)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            val perms = mutableListOf<String>()
+            if (!voiceManager.hasPermission) perms.add(android.Manifest.permission.RECORD_AUDIO)
+            if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != android.content.pm.PackageManager.PERMISSION_GRANTED)
+                perms.add(android.Manifest.permission.ACCESS_FINE_LOCATION)
+            if (checkSelfPermission(android.Manifest.permission.READ_CONTACTS) != android.content.pm.PackageManager.PERMISSION_GRANTED)
+                perms.add(android.Manifest.permission.READ_CONTACTS)
+            if (perms.isNotEmpty()) requestPermissions(perms.toTypedArray(), 1001)
         }
 
         val hasKey = when (savedProvider) {

@@ -18,6 +18,17 @@
     <!-- Camera for photo capture -->
     <uses-permission android:name="android.permission.CAMERA" />
 
+    <!-- GPS Location -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- Contacts -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+
+    <!-- Flashlight (uses camera permission already) -->
+    <!-- Vibration -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
     <!-- Foreground service for background tasks -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
