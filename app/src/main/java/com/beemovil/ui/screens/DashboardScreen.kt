@@ -289,6 +289,11 @@ fun DashboardScreen(
                         viewModel.currentScreen.value = "email_inbox"
                     }
                 }
+                item {
+                    QuickAction("🎤", "Voz", Color(0xFF4CAF50).copy(alpha = 0.2f)) {
+                        viewModel.currentScreen.value = "voice_chat"
+                    }
+                }
             }
             Spacer(modifier = Modifier.height(24.dp))
         }
@@ -299,7 +304,7 @@ fun DashboardScreen(
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("Bee-Movil v3.4 · $skillCount skills · Kotlin nativo", fontSize = 11.sp, color = BeeGray)
+                Text("Bee-Movil v3.7 · $skillCount skills · Kotlin nativo", fontSize = 11.sp, color = BeeGray)
             }
         }
     }

@@ -300,6 +300,12 @@ class MainActivity : ComponentActivity() {
                                     onBack = { viewModel.currentScreen.value = "camera" }
                                 )
                             }
+                            "voice_chat" -> {
+                                VoiceChatScreen(
+                                    viewModel = viewModel,
+                                    onBack = { viewModel.currentScreen.value = "dashboard" }
+                                )
+                            }
                             "settings" -> {
                                 SettingsScreen(
                                     viewModel = viewModel,

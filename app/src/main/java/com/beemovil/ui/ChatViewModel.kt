@@ -266,6 +266,46 @@ class ChatViewModel : ViewModel() {
     }
 
     /**
+     * Synchronous message send for voice chat — call from background thread only.
+     * Returns the agent's response text directly.
+     */
+    fun sendMessageSync(text: String): String {
+        if (text.isBlank()) return "No text"
+
+        val config = currentAgentConfig.value
+        val apiKey = apiKeys[currentProvider.value] ?: ""
+        if (apiKey.isBlank()) return "Configura tu API key primero"
+
+        // Add to UI on main thread
+        mainHandler.post {
+            messages.add(ChatUiMessage(text = text, isUser = true))
+            chatHistoryDB?.saveMessage(config.id, text, true, config.icon)
+        }
+
+        return try {
+            val agent = getOrCreateAgent(config)
+            val response = agent.chat(text)
+
+            mainHandler.post {
+                chatHistoryDB?.saveMessage(config.id, response.text, false, config.icon,
+                    response.isError, response.toolExecutions.map { it.skillName })
+                messages.add(ChatUiMessage(
+                    text = response.text, isUser = false, agentIcon = config.icon,
+                    isError = response.isError,
+                    toolsUsed = response.toolExecutions.map { it.skillName }
+                ))
+            }
+            response.text
+        } catch (e: Throwable) {
+            val err = "Error: ${e.message}"
+            mainHandler.post {
+                messages.add(ChatUiMessage(text = err, isUser = false, agentIcon = "❌", isError = true))
+            }
+            err
+        }
+    }
+
+    /**
      * Send message with an image (vision). Image is base64 encoded.
      */
     fun sendMessageWithImage(text: String, imageBase64: String) {
