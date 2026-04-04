@@ -100,6 +100,12 @@ class ChatViewModel : ViewModel() {
 
     fun getApiKey(provider: String): String = apiKeys[provider] ?: ""
 
+    fun getProviderDisplayName(): String = when (currentProvider.value) {
+        "openrouter" -> "OpenRouter"
+        "ollama" -> "Ollama Cloud"
+        else -> currentProvider.value
+    }
+
     fun updateApiKey(provider: String, key: String) {
         apiKeys[provider] = key
         agents.clear()
@@ -109,13 +115,6 @@ class ChatViewModel : ViewModel() {
         currentProvider.value = provider
         currentModel.value = model
         agents.clear()
-    }
-
-    fun getProviderDisplayName(): String {
-        return when (currentProvider.value) {
-            "ollama" -> "Ollama Cloud"
-            else -> "OpenRouter"
-        }
     }
 
     /**

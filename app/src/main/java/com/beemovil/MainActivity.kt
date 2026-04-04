@@ -8,18 +8,23 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Surface
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.beemovil.memory.ChatHistoryDB
 import com.beemovil.skills.*
 import com.beemovil.ui.ChatUiMessage
 import com.beemovil.ui.ChatViewModel
 import com.beemovil.ui.screens.ChatScreen
 import com.beemovil.ui.screens.ConversationsScreen
+import com.beemovil.ui.screens.DashboardScreen
 import com.beemovil.ui.screens.SettingsScreen
-import com.beemovil.ui.theme.BeeBlack
-import com.beemovil.ui.theme.BeeMovilTheme
+import com.beemovil.ui.theme.*
 import java.io.File
 
 class MainActivity : ComponentActivity() {
@@ -119,6 +124,7 @@ class MainActivity : ComponentActivity() {
 
         // If no API key, go straight to settings
         if (!hasKey) viewModel.currentScreen.value = "settings"
+        else viewModel.currentScreen.value = "dashboard"
 
         // Show crash log
         if (crashMsg != null) {
@@ -131,34 +137,101 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             BeeMovilTheme {
-                Surface(modifier = Modifier.fillMaxSize(), color = BeeBlack) {
-                    val screen = viewModel.currentScreen.value
-
-                    when (screen) {
-                        "settings" -> {
-                            SettingsScreen(
-                                viewModel = viewModel,
-                                onBack = {
-                                    if (viewModel.hasApiKey()) {
-                                        viewModel.currentScreen.value = "conversations"
+                Scaffold(
+                    containerColor = BeeBlack,
+                    bottomBar = {
+                        val screen = viewModel.currentScreen.value
+                        // Show bottom bar only on main screens
+                        if (screen == "dashboard" || screen == "conversations" || screen == "settings") {
+                            NavigationBar(
+                                containerColor = BeeBlackLight,
+                                contentColor = BeeYellow,
+                                tonalElevation = 0.dp
+                            ) {
+                                NavigationBarItem(
+                                    selected = screen == "dashboard",
+                                    onClick = { viewModel.currentScreen.value = "dashboard" },
+                                    icon = { Icon(Icons.Filled.Home, "Home") },
+                                    label = { Text("Home", fontSize = 11.sp) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = BeeYellow,
+                                        selectedTextColor = BeeYellow,
+                                        unselectedIconColor = BeeGray,
+                                        unselectedTextColor = BeeGray,
+                                        indicatorColor = BeeYellow.copy(alpha = 0.12f)
+                                    )
+                                )
+                                NavigationBarItem(
+                                    selected = screen == "conversations",
+                                    onClick = { viewModel.currentScreen.value = "conversations" },
+                                    icon = { Icon(Icons.Filled.Forum, "Agentes") },
+                                    label = { Text("Agentes", fontSize = 11.sp) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = BeeYellow,
+                                        selectedTextColor = BeeYellow,
+                                        unselectedIconColor = BeeGray,
+                                        unselectedTextColor = BeeGray,
+                                        indicatorColor = BeeYellow.copy(alpha = 0.12f)
+                                    )
+                                )
+                                NavigationBarItem(
+                                    selected = screen == "settings",
+                                    onClick = { viewModel.currentScreen.value = "settings" },
+                                    icon = { Icon(Icons.Filled.Settings, "Settings") },
+                                    label = { Text("Config", fontSize = 11.sp) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = BeeYellow,
+                                        selectedTextColor = BeeYellow,
+                                        unselectedIconColor = BeeGray,
+                                        unselectedTextColor = BeeGray,
+                                        indicatorColor = BeeYellow.copy(alpha = 0.12f)
+                                    )
+                                )
+                            }
+                        }
+                    }
+                ) { innerPadding ->
+                    Surface(
+                        modifier = Modifier.fillMaxSize().padding(innerPadding),
+                        color = BeeBlack
+                    ) {
+                        val screen = viewModel.currentScreen.value
+                        when (screen) {
+                            "dashboard" -> {
+                                DashboardScreen(
+                                    viewModel = viewModel,
+                                    chatHistoryDB = chatHistoryDB,
+                                    memoryDB = memoryDB,
+                                    onAgentClick = { agentId -> viewModel.openAgentChat(agentId) },
+                                    onSettingsClick = { viewModel.currentScreen.value = "settings" },
+                                    skillCount = skills.size
+                                )
+                            }
+                            "conversations" -> {
+                                ConversationsScreen(
+                                    chatHistoryDB = chatHistoryDB,
+                                    onAgentClick = { agentId -> viewModel.openAgentChat(agentId) },
+                                    onSettingsClick = { viewModel.currentScreen.value = "settings" },
+                                    skillCount = skills.size
+                                )
+                            }
+                            "chat" -> {
+                                ChatScreen(
+                                    viewModel = viewModel,
+                                    onSettingsClick = { viewModel.currentScreen.value = "settings" },
+                                    onBackClick = { viewModel.currentScreen.value = "conversations" }
+                                )
+                            }
+                            "settings" -> {
+                                SettingsScreen(
+                                    viewModel = viewModel,
+                                    onBack = {
+                                        if (viewModel.hasApiKey()) {
+                                            viewModel.currentScreen.value = "dashboard"
+                                        }
                                     }
-                                }
-                            )
-                        }
-                        "chat" -> {
-                            ChatScreen(
-                                viewModel = viewModel,
-                                onSettingsClick = { viewModel.currentScreen.value = "settings" },
-                                onBackClick = { viewModel.navigateToConversations() }
-                            )
-                        }
-                        else -> { // "conversations"
-                            ConversationsScreen(
-                                chatHistoryDB = chatHistoryDB,
-                                onAgentClick = { agentId -> viewModel.openAgentChat(agentId) },
-                                onSettingsClick = { viewModel.currentScreen.value = "settings" },
-                                skillCount = skills.size
-                            )
+                                )
+                            }
                         }
                     }
                 }
