@@ -46,7 +46,7 @@ fun LiveVisionScreen(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val prefs = remember { context.getSharedPreferences("bee_settings", 0) }
+    val prefs = remember { context.getSharedPreferences("beemovil", 0) }
 
     var hasCameraPermission by remember {
         mutableStateOf(

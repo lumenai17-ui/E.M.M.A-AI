@@ -47,7 +47,7 @@ fun CameraScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    val prefs = remember { context.getSharedPreferences("bee_settings", 0) }
+    val prefs = remember { context.getSharedPreferences("beemovil", 0) }
     var capturedBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var imageBase64 by remember { mutableStateOf("") }
     var prompt by remember { mutableStateOf("") }
