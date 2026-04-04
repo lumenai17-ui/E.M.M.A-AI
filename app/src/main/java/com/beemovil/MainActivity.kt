@@ -39,6 +39,7 @@ class MainActivity : ComponentActivity() {
 
         // Init all native skills
         val skills = mutableMapOf<String, BeeSkill>()
+        // Phase 2 skills (Core)
         try { skills["device_info"] = DeviceSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "DeviceSkill: ${e.message}") }
         try { skills["clipboard"] = ClipboardSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "ClipboardSkill: ${e.message}") }
         try { skills["notify"] = NotifySkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "NotifySkill: ${e.message}") }
@@ -47,9 +48,25 @@ class MainActivity : ComponentActivity() {
         try { skills["share"] = ShareSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "ShareSkill: ${e.message}") }
         try { skills["file"] = FileSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "FileSkill: ${e.message}") }
 
-        // Init memory system
+        // Phase 4 skill (Memory)
         val memoryDB = com.beemovil.memory.BeeMemoryDB(this)
-        try { skills["memory"] = com.beemovil.skills.MemorySkill(memoryDB) } catch (e: Throwable) { Log.e("BeeMovil", "MemorySkill: ${e.message}") }
+        try { skills["memory"] = MemorySkill(memoryDB) } catch (e: Throwable) { Log.e("BeeMovil", "MemorySkill: ${e.message}") }
+
+        // Phase 5 skills (Multimedia + Utility)
+        try { skills["camera"] = CameraSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "CameraSkill: ${e.message}") }
+        try { skills["image_gen"] = ImageGenSkill(
+            getApiKey = { viewModel.getApiKey(viewModel.currentProvider.value) },
+            getProvider = { viewModel.currentProvider.value }
+        ) } catch (e: Throwable) { Log.e("BeeMovil", "ImageGenSkill: ${e.message}") }
+        try { skills["volume"] = VolumeSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "VolumeSkill: ${e.message}") }
+        try { skills["alarm"] = AlarmSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "AlarmSkill: ${e.message}") }
+        try { skills["connectivity"] = ConnectivitySkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "ConnectivitySkill: ${e.message}") }
+        try { skills["app_launcher"] = AppLauncherSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "AppLauncherSkill: ${e.message}") }
+        try { skills["contacts"] = ContactsSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "ContactsSkill: ${e.message}") }
+        try { skills["flashlight"] = FlashlightSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "FlashlightSkill: ${e.message}") }
+        try { skills["datetime"] = DateTimeSkill() } catch (e: Throwable) { Log.e("BeeMovil", "DateTimeSkill: ${e.message}") }
+        try { skills["calculator"] = CalculatorSkill() } catch (e: Throwable) { Log.e("BeeMovil", "CalculatorSkill: ${e.message}") }
+
 
         // Load saved preferences
         val prefs = getSharedPreferences("beemovil", Context.MODE_PRIVATE)

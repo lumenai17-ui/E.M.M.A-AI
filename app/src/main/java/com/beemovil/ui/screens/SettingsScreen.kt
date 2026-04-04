@@ -131,8 +131,10 @@ fun SettingsScreen(
         // === SKILLS INFO ===
         Card(colors = CardDefaults.cardColors(containerColor = BeeBlackLight), shape = RoundedCornerShape(16.dp)) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("🔧 Skills Nativos (8)", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = BeeYellow)
+                Text("🔧 Skills Nativos (17)", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = BeeYellow)
                 Spacer(modifier = Modifier.height(8.dp))
+
+                Text("Core", fontSize = 12.sp, color = BeeGrayLight)
                 SkillRow("📱", "device_info", "Info del dispositivo")
                 SkillRow("📋", "clipboard", "Copiar/leer clipboard")
                 SkillRow("🔔", "notify", "Notificaciones push")
@@ -140,10 +142,30 @@ fun SettingsScreen(
                 SkillRow("🌐", "browser", "Abrir URLs")
                 SkillRow("📤", "share", "Compartir contenido")
                 SkillRow("📁", "file", "Archivos (leer/escribir)")
-                SkillRow("🧠", "memory", "RAG Memory (recuerda/olvida)")
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("Inteligencia", fontSize = 12.sp, color = BeeGrayLight)
+                SkillRow("🧠", "memory", "RAG Memory (recordar/olvidar)")
+                SkillRow("🧮", "calculator", "Calculadora matemática")
+                SkillRow("📅", "datetime", "Fecha, hora, calendario")
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("Multimedia", fontSize = 12.sp, color = BeeGrayLight)
+                SkillRow("📸", "camera", "Cámara / fotos")
+                SkillRow("🎨", "image_gen", "Generación de imágenes IA")
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("Sistema", fontSize = 12.sp, color = BeeGrayLight)
+                SkillRow("🔦", "flashlight", "Linterna on/off")
+                SkillRow("🔉", "volume", "Volumen / vibración")
+                SkillRow("⏰", "alarm", "Alarmas y timers")
+                SkillRow("📱", "app_launcher", "Abrir apps")
+                SkillRow("📞", "contacts", "Contactos / llamar / SMS")
+                SkillRow("📡", "connectivity", "WiFi / red / GPS")
+
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    "⚠️ Skills solo funcionan con modelos que soporten function calling (Ollama Cloud, modelos de pago)",
+                    "🎙️ Voice Input integrado en la barra de chat\n⚠️ Skills activos con function calling (Ollama Cloud, modelos de pago)",
                     fontSize = 11.sp, color = BeeGrayLight
                 )
             }
