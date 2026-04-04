@@ -160,14 +160,37 @@ fun AgentCreatorScreen(
 
             if (!useGlobalModel) {
                 Spacer(modifier = Modifier.height(4.dp))
-                OutlinedTextField(
-                    value = customModel,
-                    onValueChange = { customModel = it },
-                    label = { Text("Modelo") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    colors = fieldColors()
-                )
+                Text("Modelos disponibles:", fontSize = 11.sp, color = BeeGray)
+                Spacer(modifier = Modifier.height(4.dp))
+
+                val models = if (viewModel.currentProvider.value == "openrouter")
+                    com.beemovil.llm.LlmFactory.OPENROUTER.models
+                else
+                    com.beemovil.llm.LlmFactory.OLLAMA_CLOUD.models
+
+                models.forEach { model ->
+                    val isSelected = customModel == model.id
+                    Surface(
+                        onClick = { customModel = model.id },
+                        color = if (isSelected) BeeYellow.copy(alpha = 0.15f) else Color(0xFF1A1A2E),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(if (model.free) "🆓" else "🤖", fontSize = 14.sp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(model.name, fontSize = 13.sp,
+                                    color = if (isSelected) BeeYellow else Color(0xFFE0E0E0))
+                                Text(model.id, fontSize = 10.sp, color = BeeGray)
+                            }
+                            if (isSelected) Text("✓", color = BeeYellow, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))

@@ -405,10 +405,14 @@ fun SettingsScreen(
                 var emailPasswd by remember { mutableStateOf(prefs.getString("email_password", "") ?: "") }
                 var showEmailPass by remember { mutableStateOf(false) }
                 var emailImapHost by remember { mutableStateOf(prefs.getString("email_imap_host", "imap.gmail.com") ?: "imap.gmail.com") }
+                var emailImapPort by remember { mutableStateOf(prefs.getInt("email_imap_port", 993).toString()) }
                 var emailSmtpHost by remember { mutableStateOf(prefs.getString("email_smtp_host", "smtp.gmail.com") ?: "smtp.gmail.com") }
+                var emailSmtpPort by remember { mutableStateOf(prefs.getInt("email_smtp_port", 587).toString()) }
                 var emailTestResult by remember { mutableStateOf("") }
+                var showServerFields by remember { mutableStateOf(false) }
 
-                // Presets
+                // Presets – auto-fill servers
+                Text("PROVEEDOR", fontSize = 10.sp, color = BeeGray, letterSpacing = 1.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf("Gmail", "Outlook", "Yahoo").forEach { name ->
                         FilterChip(
@@ -416,7 +420,10 @@ fun SettingsScreen(
                             onClick = {
                                 val preset = com.beemovil.email.EmailService.PRESETS[name]!!
                                 emailImapHost = preset.imapHost
+                                emailImapPort = preset.imapPort.toString()
                                 emailSmtpHost = preset.smtpHost
+                                emailSmtpPort = preset.smtpPort.toString()
+                                emailTestResult = ""
                             },
                             label = { Text(name, fontSize = 12.sp) },
                             colors = FilterChipDefaults.filterChipColors(
@@ -433,7 +440,28 @@ fun SettingsScreen(
 
                 OutlinedTextField(
                     value = emailAddr,
-                    onValueChange = { emailAddr = it },
+                    onValueChange = {
+                        emailAddr = it
+                        // Auto-detect provider from email
+                        val lower = it.lowercase()
+                        when {
+                            lower.contains("@gmail") -> {
+                                val p = com.beemovil.email.EmailService.PRESETS["Gmail"]!!
+                                emailImapHost = p.imapHost; emailSmtpHost = p.smtpHost
+                                emailImapPort = p.imapPort.toString(); emailSmtpPort = p.smtpPort.toString()
+                            }
+                            lower.contains("@outlook") || lower.contains("@hotmail") || lower.contains("@live") -> {
+                                val p = com.beemovil.email.EmailService.PRESETS["Outlook"]!!
+                                emailImapHost = p.imapHost; emailSmtpHost = p.smtpHost
+                                emailImapPort = p.imapPort.toString(); emailSmtpPort = p.smtpPort.toString()
+                            }
+                            lower.contains("@yahoo") -> {
+                                val p = com.beemovil.email.EmailService.PRESETS["Yahoo"]!!
+                                emailImapHost = p.imapHost; emailSmtpHost = p.smtpHost
+                                emailImapPort = p.imapPort.toString(); emailSmtpPort = p.smtpPort.toString()
+                            }
+                        }
+                    },
                     label = { Text("Correo electrónico") },
                     placeholder = { Text("usuario@gmail.com", color = BeeGray) },
                     modifier = Modifier.fillMaxWidth(),
@@ -460,23 +488,78 @@ fun SettingsScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Server info (collapsed)
-                Text("IMAP: $emailImapHost · SMTP: $emailSmtpHost", fontSize = 11.sp, color = BeeGray)
+                // Server fields — expandable
+                Surface(
+                    onClick = { showServerFields = !showServerFields },
+                    color = Color(0xFF1A1A2E),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("🔧", fontSize = 14.sp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Servidores", fontSize = 13.sp, color = Color(0xFFE0E0E0))
+                            Text("IMAP: $emailImapHost:$emailImapPort · SMTP: $emailSmtpHost:$emailSmtpPort",
+                                fontSize = 10.sp, color = BeeGray)
+                        }
+                        Text(if (showServerFields) "▲" else "▼", color = BeeGray)
+                    }
+                }
+
+                if (showServerFields) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = emailImapHost,
+                            onValueChange = { emailImapHost = it },
+                            label = { Text("IMAP Host") },
+                            modifier = Modifier.weight(2f),
+                            singleLine = true,
+                            colors = fieldColors()
+                        )
+                        OutlinedTextField(
+                            value = emailImapPort,
+                            onValueChange = { emailImapPort = it },
+                            label = { Text("Puerto") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            colors = fieldColors()
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = emailSmtpHost,
+                            onValueChange = { emailSmtpHost = it },
+                            label = { Text("SMTP Host") },
+                            modifier = Modifier.weight(2f),
+                            singleLine = true,
+                            colors = fieldColors()
+                        )
+                        OutlinedTextField(
+                            value = emailSmtpPort,
+                            onValueChange = { emailSmtpPort = it },
+                            label = { Text("Puerto") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            colors = fieldColors()
+                        )
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = {
-                            val preset = com.beemovil.email.EmailService.PRESETS.values.find { it.imapHost == emailImapHost }
-                                ?: com.beemovil.email.EmailService.EmailConfig(emailImapHost, 993, emailSmtpHost, 587)
                             prefs.edit()
                                 .putString("email_address", emailAddr.trim())
                                 .putString("email_password", emailPasswd)
-                                .putString("email_imap_host", preset.imapHost)
-                                .putInt("email_imap_port", preset.imapPort)
-                                .putString("email_smtp_host", preset.smtpHost)
-                                .putInt("email_smtp_port", preset.smtpPort)
+                                .putString("email_imap_host", emailImapHost)
+                                .putInt("email_imap_port", emailImapPort.toIntOrNull() ?: 993)
+                                .putString("email_smtp_host", emailSmtpHost)
+                                .putInt("email_smtp_port", emailSmtpPort.toIntOrNull() ?: 587)
                                 .apply()
                             Toast.makeText(context, "✅ Email configurado", Toast.LENGTH_SHORT).show()
                         },
@@ -488,16 +571,36 @@ fun SettingsScreen(
                     }
                     Button(
                         onClick = {
-                            emailTestResult = "⏳ Probando..."
+                            emailTestResult = "⏳ Conectando a $emailImapHost..."
+                            // Also save before testing
+                            prefs.edit()
+                                .putString("email_address", emailAddr.trim())
+                                .putString("email_password", emailPasswd)
+                                .putString("email_imap_host", emailImapHost)
+                                .putInt("email_imap_port", emailImapPort.toIntOrNull() ?: 993)
+                                .putString("email_smtp_host", emailSmtpHost)
+                                .putInt("email_smtp_port", emailSmtpPort.toIntOrNull() ?: 587)
+                                .apply()
                             Thread {
                                 try {
-                                    val preset = com.beemovil.email.EmailService.PRESETS.values.find { it.imapHost == emailImapHost }
-                                        ?: com.beemovil.email.EmailService.EmailConfig(emailImapHost, 993, emailSmtpHost, 587)
+                                    val config = com.beemovil.email.EmailService.EmailConfig(
+                                        emailImapHost, emailImapPort.toIntOrNull() ?: 993,
+                                        emailSmtpHost, emailSmtpPort.toIntOrNull() ?: 587
+                                    )
                                     val result = com.beemovil.email.EmailService(context)
-                                        .testConnection(emailAddr.trim(), emailPasswd, preset)
-                                    emailTestResult = "✅ $result"
+                                        .testConnection(emailAddr.trim(), emailPasswd, config)
+                                    emailTestResult = "✅ Conectado · $result"
                                 } catch (e: Exception) {
-                                    emailTestResult = "❌ ${e.message?.take(60)}"
+                                    val msg = e.message ?: "Error desconocido"
+                                    emailTestResult = when {
+                                        msg.contains("Authentication", true) || msg.contains("AUTHENTICATE", true) ->
+                                            "❌ Credenciales incorrectas. Gmail necesita App Password, no tu contraseña normal"
+                                        msg.contains("connect", true) || msg.contains("timeout", true) ->
+                                            "❌ No pudo conectar a $emailImapHost. Verifica el servidor"
+                                        msg.contains("SSL", true) || msg.contains("TLS", true) ->
+                                            "❌ Error SSL. Prueba otro puerto (993 para IMAP)"
+                                        else -> "❌ ${msg.take(80)}"
+                                    }
                                 }
                             }.start()
                         },
@@ -513,12 +616,27 @@ fun SettingsScreen(
                 if (emailTestResult.isNotBlank()) {
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(emailTestResult, fontSize = 12.sp,
-                        color = if (emailTestResult.startsWith("✅")) Color(0xFF4CAF50) else if (emailTestResult.startsWith("❌")) Color(0xFFF44336) else BeeGray)
+                        color = when {
+                            emailTestResult.startsWith("✅") -> Color(0xFF4CAF50)
+                            emailTestResult.startsWith("❌") -> Color(0xFFF44336)
+                            else -> BeeGray
+                        }
+                    )
                 }
 
-                Spacer(modifier = Modifier.height(4.dp))
-                Text("Gmail: usa una App Password (Seguridad → Verificación en 2 pasos → App Passwords)",
-                    fontSize = 10.sp, color = BeeGray)
+                Spacer(modifier = Modifier.height(6.dp))
+                Surface(
+                    color = Color(0xFFFFC107).copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text("⚠️ Gmail requiere App Password", fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp, color = Color(0xFFFFC107))
+                        Text("1. Ve a myaccount.google.com\n2. Seguridad → Verificación en 2 pasos (activar)\n3. App Passwords → genera una y pégala aquí\n\nOutlook/Hotmail: usa tu contraseña normal",
+                            fontSize = 10.sp, color = BeeGray)
+                    }
+                }
             }
 
             // ═══════════════════════════════════════

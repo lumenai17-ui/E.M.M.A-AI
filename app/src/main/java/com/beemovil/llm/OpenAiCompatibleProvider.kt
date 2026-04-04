@@ -152,9 +152,12 @@ object LlmFactory {
             ModelOption("gemma3:27b", "Gemma 3 27B"),
             ModelOption("mistral", "Mistral 7B"),
             ModelOption("command-r-plus", "Command R+ 104B"),
-            ModelOption("llama3.1:405b", "Llama 3.1 405B (Massive)"),
             ModelOption("phi4", "Phi-4 14B"),
-            ModelOption("glm-5:cloud", "GLM-5 Cloud")
+            ModelOption("glm4", "GLM-4 9B"),
+            // Vision models
+            ModelOption("llava", "LLaVA 7B (👁️ Vision)"),
+            ModelOption("llama3.2-vision", "Llama 3.2 Vision 11B (👁️)"),
+            ModelOption("bakllava", "BakLLaVA 7B (👁️ Vision)")
         )
     )
 
