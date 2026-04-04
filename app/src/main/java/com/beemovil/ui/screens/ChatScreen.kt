@@ -2,6 +2,7 @@ package com.beemovil.ui.screens
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,6 +19,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -25,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.beemovil.R
 import com.beemovil.ui.ChatUiMessage
 import com.beemovil.ui.ChatViewModel
 import com.beemovil.ui.theme.*
@@ -61,19 +65,19 @@ fun ChatScreen(viewModel: ChatViewModel, onSettingsClick: () -> Unit = {}) {
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.padding(vertical = 4.dp)
                         ) {
-                            // Agent avatar
+                            // Agent avatar — bee logo
                             Surface(
                                 onClick = { showAgentPicker = true },
                                 color = BeeYellow.copy(alpha = 0.15f),
                                 shape = CircleShape,
                                 modifier = Modifier.size(38.dp)
                             ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Text(
-                                        viewModel.currentAgentConfig.value.icon,
-                                        fontSize = 20.sp
-                                    )
-                                }
+                                Image(
+                                    painter = painterResource(id = R.drawable.bee_logo),
+                                    contentDescription = "Bee Logo",
+                                    modifier = Modifier.size(32.dp).clip(CircleShape),
+                                    contentScale = ContentScale.Crop
+                                )
                             }
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
@@ -182,15 +186,25 @@ fun ChatScreen(viewModel: ChatViewModel, onSettingsClick: () -> Unit = {}) {
             }
         }
     ) { padding ->
-        LazyColumn(
-            state = listState,
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(BeeBlack),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
+            // Honeycomb background
+            Image(
+                painter = painterResource(id = R.drawable.chat_bg),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+                alpha = 0.4f
+            )
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
             items(
                 items = viewModel.messages.toList()
             ) { message ->
@@ -203,6 +217,7 @@ fun ChatScreen(viewModel: ChatViewModel, onSettingsClick: () -> Unit = {}) {
                     TypingIndicator(viewModel.currentAgentConfig.value.icon)
                 }
             }
+        }
         }
     }
 
