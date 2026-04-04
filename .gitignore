@@ -1,0 +1,25 @@
+# Bee-Movil Native
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# App build
+/app/build
+/app/release
+
+# Keystore
+*.jks
+*.keystore
+
+# Crash logs
+crash.log
+
+# API keys (never commit)
+secrets.properties
