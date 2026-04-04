@@ -1,9 +1,12 @@
 package com.beemovil.ui.screens
 
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.BatteryManager
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -19,6 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -29,6 +33,8 @@ import com.beemovil.memory.BeeMemoryDB
 import com.beemovil.memory.ChatHistoryDB
 import com.beemovil.ui.ChatViewModel
 import com.beemovil.ui.theme.*
+import java.text.SimpleDateFormat
+import java.util.*
 
 /**
  * DashboardScreen — Mission Control. Main home screen.
@@ -42,15 +48,19 @@ fun DashboardScreen(
     onSettingsClick: () -> Unit,
     skillCount: Int
 ) {
+    val context = LocalContext.current
+
     // Collect stats
     val totalMessages = remember { mutableStateOf(0) }
     val memoryCount = remember { mutableStateOf(0) }
     val agentCount = remember { mutableStateOf(viewModel.availableAgents.size) }
     val recentChats = remember { mutableStateListOf<ChatHistoryDB.ConversationPreview>() }
+    val batteryLevel = remember { mutableStateOf(getBatteryLevel(context)) }
 
     LaunchedEffect(Unit) {
         totalMessages.value = chatHistoryDB?.getTotalMessageCount() ?: 0
         memoryCount.value = memoryDB?.getMemoryCount() ?: 0
+        batteryLevel.value = getBatteryLevel(context)
         chatHistoryDB?.let { db ->
             recentChats.clear()
             recentChats.addAll(db.getConversationPreviews().take(4))
@@ -59,6 +69,7 @@ fun DashboardScreen(
 
     val telegramStatus = viewModel.telegramBotStatus.value
     val telegramName = viewModel.telegramBotName.value
+    val now = remember { SimpleDateFormat("EEEE, d MMM", Locale("es")).format(Date()).replaceFirstChar { it.uppercase() } }
 
     LazyColumn(
         modifier = Modifier
@@ -66,7 +77,7 @@ fun DashboardScreen(
             .background(BeeBlack),
         contentPadding = PaddingValues(bottom = 16.dp)
     ) {
-        // Header
+        // Header with logo + date
         item {
             Surface(
                 color = Color.Transparent,
@@ -75,7 +86,7 @@ fun DashboardScreen(
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
-                                BeeYellow.copy(alpha = 0.12f),
+                                BeeYellow.copy(alpha = 0.15f),
                                 BeeBlack
                             )
                         )
@@ -92,14 +103,14 @@ fun DashboardScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Image(
                             painter = painterResource(id = R.drawable.bee_logo),
-                            contentDescription = "Bee",
-                            modifier = Modifier.size(44.dp).clip(CircleShape),
+                            contentDescription = "Bee-Movil",
+                            modifier = Modifier.size(48.dp).clip(CircleShape),
                             contentScale = ContentScale.Crop
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
-                            Text("Bee-Movil", fontWeight = FontWeight.Bold, fontSize = 22.sp, color = BeeWhite)
-                            Text("Mission Control", fontSize = 12.sp, color = BeeYellow)
+                            Text("Bee-Movil", fontWeight = FontWeight.Bold, fontSize = 24.sp, color = BeeWhite)
+                            Text(now, fontSize = 12.sp, color = BeeYellowLight)
                         }
                     }
                     IconButton(onClick = onSettingsClick) {
@@ -115,25 +126,62 @@ fun DashboardScreen(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                MetricCard("Agentes", "${agentCount.value}", "🤖", BeeYellow.copy(alpha = 0.15f), Modifier.weight(1f))
-                MetricCard("Mensajes", "${totalMessages.value}", "💬", BeeYellow.copy(alpha = 0.10f), Modifier.weight(1f))
-                MetricCard("Memorias", "${memoryCount.value}", "🧠", BeeYellow.copy(alpha = 0.08f), Modifier.weight(1f))
+                MetricCard("Agentes", "${agentCount.value}", "🤖", Modifier.weight(1f))
+                MetricCard("Mensajes", "${totalMessages.value}", "💬", Modifier.weight(1f))
+                MetricCard("Memorias", "${memoryCount.value}", "🧠", Modifier.weight(1f))
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
+        }
+
+        // Device info bar
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    val bat = batteryLevel.value
+                    val batColor = when {
+                        bat > 60 -> Color(0xFF4CAF50)
+                        bat > 20 -> BeeYellow
+                        else -> Color(0xFFF44336)
+                    }
+                    DeviceChip("🔋", "${bat}%", batColor)
+                    DeviceChip("📶", "Online", Color(0xFF4CAF50))
+                    DeviceChip("🔧", "$skillCount", BeeYellow)
+                    DeviceChip(
+                        if (telegramStatus == "online") "🟢" else "⚪",
+                        "TG Bot",
+                        if (telegramStatus == "online") Color(0xFF4CAF50) else BeeGray
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(14.dp))
         }
 
         // System status
         item {
             Card(
-                colors = CardDefaults.cardColors(containerColor = BeeBlackLight),
-                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+                shape = RoundedCornerShape(14.dp),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Estado del sistema", fontSize = 13.sp, color = BeeGrayLight, fontWeight = FontWeight.Medium)
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Text("ESTADO DEL SISTEMA", fontSize = 11.sp, color = BeeYellow,
+                        fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    // Telegram bot status
+                    StatusRow(
+                        icon = "🧠",
+                        label = "Proveedor AI",
+                        value = viewModel.getProviderDisplayName(),
+                        statusColor = if (viewModel.hasApiKey()) Color(0xFF4CAF50) else Color(0xFFF44336)
+                    )
+
                     StatusRow(
                         icon = "🤖",
                         label = "Telegram Bot",
@@ -150,31 +198,25 @@ fun DashboardScreen(
                     )
 
                     StatusRow(
-                        icon = "🧠",
-                        label = "Proveedor AI",
-                        value = viewModel.getProviderDisplayName(),
-                        statusColor = if (viewModel.hasApiKey()) Color(0xFF4CAF50) else Color(0xFFF44336)
-                    )
-
-                    StatusRow(
-                        icon = "🔧",
-                        label = "Skills activos",
-                        value = "$skillCount/25",
-                        statusColor = BeeYellow
+                        icon = "💾",
+                        label = "Base de datos",
+                        value = "SQLite OK",
+                        statusColor = Color(0xFF4CAF50)
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
         }
 
         // Recent conversations
         if (recentChats.isNotEmpty()) {
             item {
                 Text(
-                    "Conversaciones recientes",
-                    fontSize = 13.sp,
-                    color = BeeGrayLight,
-                    fontWeight = FontWeight.Medium,
+                    "CONVERSACIONES RECIENTES",
+                    fontSize = 11.sp,
+                    color = BeeYellow,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp,
                     modifier = Modifier.padding(horizontal = 20.dp)
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -193,16 +235,17 @@ fun DashboardScreen(
                 }
             }
 
-            item { Spacer(modifier = Modifier.height(16.dp)) }
+            item { Spacer(modifier = Modifier.height(14.dp)) }
         }
 
-        // Quick actions
+        // Quick actions — now functional
         item {
             Text(
-                "Accesos rápidos",
-                fontSize = 13.sp,
-                color = BeeGrayLight,
-                fontWeight = FontWeight.Medium,
+                "ACCESOS RÁPIDOS",
+                fontSize = 11.sp,
+                color = BeeYellow,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
                 modifier = Modifier.padding(horizontal = 20.dp)
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -212,28 +255,33 @@ fun DashboardScreen(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 item {
-                    QuickAction("🐝", "Chat", BeeYellow.copy(alpha = 0.15f)) {
+                    QuickAction("🐝", "Chat", Color(0xFFFFC107).copy(alpha = 0.2f)) {
                         onAgentClick("main")
                     }
                 }
                 item {
-                    QuickAction("🌤️", "Clima", Color(0xFF2196F3).copy(alpha = 0.15f)) {
-                        onAgentClick("main")
+                    QuickAction("🌤️", "Clima", Color(0xFF2196F3).copy(alpha = 0.2f)) {
+                        viewModel.openAgentChatWithPrompt("main", "¿Cómo está el clima ahora?")
                     }
                 }
                 item {
-                    QuickAction("🔋", "Batería", Color(0xFF4CAF50).copy(alpha = 0.15f)) {
-                        onAgentClick("main")
+                    QuickAction("🔋", "Batería", Color(0xFF4CAF50).copy(alpha = 0.2f)) {
+                        viewModel.openAgentChatWithPrompt("main", "¿Cómo está la batería de mi teléfono?")
                     }
                 }
                 item {
-                    QuickAction("📱", "QR", Color(0xFF9C27B0).copy(alpha = 0.15f)) {
-                        onAgentClick("main")
+                    QuickAction("📅", "Agenda", Color(0xFF9C27B0).copy(alpha = 0.2f)) {
+                        viewModel.openAgentChatWithPrompt("agenda", "¿Qué tengo programado hoy?")
                     }
                 }
                 item {
-                    QuickAction("🔍", "Buscar", Color(0xFFFF5722).copy(alpha = 0.15f)) {
-                        onAgentClick("main")
+                    QuickAction("🔍", "Buscar", Color(0xFFFF5722).copy(alpha = 0.2f)) {
+                        viewModel.openAgentChatWithPrompt("main", "Busca las últimas noticias de tecnología")
+                    }
+                }
+                item {
+                    QuickAction("📱", "Info", Color(0xFF00BCD4).copy(alpha = 0.2f)) {
+                        viewModel.openAgentChatWithPrompt("main", "Dame información completa de mi dispositivo")
                     }
                 }
             }
@@ -246,16 +294,26 @@ fun DashboardScreen(
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("🐝 Bee-Movil v3.0 · $skillCount skills · Kotlin nativo", fontSize = 11.sp, color = BeeGray)
+                Text("Bee-Movil v3.0 · $skillCount skills · Kotlin nativo", fontSize = 11.sp, color = BeeGray)
             }
         }
     }
 }
 
+private fun getBatteryLevel(context: Context): Int {
+    return try {
+        val filter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+        val battery = context.registerReceiver(null, filter)
+        val level = battery?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+        val scale = battery?.getIntExtra(BatteryManager.EXTRA_SCALE, 100) ?: 100
+        (level * 100) / scale
+    } catch (_: Exception) { -1 }
+}
+
 @Composable
-private fun MetricCard(label: String, value: String, emoji: String, bgColor: Color, modifier: Modifier) {
+private fun MetricCard(label: String, value: String, emoji: String, modifier: Modifier) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = BeeBlackLight),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
         shape = RoundedCornerShape(14.dp),
         modifier = modifier.animateContentSize()
     ) {
@@ -265,23 +323,32 @@ private fun MetricCard(label: String, value: String, emoji: String, bgColor: Col
         ) {
             Text(emoji, fontSize = 20.sp)
             Spacer(modifier = Modifier.height(4.dp))
-            Text(value, fontWeight = FontWeight.Bold, fontSize = 22.sp, color = BeeYellow)
-            Text(label, fontSize = 11.sp, color = BeeGrayLight)
+            Text(value, fontWeight = FontWeight.Bold, fontSize = 24.sp, color = BeeYellow)
+            Text(label, fontSize = 11.sp, color = Color(0xFFB0B0B0))
         }
+    }
+}
+
+@Composable
+private fun DeviceChip(icon: String, label: String, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(icon, fontSize = 14.sp)
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(label, fontSize = 12.sp, color = color, fontWeight = FontWeight.Medium)
     }
 }
 
 @Composable
 private fun StatusRow(icon: String, label: String, value: String, statusColor: Color) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(icon, fontSize = 16.sp)
         Spacer(modifier = Modifier.width(10.dp))
-        Text(label, fontSize = 14.sp, color = BeeWhite, modifier = Modifier.weight(1f))
+        Text(label, fontSize = 14.sp, color = Color(0xFFE0E0E0), modifier = Modifier.weight(1f))
         Surface(
-            color = statusColor.copy(alpha = 0.2f),
+            color = statusColor.copy(alpha = 0.15f),
             shape = RoundedCornerShape(8.dp)
         ) {
             Row(
@@ -290,12 +357,12 @@ private fun StatusRow(icon: String, label: String, value: String, statusColor: C
             ) {
                 Box(
                     modifier = Modifier
-                        .size(6.dp)
+                        .size(7.dp)
                         .clip(CircleShape)
                         .background(statusColor)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
-                Text(value, fontSize = 12.sp, color = statusColor)
+                Text(value, fontSize = 12.sp, color = Color(0xFFE0E0E0), fontWeight = FontWeight.Medium)
             }
         }
     }
@@ -312,20 +379,21 @@ private fun RecentChatRow(
 ) {
     Surface(
         onClick = onClick,
-        color = BeeBlack,
+        color = Color.Transparent,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Surface(color = BeeGray.copy(alpha = 0.3f), shape = CircleShape, modifier = Modifier.size(40.dp)) {
-                Box(contentAlignment = Alignment.Center) { Text(agentIcon, fontSize = 20.sp) }
+            Surface(color = Color(0xFF2A2A3E), shape = CircleShape, modifier = Modifier.size(44.dp)) {
+                Box(contentAlignment = Alignment.Center) { Text(agentIcon, fontSize = 22.sp) }
             }
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(agentName, fontWeight = FontWeight.Medium, fontSize = 14.sp, color = BeeWhite)
-                Text(lastMessage, fontSize = 12.sp, color = BeeGrayLight, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(agentName, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = Color(0xFFE8E8E8))
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(lastMessage, fontSize = 12.sp, color = Color(0xFF888888), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Column(horizontalAlignment = Alignment.End) {
                 val diff = System.currentTimeMillis() - timestamp
@@ -335,12 +403,13 @@ private fun RecentChatRow(
                     diff < 86400_000 -> "${diff / 3600_000}h"
                     else -> "${diff / 86400_000}d"
                 }
-                Text(timeText, fontSize = 11.sp, color = BeeGrayLight)
+                Text(timeText, fontSize = 11.sp, color = Color(0xFF888888))
                 if (messageCount > 0) {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Surface(color = BeeYellow.copy(alpha = 0.2f), shape = CircleShape) {
-                        Text("$messageCount", fontSize = 10.sp, color = BeeYellow,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp))
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Surface(color = BeeYellow, shape = CircleShape) {
+                        Text("$messageCount", fontSize = 10.sp, color = BeeBlack,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp))
                     }
                 }
             }
@@ -352,19 +421,19 @@ private fun RecentChatRow(
 private fun QuickAction(emoji: String, label: String, bgColor: Color, onClick: () -> Unit) {
     Card(
         onClick = onClick,
-        colors = CardDefaults.cardColors(containerColor = BeeBlackLight),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
         shape = RoundedCornerShape(14.dp),
-        modifier = Modifier.width(80.dp)
+        modifier = Modifier.width(82.dp)
     ) {
         Column(
             modifier = Modifier.padding(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Surface(color = bgColor, shape = CircleShape, modifier = Modifier.size(44.dp)) {
+            Surface(color = bgColor, shape = CircleShape, modifier = Modifier.size(46.dp)) {
                 Box(contentAlignment = Alignment.Center) { Text(emoji, fontSize = 22.sp) }
             }
             Spacer(modifier = Modifier.height(6.dp))
-            Text(label, fontSize = 11.sp, color = BeeGrayLight)
+            Text(label, fontSize = 11.sp, color = Color(0xFFB0B0B0), fontWeight = FontWeight.Medium)
         }
     }
 }

@@ -172,6 +172,15 @@ class ChatViewModel : ViewModel() {
         currentScreen.value = "conversations"
     }
 
+    /**
+     * Open a chat and immediately send a message (for quick actions / shortcuts).
+     */
+    fun openAgentChatWithPrompt(agentId: String, prompt: String) {
+        openAgentChat(agentId)
+        // Auto-send after a small delay to let UI settle
+        mainHandler.postDelayed({ sendMessage(prompt) }, 300)
+    }
+
     private fun getOrCreateAgent(config: AgentConfig): BeeAgent {
         val key = "${config.id}_${currentProvider.value}_${currentModel.value}"
         return agents.getOrPut(key) {
