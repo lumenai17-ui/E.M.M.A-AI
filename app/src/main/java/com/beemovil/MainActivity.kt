@@ -282,6 +282,12 @@ class MainActivity : ComponentActivity() {
                                     onBack = { viewModel.currentScreen.value = "email_inbox" }
                                 )
                             }
+                            "camera" -> {
+                                CameraScreen(
+                                    viewModel = viewModel,
+                                    onBack = { viewModel.currentScreen.value = "dashboard" }
+                                )
+                            }
                             "settings" -> {
                                 SettingsScreen(
                                     viewModel = viewModel,

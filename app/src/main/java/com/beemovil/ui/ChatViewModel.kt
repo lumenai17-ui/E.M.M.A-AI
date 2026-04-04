@@ -265,6 +265,55 @@ class ChatViewModel : ViewModel() {
         }.start()
     }
 
+    /**
+     * Send message with an image (vision). Image is base64 encoded.
+     */
+    fun sendMessageWithImage(text: String, imageBase64: String) {
+        if (text.isBlank() || isLoading.value) return
+
+        val config = currentAgentConfig.value
+        messages.add(ChatUiMessage(text = "📷 $text", isUser = true))
+        chatHistoryDB?.saveMessage(config.id, "📷 $text", true, config.icon)
+
+        val apiKey = apiKeys[currentProvider.value] ?: ""
+        if (apiKey.isBlank()) {
+            val errorMsg = "⚠️ Configura tu API key primero (⚙️)"
+            messages.add(ChatUiMessage(text = errorMsg, isUser = false, agentIcon = "⚠️", isError = true))
+            return
+        }
+
+        isLoading.value = true
+
+        Thread {
+            var responseText: String
+            var isError = false
+            var toolNames = emptyList<String>()
+
+            try {
+                val agent = getOrCreateAgent(config)
+                val response = agent.chatWithImage(text, imageBase64)
+                responseText = response.text
+                isError = response.isError
+                toolNames = response.toolExecutions.map { it.skillName }
+            } catch (e: Throwable) {
+                Log.e(TAG, "Vision error: ${e.message}", e)
+                responseText = "❌ ${e.javaClass.simpleName}: ${e.message}"
+                isError = true
+            }
+
+            chatHistoryDB?.saveMessage(config.id, responseText, false, config.icon, isError, toolNames)
+
+            mainHandler.post {
+                isLoading.value = false
+                messages.add(ChatUiMessage(
+                    text = responseText,
+                    isUser = false, agentIcon = config.icon,
+                    isError = isError, toolsUsed = toolNames
+                ))
+            }
+        }.start()
+    }
+
     fun clearChat() {
         val config = currentAgentConfig.value
         agents.values.forEach { try { it.clearMemory() } catch (_: Throwable) {} }

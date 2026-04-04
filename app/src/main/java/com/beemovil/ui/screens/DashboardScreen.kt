@@ -280,8 +280,13 @@ fun DashboardScreen(
                     }
                 }
                 item {
-                    QuickAction("📱", "Info", Color(0xFF00BCD4).copy(alpha = 0.2f)) {
-                        viewModel.openAgentChatWithPrompt("main", "Dame información completa de mi dispositivo")
+                    QuickAction("📸", "Cámara", Color(0xFFE91E63).copy(alpha = 0.2f)) {
+                        viewModel.currentScreen.value = "camera"
+                    }
+                }
+                item {
+                    QuickAction("📧", "Correo", Color(0xFF3F51B5).copy(alpha = 0.2f)) {
+                        viewModel.currentScreen.value = "email_inbox"
                     }
                 }
             }
@@ -294,7 +299,7 @@ fun DashboardScreen(
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("Bee-Movil v3.0 · $skillCount skills · Kotlin nativo", fontSize = 11.sp, color = BeeGray)
+                Text("Bee-Movil v3.4 · $skillCount skills · Kotlin nativo", fontSize = 11.sp, color = BeeGray)
             }
         }
     }

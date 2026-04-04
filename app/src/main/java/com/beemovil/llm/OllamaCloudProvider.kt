@@ -79,6 +79,12 @@ class OllamaCloudProvider(
                 put(JSONObject().apply {
                     put("role", msg.role)
                     put("content", msg.content ?: "")
+                    // Vision: send base64 images for multimodal models
+                    if (!msg.images.isNullOrEmpty()) {
+                        put("images", JSONArray().apply {
+                            msg.images.forEach { b64 -> put(b64) }
+                        })
+                    }
                     // For tool results, add tool_name
                     if (msg.role == "tool" && msg.toolCallId != null) {
                         // Ollama uses tool_name instead of tool_call_id

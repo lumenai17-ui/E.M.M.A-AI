@@ -21,7 +21,8 @@ data class ChatMessage(
     val role: String,
     val content: String?,
     val toolCalls: List<ToolCall>? = null,
-    val toolCallId: String? = null
+    val toolCallId: String? = null,
+    val images: List<String>? = null  // base64 images for vision models
 ) {
     fun toJson(): JSONObject {
         val json = JSONObject()

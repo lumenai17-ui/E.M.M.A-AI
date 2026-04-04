@@ -65,6 +65,34 @@ class BeeAgent(
         messages.add(ChatMessage(role = "user", content = userMessage))
         Log.i(TAG, "[${config.id}] User: ${userMessage.take(80)}")
 
+        return processChat(userMessage)
+    }
+
+    /**
+     * SYNCHRONOUS chat with image (vision). Image is base64 encoded.
+     */
+    fun chatWithImage(userMessage: String, imageBase64: String): AgentResponse {
+        // RAG still applies
+        if (memoryDB != null) {
+            val ragContext = memoryDB.buildRagContext(userMessage)
+            if (ragContext.isNotBlank()) {
+                val enhancedPrompt = config.systemPrompt + "\n\n" + ragContext
+                messages[0] = ChatMessage(role = "system", content = enhancedPrompt)
+            }
+        }
+
+        messages.add(ChatMessage(
+            role = "user",
+            content = userMessage,
+            images = listOf(imageBase64)
+        ))
+        Log.i(TAG, "[${config.id}] User (vision): ${userMessage.take(80)} + image")
+
+        return processChat(userMessage)
+    }
+
+    private fun processChat(userMessage: String): AgentResponse {
+
         // Save user message to DB
         memoryDB?.saveMessage(sessionId, "user", userMessage, config.id)
 
