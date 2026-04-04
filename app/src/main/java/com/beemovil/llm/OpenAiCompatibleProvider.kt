@@ -145,6 +145,7 @@ object LlmFactory {
         apiKey = "",
         supportsTools = true,
         models = listOf(
+            ModelOption("glm4:32b", "GLM-4 32B"),
             ModelOption("llama3.3", "Llama 3.3 70B"),
             ModelOption("qwen3", "Qwen 3 32B"),
             ModelOption("qwen3:235b", "Qwen 3 235B (Large)"),
@@ -153,12 +154,20 @@ object LlmFactory {
             ModelOption("mistral", "Mistral 7B"),
             ModelOption("command-r-plus", "Command R+ 104B"),
             ModelOption("phi4", "Phi-4 14B"),
-            ModelOption("glm4", "GLM-4 9B"),
-            // Vision models
+            // Vision models (for camera/image analysis)
             ModelOption("llava", "LLaVA 7B (👁️ Vision)"),
             ModelOption("llama3.2-vision", "Llama 3.2 Vision 11B (👁️)"),
-            ModelOption("bakllava", "BakLLaVA 7B (👁️ Vision)")
+            ModelOption("bakllava", "BakLLaVA 7B (👁️ Vision)"),
+            ModelOption("moondream", "Moondream 2 (👁️ Vision)")
         )
+    )
+
+    // Vision models list for CameraScreen
+    val VISION_MODELS = listOf(
+        ModelOption("llava", "LLaVA 7B"),
+        ModelOption("llama3.2-vision", "Llama 3.2 Vision 11B"),
+        ModelOption("bakllava", "BakLLaVA 7B"),
+        ModelOption("moondream", "Moondream 2")
     )
 
     fun createProvider(

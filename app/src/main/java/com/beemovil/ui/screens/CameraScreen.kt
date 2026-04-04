@@ -23,7 +23,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -33,6 +32,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import com.beemovil.llm.ChatMessage
+import com.beemovil.llm.LlmFactory
+import com.beemovil.llm.OllamaCloudProvider
 import com.beemovil.ui.ChatViewModel
 import com.beemovil.ui.theme.*
 import java.io.ByteArrayOutputStream
@@ -45,11 +47,18 @@ fun CameraScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("bee_settings", 0) }
     var capturedBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var imageBase64 by remember { mutableStateOf("") }
     var prompt by remember { mutableStateOf("") }
     var analysisResult by remember { mutableStateOf("") }
     var isAnalyzing by remember { mutableStateOf(false) }
+
+    // Vision model — separate from global chat model
+    var selectedVisionModel by remember {
+        mutableStateOf(prefs.getString("vision_model", "llava") ?: "llava")
+    }
+    var showModelPicker by remember { mutableStateOf(false) }
 
     // Camera capture
     val photoFile = remember { File(context.cacheDir, "bee_camera_${System.currentTimeMillis()}.jpg") }
@@ -61,7 +70,6 @@ fun CameraScreen(
         if (success && photoFile.exists()) {
             val bitmap = BitmapFactory.decodeFile(photoFile.absolutePath)
             if (bitmap != null) {
-                // Resize for efficiency (max 800px)
                 val scale = minOf(800f / bitmap.width, 800f / bitmap.height, 1f)
                 val resized = Bitmap.createScaledBitmap(
                     bitmap,
@@ -70,8 +78,6 @@ fun CameraScreen(
                     true
                 )
                 capturedBitmap = resized
-
-                // Encode to base64
                 val baos = ByteArrayOutputStream()
                 resized.compress(Bitmap.CompressFormat.JPEG, 85, baos)
                 imageBase64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
@@ -125,6 +131,48 @@ fun CameraScreen(
         "🌿" to "Identifica esta planta, animal o elemento natural."
     )
 
+    // ── Analysis function using dedicated vision model ──
+    fun analyzeImage(question: String) {
+        if (imageBase64.isBlank()) return
+        isAnalyzing = true
+        analysisResult = ""
+
+        Thread {
+            try {
+                // Get Ollama API key
+                val apiKey = prefs.getString("ollama_api_key", "") ?: ""
+                if (apiKey.isBlank()) {
+                    analysisResult = "⚠️ Configura tu API key de Ollama en Settings"
+                    isAnalyzing = false
+                    return@Thread
+                }
+
+                // Create a DEDICATED vision provider (not the global chat one)
+                val visionProvider = OllamaCloudProvider(
+                    apiKey = apiKey,
+                    model = selectedVisionModel
+                )
+
+                // Send image + question directly
+                val messages = listOf(
+                    ChatMessage(role = "user", content = question, images = listOf(imageBase64))
+                )
+                val response = visionProvider.complete(messages, emptyList())
+                analysisResult = response.text ?: "Sin respuesta del modelo"
+            } catch (e: Exception) {
+                val msg = e.message ?: "Error desconocido"
+                analysisResult = when {
+                    msg.contains("404") || msg.contains("not found", true) ->
+                        "❌ Modelo '$selectedVisionModel' no encontrado en Ollama Cloud.\nPrueba con 'llava' o 'llama3.2-vision'"
+                    msg.contains("timeout", true) ->
+                        "❌ Timeout - la imagen puede ser muy grande o el modelo tarda"
+                    else -> "❌ ${msg.take(120)}"
+                }
+            }
+            isAnalyzing = false
+        }.start()
+    }
+
     Column(
         modifier = Modifier.fillMaxSize().background(BeeBlack)
     ) {
@@ -133,7 +181,7 @@ fun CameraScreen(
             title = {
                 Column {
                     Text("Visión AI", fontWeight = FontWeight.Bold)
-                    Text("Ollama Vision · Analiza imágenes", fontSize = 11.sp, color = BeeGray)
+                    Text("👁️ $selectedVisionModel · Analiza imágenes", fontSize = 11.sp, color = BeeGray)
                 }
             },
             navigationIcon = {
@@ -153,6 +201,61 @@ fun CameraScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
+            // ═══ Vision Model Selector ═══
+            Surface(
+                onClick = { showModelPicker = !showModelPicker },
+                color = Color(0xFF1A1A2E),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("👁️", fontSize = 20.sp)
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("MODELO DE VISIÓN", fontSize = 10.sp, color = BeeYellow,
+                            fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                        val displayName = LlmFactory.VISION_MODELS.find { it.id == selectedVisionModel }?.name
+                            ?: selectedVisionModel
+                        Text(displayName, fontSize = 14.sp, color = BeeWhite)
+                        Text(selectedVisionModel, fontSize = 10.sp, color = BeeGray)
+                    }
+                    Text(if (showModelPicker) "▲" else "▼", color = BeeYellow)
+                }
+            }
+
+            if (showModelPicker) {
+                Spacer(modifier = Modifier.height(4.dp))
+                LlmFactory.VISION_MODELS.forEach { model ->
+                    val isSelected = selectedVisionModel == model.id
+                    Surface(
+                        onClick = {
+                            selectedVisionModel = model.id
+                            prefs.edit().putString("vision_model", model.id).apply()
+                            showModelPicker = false
+                        },
+                        color = if (isSelected) BeeYellow.copy(alpha = 0.15f) else Color(0xFF2A2A3E),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                    ) {
+                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("👁️", fontSize = 16.sp)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(model.name, fontSize = 14.sp,
+                                    color = if (isSelected) BeeYellow else Color(0xFFE0E0E0))
+                                Text(model.id, fontSize = 10.sp, color = BeeGray)
+                            }
+                            if (isSelected) Text("✓", color = BeeYellow, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
             // Image preview or capture prompt
             if (capturedBitmap != null) {
                 Card(
@@ -195,7 +298,7 @@ fun CameraScreen(
                         Spacer(modifier = Modifier.height(12.dp))
                         Text("Captura o selecciona una imagen", fontWeight = FontWeight.Bold,
                             fontSize = 16.sp, color = BeeWhite)
-                        Text("El agente analizará lo que vea", fontSize = 13.sp, color = BeeGray)
+                        Text("El modelo de visión analizará lo que vea", fontSize = 13.sp, color = BeeGray)
                     }
                 }
             }
@@ -247,25 +350,7 @@ fun CameraScreen(
                             Surface(
                                 onClick = {
                                     prompt = p
-                                    isAnalyzing = true
-                                    analysisResult = ""
-                                    Thread {
-                                        try {
-                                            val agent = viewModel.let {
-                                                val config = it.currentAgentConfig.value
-                                                // Use vision through agent
-                                                val m = it.javaClass.getDeclaredMethod("getOrCreateAgent",
-                                                    com.beemovil.agent.AgentConfig::class.java)
-                                                m.isAccessible = true
-                                                m.invoke(it, config) as com.beemovil.agent.BeeAgent
-                                            }
-                                            val response = agent.chatWithImage(p, imageBase64)
-                                            analysisResult = response.text
-                                        } catch (e: Exception) {
-                                            analysisResult = "❌ Error: ${e.message}"
-                                        }
-                                        isAnalyzing = false
-                                    }.start()
+                                    analyzeImage(p)
                                 },
                                 color = Color(0xFF2A2A3E),
                                 shape = RoundedCornerShape(10.dp),
@@ -308,24 +393,7 @@ fun CameraScreen(
                             Toast.makeText(context, "Escribe una pregunta", Toast.LENGTH_SHORT).show()
                             return@Button
                         }
-                        isAnalyzing = true
-                        analysisResult = ""
-                        Thread {
-                            try {
-                                val agent = viewModel.let {
-                                    val config = it.currentAgentConfig.value
-                                    val m = it.javaClass.getDeclaredMethod("getOrCreateAgent",
-                                        com.beemovil.agent.AgentConfig::class.java)
-                                    m.isAccessible = true
-                                    m.invoke(it, config) as com.beemovil.agent.BeeAgent
-                                }
-                                val response = agent.chatWithImage(prompt, imageBase64)
-                                analysisResult = response.text
-                            } catch (e: Exception) {
-                                analysisResult = "❌ Error: ${e.message}"
-                            }
-                            isAnalyzing = false
-                        }.start()
+                        analyzeImage(prompt)
                     },
                     enabled = prompt.isNotBlank() && !isAnalyzing,
                     colors = ButtonDefaults.buttonColors(containerColor = BeeYellow, contentColor = BeeBlack),
@@ -353,8 +421,12 @@ fun CameraScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("🐝 RESULTADO", fontSize = 11.sp, color = BeeYellow,
-                            fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("🐝 RESULTADO", fontSize = 11.sp, color = BeeYellow,
+                                fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                            Spacer(modifier = Modifier.weight(1f))
+                            Text("via $selectedVisionModel", fontSize = 9.sp, color = BeeGray)
+                        }
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(analysisResult, fontSize = 14.sp, color = Color(0xFFE0E0E0), lineHeight = 22.sp)
 
@@ -363,7 +435,7 @@ fun CameraScreen(
                             OutlinedButton(
                                 onClick = {
                                     viewModel.openAgentChatWithPrompt("main",
-                                        "Resultado de análisis de imagen: $analysisResult\n\n¿Puedes elaborar más?")
+                                        "Resultado de análisis de imagen ($selectedVisionModel): $analysisResult\n\n¿Puedes elaborar más?")
                                 },
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = BeeYellow),
                                 modifier = Modifier.weight(1f),
@@ -395,7 +467,7 @@ fun CameraScreen(
                     color = BeeYellow, trackColor = Color(0xFF1A1A2E)
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("🧠 Analizando imagen con ${viewModel.getProviderDisplayName()}...",
+                Text("👁️ Analizando con $selectedVisionModel...",
                     fontSize = 13.sp, color = BeeGray,
                     modifier = Modifier.align(Alignment.CenterHorizontally))
             }
