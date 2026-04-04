@@ -2,10 +2,10 @@ package com.beemovil.ui.screens
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -23,245 +24,328 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.beemovil.R
+import com.beemovil.agent.AgentConfig
 import com.beemovil.agent.DefaultAgents
 import com.beemovil.memory.ChatHistoryDB
+import com.beemovil.ui.ChatViewModel
 import com.beemovil.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.*
 
 /**
- * ConversationsScreen — WhatsApp-style list of agent chats.
- * Shows all agents with their last message and timestamp.
+ * ConversationsScreen — Premium agent list with cards, status, and create button.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConversationsScreen(
+    viewModel: ChatViewModel,
     chatHistoryDB: ChatHistoryDB?,
     onAgentClick: (String) -> Unit,
-    onSettingsClick: () -> Unit,
+    onCreateAgent: () -> Unit,
+    onEditAgent: (String) -> Unit,
     skillCount: Int = 25
 ) {
     val previews = remember { mutableStateListOf<ChatHistoryDB.ConversationPreview>() }
-    val agents = DefaultAgents.ALL
+    val agents = viewModel.availableAgents
+    val defaultIds = DefaultAgents.ALL.map { it.id }.toSet()
+    val telegramStatus = viewModel.telegramBotStatus.value
 
-    // Load previews
-    LaunchedEffect(Unit) {
+    LaunchedEffect(agents.size) {
         chatHistoryDB?.let { db ->
             previews.clear()
             previews.addAll(db.getConversationPreviews())
         }
     }
 
-    Scaffold(
-        topBar = {
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(BeeBlack),
+        contentPadding = PaddingValues(bottom = 24.dp)
+    ) {
+        // Header
+        item {
             Surface(
-                color = BeeBlack,
-                modifier = Modifier.background(
-                    Brush.verticalGradient(
-                        colors = listOf(BeeBlack, BeeBlack.copy(alpha = 0.95f))
-                    )
+                color = Color.Transparent,
+                modifier = Modifier.fillMaxWidth().background(
+                    Brush.verticalGradient(listOf(BeeYellow.copy(alpha = 0.1f), BeeBlack))
                 )
             ) {
-                TopAppBar(
-                    title = {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(vertical = 4.dp)
-                        ) {
-                            Image(
-                                painter = painterResource(id = R.drawable.bee_logo),
-                                contentDescription = "Bee Logo",
-                                modifier = Modifier.size(36.dp).clip(CircleShape),
-                                contentScale = ContentScale.Crop
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    "Bee-Movil",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 20.sp,
-                                    color = BeeWhite
-                                )
-                                Text(
-                                    "$skillCount skills activos",
-                                    fontSize = 11.sp,
-                                    color = BeeGrayLight
-                                )
-                            }
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = BeeBlack,
-                        titleContentColor = BeeWhite
-                    ),
-                    actions = {
-                        IconButton(onClick = onSettingsClick) {
-                            Icon(Icons.Filled.Settings, "Settings", tint = BeeYellow)
-                        }
-                    }
-                )
-            }
-        },
-        containerColor = BeeBlack
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(vertical = 4.dp)
-        ) {
-            // All agents
-            items(agents) { agentConfig ->
-                val preview = previews.find { it.agentId == agentConfig.id }
-                AgentChatRow(
-                    icon = agentConfig.icon,
-                    name = agentConfig.name,
-                    description = agentConfig.description,
-                    lastMessage = preview?.lastMessage,
-                    timestamp = preview?.lastTimestamp,
-                    messageCount = preview?.messageCount ?: 0,
-                    isMainAgent = agentConfig.id == "main",
-                    onClick = { onAgentClick(agentConfig.id) }
-                )
-            }
-
-            // Stats footer
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-                val totalMessages = previews.sumOf { it.messageCount }
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = BeeBlackLight),
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 16.dp)
+                        .statusBarsPadding(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                    Column {
+                        Text("Mis Agentes", fontWeight = FontWeight.Bold, fontSize = 24.sp, color = BeeWhite)
+                        Text("${agents.size} agentes · $skillCount skills", fontSize = 12.sp, color = BeeGray)
+                    }
+                    FloatingActionButton(
+                        onClick = onCreateAgent,
+                        containerColor = BeeYellow,
+                        contentColor = BeeBlack,
+                        modifier = Modifier.size(44.dp)
                     ) {
-                        Text("🐝 Bee-Movil v2.0", fontSize = 14.sp, color = BeeYellow, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            "$skillCount skills · $totalMessages mensajes · ${agents.size} agentes",
-                            fontSize = 12.sp, color = BeeGrayLight
-                        )
+                        Icon(Icons.Filled.Add, "Crear", modifier = Modifier.size(24.dp))
                     }
                 }
-                Spacer(modifier = Modifier.height(80.dp))
+            }
+        }
+
+        // Main agent (featured card)
+        val mainAgent = agents.find { it.id == "main" }
+        val mainPreview = previews.find { it.agentId == "main" }
+        if (mainAgent != null) {
+            item {
+                FeaturedAgentCard(
+                    agent = mainAgent,
+                    preview = mainPreview,
+                    telegramStatus = telegramStatus,
+                    onClick = { onAgentClick("main") }
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+        }
+
+        // Default agents section
+        val defaultAgents = agents.filter { it.id != "main" && it.id in defaultIds }
+        if (defaultAgents.isNotEmpty()) {
+            item {
+                Text(
+                    "AGENTES PREDEFINIDOS",
+                    fontSize = 11.sp, color = BeeYellow,
+                    fontWeight = FontWeight.Bold, letterSpacing = 1.sp,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+                )
+            }
+            defaultAgents.forEach { agent ->
+                item {
+                    val preview = previews.find { it.agentId == agent.id }
+                    AgentCard(
+                        agent = agent,
+                        preview = preview,
+                        isCustom = false,
+                        onClick = { onAgentClick(agent.id) },
+                        onEdit = null
+                    )
+                }
+            }
+            item { Spacer(modifier = Modifier.height(12.dp)) }
+        }
+
+        // Custom agents section
+        val customAgents = agents.filter { it.id !in defaultIds }
+        if (customAgents.isNotEmpty()) {
+            item {
+                Text(
+                    "AGENTES PERSONALIZADOS",
+                    fontSize = 11.sp, color = BeeYellow,
+                    fontWeight = FontWeight.Bold, letterSpacing = 1.sp,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+                )
+            }
+            customAgents.forEach { agent ->
+                item {
+                    val preview = previews.find { it.agentId == agent.id }
+                    AgentCard(
+                        agent = agent,
+                        preview = preview,
+                        isCustom = true,
+                        onClick = { onAgentClick(agent.id) },
+                        onEdit = { onEditAgent(agent.id) }
+                    )
+                }
+            }
+        }
+
+        // Empty state for custom
+        if (customAgents.isEmpty()) {
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    onClick = onCreateAgent
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("➕", fontSize = 32.sp)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Crear agente personalizado", color = BeeYellow,
+                            fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                        Text("Hasta 10 agentes custom con su propia personalidad",
+                            color = BeeGray, fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+
+        // Footer
+        item {
+            Spacer(modifier = Modifier.height(16.dp))
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Text("Bee-Movil v3.0 · Kotlin nativo", fontSize = 11.sp, color = BeeGray)
             }
         }
     }
 }
 
 @Composable
-private fun AgentChatRow(
-    icon: String,
-    name: String,
-    description: String,
-    lastMessage: String?,
-    timestamp: Long?,
-    messageCount: Int,
-    isMainAgent: Boolean,
+private fun FeaturedAgentCard(
+    agent: AgentConfig,
+    preview: ChatHistoryDB.ConversationPreview?,
+    telegramStatus: String,
     onClick: () -> Unit
 ) {
-    val timeText = timestamp?.let { formatTimestamp(it) } ?: ""
-
-    Surface(
+    Card(
         onClick = onClick,
-        color = BeeBlack,
-        modifier = Modifier.fillMaxWidth()
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Agent avatar
-            Surface(
-                color = if (isMainAgent) BeeYellow.copy(alpha = 0.2f) else BeeGray.copy(alpha = 0.3f),
-                shape = CircleShape,
-                modifier = Modifier.size(52.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    if (isMainAgent) {
-                        Image(
-                            painter = painterResource(id = R.drawable.bee_logo),
-                            contentDescription = null,
-                            modifier = Modifier.size(40.dp).clip(CircleShape),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
-                        Text(icon, fontSize = 26.sp)
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Image(
+                    painter = painterResource(id = R.drawable.bee_logo),
+                    contentDescription = null,
+                    modifier = Modifier.size(52.dp).clip(CircleShape),
+                    contentScale = ContentScale.Crop
+                )
+                Spacer(modifier = Modifier.width(14.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(agent.name, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = BeeWhite)
+                    Text(agent.description, fontSize = 12.sp, color = BeeGray)
+                }
+                if (telegramStatus == "online") {
+                    Surface(
+                        color = Color(0xFF4CAF50).copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("🟢 TG", fontSize = 11.sp, color = Color(0xFF4CAF50),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.width(14.dp))
-
-            // Name + last message
-            Column(modifier = Modifier.weight(1f)) {
+            if (preview != null) {
+                Spacer(modifier = Modifier.height(10.dp))
+                HorizontalDivider(color = BeeGray.copy(alpha = 0.2f))
+                Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = name,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        color = BeeWhite
+                        preview.lastMessage,
+                        fontSize = 13.sp, color = Color(0xFFB0B0B0),
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
                     )
-                    if (timeText.isNotBlank()) {
-                        Text(
-                            text = timeText,
-                            fontSize = 11.sp,
-                            color = BeeGrayLight
-                        )
-                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(formatTimestamp(preview.lastTimestamp), fontSize = 11.sp, color = BeeGray)
                 }
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = lastMessage ?: description,
-                    fontSize = 13.sp,
-                    color = if (lastMessage != null) BeeGrayLight else BeeGray,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            // Message count badge
-            if (messageCount > 0) {
-                Spacer(modifier = Modifier.width(8.dp))
-                Surface(
-                    color = BeeYellow.copy(alpha = 0.2f),
-                    shape = CircleShape,
-                    modifier = Modifier.size(24.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = if (messageCount > 99) "99+" else "$messageCount",
-                            fontSize = 9.sp,
-                            color = BeeYellow,
-                            fontWeight = FontWeight.Bold
-                        )
+                Row(modifier = Modifier.padding(top = 4.dp)) {
+                    Surface(color = BeeYellow.copy(alpha = 0.15f), shape = RoundedCornerShape(6.dp)) {
+                        Text("${preview.messageCount} msgs", fontSize = 10.sp, color = BeeYellow,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Surface(color = Color(0xFF2196F3).copy(alpha = 0.15f), shape = RoundedCornerShape(6.dp)) {
+                        Text("25 skills", fontSize = 10.sp, color = Color(0xFF2196F3),
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
                     }
                 }
             }
         }
     }
+}
 
-    // Divider
-    HorizontalDivider(
-        modifier = Modifier.padding(start = 82.dp),
-        color = BeeGray.copy(alpha = 0.2f),
-        thickness = 0.5.dp
-    )
+@Composable
+private fun AgentCard(
+    agent: AgentConfig,
+    preview: ChatHistoryDB.ConversationPreview?,
+    isCustom: Boolean,
+    onClick: () -> Unit,
+    onEdit: (() -> Unit)?
+) {
+    Card(
+        onClick = onClick,
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Avatar
+            Surface(
+                color = Color(0xFF2A2A3E),
+                shape = CircleShape,
+                modifier = Modifier.size(46.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(agent.icon, fontSize = 24.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            // Info
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(agent.name, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = BeeWhite)
+                    if (isCustom) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Surface(color = BeeGray.copy(alpha = 0.3f), shape = RoundedCornerShape(4.dp)) {
+                            Text("custom", fontSize = 9.sp, color = BeeGray,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp))
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    preview?.lastMessage ?: agent.description,
+                    fontSize = 12.sp,
+                    color = if (preview != null) Color(0xFFB0B0B0) else BeeGray,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            // Right side
+            Column(horizontalAlignment = Alignment.End) {
+                if (preview != null) {
+                    Text(formatTimestamp(preview.lastTimestamp), fontSize = 11.sp, color = BeeGray)
+                    if (preview.messageCount > 0) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Surface(color = BeeYellow, shape = CircleShape) {
+                            Text("${preview.messageCount}", fontSize = 10.sp, color = BeeBlack,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp))
+                        }
+                    }
+                }
+                if (isCustom && onEdit != null) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    IconButton(onClick = onEdit, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Filled.Edit, "Editar", tint = BeeGray, modifier = Modifier.size(16.dp))
+                    }
+                }
+            }
+        }
+    }
 }
 
 private fun formatTimestamp(ts: Long): String {
-    val now = System.currentTimeMillis()
-    val diff = now - ts
-
+    val diff = System.currentTimeMillis() - ts
     return when {
         diff < 60_000 -> "ahora"
         diff < 3600_000 -> "${diff / 60_000}m"

@@ -16,14 +16,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.beemovil.agent.CustomAgentDB
 import com.beemovil.memory.ChatHistoryDB
 import com.beemovil.skills.*
 import com.beemovil.ui.ChatUiMessage
 import com.beemovil.ui.ChatViewModel
-import com.beemovil.ui.screens.ChatScreen
-import com.beemovil.ui.screens.ConversationsScreen
-import com.beemovil.ui.screens.DashboardScreen
-import com.beemovil.ui.screens.SettingsScreen
+import com.beemovil.ui.screens.*
 import com.beemovil.ui.theme.*
 import java.io.File
 
@@ -122,6 +120,10 @@ class MainActivity : ComponentActivity() {
         viewModel.currentProvider.value = savedProvider
         viewModel.currentModel.value = savedModel
 
+        // Init custom agents DB
+        val customAgentDB = CustomAgentDB(this)
+        viewModel.reloadCustomAgents(customAgentDB)
+
         // If no API key, go straight to settings
         if (!hasKey) viewModel.currentScreen.value = "settings"
         else viewModel.currentScreen.value = "dashboard"
@@ -196,6 +198,7 @@ class MainActivity : ComponentActivity() {
                         color = BeeBlack
                     ) {
                         val screen = viewModel.currentScreen.value
+                        val editingAgentId = remember { mutableStateOf<String?>(null) }
                         when (screen) {
                             "dashboard" -> {
                                 DashboardScreen(
@@ -209,9 +212,17 @@ class MainActivity : ComponentActivity() {
                             }
                             "conversations" -> {
                                 ConversationsScreen(
+                                    viewModel = viewModel,
                                     chatHistoryDB = chatHistoryDB,
                                     onAgentClick = { agentId -> viewModel.openAgentChat(agentId) },
-                                    onSettingsClick = { viewModel.currentScreen.value = "settings" },
+                                    onCreateAgent = {
+                                        editingAgentId.value = null
+                                        viewModel.currentScreen.value = "create_agent"
+                                    },
+                                    onEditAgent = { agentId ->
+                                        editingAgentId.value = agentId
+                                        viewModel.currentScreen.value = "create_agent"
+                                    },
                                     skillCount = skills.size
                                 )
                             }
@@ -220,6 +231,15 @@ class MainActivity : ComponentActivity() {
                                     viewModel = viewModel,
                                     onSettingsClick = { viewModel.currentScreen.value = "settings" },
                                     onBackClick = { viewModel.currentScreen.value = "conversations" }
+                                )
+                            }
+                            "create_agent" -> {
+                                AgentCreatorScreen(
+                                    viewModel = viewModel,
+                                    customAgentDB = customAgentDB,
+                                    editAgentId = editingAgentId.value,
+                                    onSaved = { viewModel.currentScreen.value = "conversations" },
+                                    onBack = { viewModel.currentScreen.value = "conversations" }
                                 )
                             }
                             "settings" -> {

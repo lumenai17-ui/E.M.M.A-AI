@@ -32,7 +32,7 @@ class ChatViewModel : ViewModel() {
     val messages = mutableStateListOf<ChatUiMessage>()
     val isLoading = mutableStateOf(false)
     val currentAgentConfig = mutableStateOf(DefaultAgents.MAIN)
-    val availableAgents = DefaultAgents.ALL
+    val availableAgents = mutableStateListOf<AgentConfig>().apply { addAll(DefaultAgents.ALL) }
 
     // Provider configuration
     val currentProvider = mutableStateOf("openrouter")
@@ -179,6 +179,22 @@ class ChatViewModel : ViewModel() {
         openAgentChat(agentId)
         // Auto-send after a small delay to let UI settle
         mainHandler.postDelayed({ sendMessage(prompt) }, 300)
+    }
+
+    /**
+     * Reload custom agents from database.
+     */
+    fun reloadCustomAgents(db: com.beemovil.agent.CustomAgentDB) {
+        availableAgents.clear()
+        availableAgents.addAll(DefaultAgents.ALL)
+        val customs = db.getAllAgents()
+        customs.forEach { custom ->
+            // If model is blank, inherit global model
+            val resolved = if (custom.model.isBlank()) {
+                custom.copy(model = currentModel.value)
+            } else custom
+            availableAgents.add(resolved)
+        }
     }
 
     private fun getOrCreateAgent(config: AgentConfig): BeeAgent {
