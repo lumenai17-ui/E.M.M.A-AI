@@ -144,7 +144,7 @@ class MainActivity : ComponentActivity() {
                     bottomBar = {
                         val screen = viewModel.currentScreen.value
                         // Show bottom bar only on main screens
-                        if (screen == "dashboard" || screen == "conversations" || screen == "settings") {
+                        if (screen in listOf("dashboard", "conversations", "email_inbox", "settings")) {
                             NavigationBar(
                                 containerColor = BeeBlackLight,
                                 contentColor = BeeYellow,
@@ -168,6 +168,19 @@ class MainActivity : ComponentActivity() {
                                     onClick = { viewModel.currentScreen.value = "conversations" },
                                     icon = { Icon(Icons.Filled.Forum, "Agentes") },
                                     label = { Text("Agentes", fontSize = 11.sp) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = BeeYellow,
+                                        selectedTextColor = BeeYellow,
+                                        unselectedIconColor = BeeGray,
+                                        unselectedTextColor = BeeGray,
+                                        indicatorColor = BeeYellow.copy(alpha = 0.12f)
+                                    )
+                                )
+                                NavigationBarItem(
+                                    selected = screen == "email_inbox",
+                                    onClick = { viewModel.currentScreen.value = "email_inbox" },
+                                    icon = { Icon(Icons.Filled.Email, "Email") },
+                                    label = { Text("Correo", fontSize = 11.sp) },
                                     colors = NavigationBarItemDefaults.colors(
                                         selectedIconColor = BeeYellow,
                                         selectedTextColor = BeeYellow,
@@ -240,6 +253,33 @@ class MainActivity : ComponentActivity() {
                                     editAgentId = editingAgentId.value,
                                     onSaved = { viewModel.currentScreen.value = "conversations" },
                                     onBack = { viewModel.currentScreen.value = "conversations" }
+                                )
+                            }
+                            "email_inbox" -> {
+                                val selectedEmailUid = remember { mutableStateOf(0L) }
+                                val replyTo = remember { mutableStateOf<String?>(null) }
+                                val replySubject = remember { mutableStateOf<String?>(null) }
+                                EmailInboxScreen(
+                                    onEmailClick = { uid ->
+                                        selectedEmailUid.value = uid
+                                        viewModel.currentScreen.value = "email_detail"
+                                    },
+                                    onCompose = { viewModel.currentScreen.value = "email_compose" }
+                                )
+                            }
+                            "email_detail" -> {
+                                EmailDetailScreen(
+                                    uid = 0L, // will be passed via state
+                                    viewModel = viewModel,
+                                    onBack = { viewModel.currentScreen.value = "email_inbox" },
+                                    onReply = { to, subject ->
+                                        viewModel.currentScreen.value = "email_compose"
+                                    }
+                                )
+                            }
+                            "email_compose" -> {
+                                EmailComposeScreen(
+                                    onBack = { viewModel.currentScreen.value = "email_inbox" }
                                 )
                             }
                             "settings" -> {

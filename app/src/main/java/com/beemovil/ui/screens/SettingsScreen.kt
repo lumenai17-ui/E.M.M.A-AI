@@ -394,6 +394,134 @@ fun SettingsScreen(
             }
 
             // ═══════════════════════════════════════
+            // EMAIL CONFIG
+            // ═══════════════════════════════════════
+            SectionCard {
+                SectionTitle("CORREO ELECTRÓNICO")
+                Text("Configura tu email para usar la bandeja de entrada", fontSize = 12.sp, color = BeeGray)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                var emailAddr by remember { mutableStateOf(prefs.getString("email_address", "") ?: "") }
+                var emailPasswd by remember { mutableStateOf(prefs.getString("email_password", "") ?: "") }
+                var showEmailPass by remember { mutableStateOf(false) }
+                var emailImapHost by remember { mutableStateOf(prefs.getString("email_imap_host", "imap.gmail.com") ?: "imap.gmail.com") }
+                var emailSmtpHost by remember { mutableStateOf(prefs.getString("email_smtp_host", "smtp.gmail.com") ?: "smtp.gmail.com") }
+                var emailTestResult by remember { mutableStateOf("") }
+
+                // Presets
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("Gmail", "Outlook", "Yahoo").forEach { name ->
+                        FilterChip(
+                            selected = emailImapHost.contains(name.lowercase()),
+                            onClick = {
+                                val preset = com.beemovil.email.EmailService.PRESETS[name]!!
+                                emailImapHost = preset.imapHost
+                                emailSmtpHost = preset.smtpHost
+                            },
+                            label = { Text(name, fontSize = 12.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = BeeYellow,
+                                selectedLabelColor = BeeBlack,
+                                containerColor = BeeGray.copy(alpha = 0.3f),
+                                labelColor = Color(0xFFE0E0E0)
+                            )
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = emailAddr,
+                    onValueChange = { emailAddr = it },
+                    label = { Text("Correo electrónico") },
+                    placeholder = { Text("usuario@gmail.com", color = BeeGray) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    colors = fieldColors()
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                OutlinedTextField(
+                    value = emailPasswd,
+                    onValueChange = { emailPasswd = it },
+                    label = { Text("Contraseña / App Password") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    visualTransformation = if (showEmailPass) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { showEmailPass = !showEmailPass }) {
+                            Icon(if (showEmailPass) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Toggle", tint = BeeGrayLight)
+                        }
+                    },
+                    colors = fieldColors()
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Server info (collapsed)
+                Text("IMAP: $emailImapHost · SMTP: $emailSmtpHost", fontSize = 11.sp, color = BeeGray)
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            val preset = com.beemovil.email.EmailService.PRESETS.values.find { it.imapHost == emailImapHost }
+                                ?: com.beemovil.email.EmailService.EmailConfig(emailImapHost, 993, emailSmtpHost, 587)
+                            prefs.edit()
+                                .putString("email_address", emailAddr.trim())
+                                .putString("email_password", emailPasswd)
+                                .putString("email_imap_host", preset.imapHost)
+                                .putInt("email_imap_port", preset.imapPort)
+                                .putString("email_smtp_host", preset.smtpHost)
+                                .putInt("email_smtp_port", preset.smtpPort)
+                                .apply()
+                            Toast.makeText(context, "✅ Email configurado", Toast.LENGTH_SHORT).show()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = BeeGray.copy(alpha = 0.5f)),
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("💾 Guardar", color = BeeWhite, fontSize = 13.sp)
+                    }
+                    Button(
+                        onClick = {
+                            emailTestResult = "⏳ Probando..."
+                            Thread {
+                                try {
+                                    val preset = com.beemovil.email.EmailService.PRESETS.values.find { it.imapHost == emailImapHost }
+                                        ?: com.beemovil.email.EmailService.EmailConfig(emailImapHost, 993, emailSmtpHost, 587)
+                                    val result = com.beemovil.email.EmailService(context)
+                                        .testConnection(emailAddr.trim(), emailPasswd, preset)
+                                    emailTestResult = "✅ $result"
+                                } catch (e: Exception) {
+                                    emailTestResult = "❌ ${e.message?.take(60)}"
+                                }
+                            }.start()
+                        },
+                        enabled = emailAddr.isNotBlank() && emailPasswd.isNotBlank(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1565C0)),
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("🔍 Probar", color = BeeWhite, fontSize = 13.sp)
+                    }
+                }
+
+                if (emailTestResult.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(emailTestResult, fontSize = 12.sp,
+                        color = if (emailTestResult.startsWith("✅")) Color(0xFF4CAF50) else if (emailTestResult.startsWith("❌")) Color(0xFFF44336) else BeeGray)
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("Gmail: usa una App Password (Seguridad → Verificación en 2 pasos → App Passwords)",
+                    fontSize = 10.sp, color = BeeGray)
+            }
+
+            // ═══════════════════════════════════════
             // DATOS Y ALMACENAMIENTO
             // ═══════════════════════════════════════
             SectionCard {

@@ -1,0 +1,318 @@
+package com.beemovil.ui.screens
+
+import android.content.Intent
+import android.widget.Toast
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.beemovil.email.EmailService
+import com.beemovil.ui.ChatViewModel
+import com.beemovil.ui.theme.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.*
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EmailDetailScreen(
+    uid: Long,
+    viewModel: ChatViewModel,
+    onBack: () -> Unit,
+    onReply: (String, String) -> Unit
+) {
+    val context = LocalContext.current
+    val prefs = context.getSharedPreferences("beemovil", android.content.Context.MODE_PRIVATE)
+    val scope = rememberCoroutineScope()
+
+    val emailAddr = prefs.getString("email_address", "") ?: ""
+    val emailPass = prefs.getString("email_password", "") ?: ""
+    val config = EmailService.EmailConfig(
+        prefs.getString("email_imap_host", "imap.gmail.com") ?: "imap.gmail.com",
+        prefs.getInt("email_imap_port", 993),
+        prefs.getString("email_smtp_host", "smtp.gmail.com") ?: "smtp.gmail.com",
+        prefs.getInt("email_smtp_port", 587)
+    )
+
+    var email by remember { mutableStateOf<EmailService.EmailMessage?>(null) }
+    var isLoading by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(uid) {
+        try {
+            val service = EmailService(context)
+            email = withContext(Dispatchers.IO) {
+                service.fetchEmail(emailAddr, emailPass, config, uid)
+            }
+        } catch (e: Exception) {
+            error = e.message
+        } finally {
+            isLoading = false
+        }
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize().background(BeeBlack)
+    ) {
+        // Top bar
+        TopAppBar(
+            title = { Text("Correo", fontWeight = FontWeight.Bold) },
+            navigationIcon = {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.Filled.ArrowBack, "Back", tint = BeeYellow)
+                }
+            },
+            actions = {
+                if (email != null) {
+                    IconButton(onClick = {
+                        email?.let { e -> onReply(e.fromEmail, e.subject) }
+                    }) {
+                        Icon(Icons.Filled.Reply, "Reply", tint = BeeYellow)
+                    }
+                    IconButton(onClick = {
+                        // Forward
+                        email?.let { e ->
+                            val intent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_SUBJECT, "Fwd: ${e.subject}")
+                                putExtra(Intent.EXTRA_TEXT, e.body)
+                            }
+                            context.startActivity(Intent.createChooser(intent, "Reenviar"))
+                        }
+                    }) {
+                        Icon(Icons.Filled.Forward, "Forward", tint = BeeGray)
+                    }
+                }
+            },
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = Color(0xFF1A1A2E),
+                titleContentColor = BeeWhite
+            )
+        )
+
+        if (isLoading) {
+            LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth(),
+                color = BeeYellow, trackColor = Color(0xFF1A1A2E)
+            )
+        }
+
+        if (error != null) {
+            Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+                Text("⚠️ $error", color = Color(0xFFF44336))
+            }
+            return
+        }
+
+        val msg = email ?: return
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(20.dp)
+        ) {
+            // From header
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val initial = msg.from.firstOrNull()?.uppercase() ?: "?"
+                Surface(
+                    color = getDetailAvatarColor(msg.fromEmail),
+                    shape = CircleShape,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(initial, fontSize = 20.sp, color = BeeWhite, fontWeight = FontWeight.Bold)
+                    }
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(msg.from, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = BeeWhite)
+                    Text(msg.fromEmail, fontSize = 12.sp, color = BeeGray)
+                    Text(
+                        SimpleDateFormat("EEEE d MMM, HH:mm", Locale("es")).format(msg.date),
+                        fontSize = 12.sp, color = BeeGray
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Subject
+            Text(msg.subject, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = BeeWhite)
+
+            Spacer(modifier = Modifier.height(4.dp))
+            Text("Para: ${msg.to}", fontSize = 12.sp, color = BeeGray)
+
+            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider(color = BeeGray.copy(alpha = 0.2f))
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Body
+            val cleanBody = msg.body.replace(Regex("<[^>]*>"), "").trim()
+            Text(cleanBody, fontSize = 14.sp, color = Color(0xFFE0E0E0), lineHeight = 22.sp)
+
+            // Attachments
+            if (msg.attachments.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(20.dp))
+                HorizontalDivider(color = BeeGray.copy(alpha = 0.2f))
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    "ADJUNTOS (${msg.attachments.size})",
+                    fontSize = 11.sp, color = BeeYellow,
+                    fontWeight = FontWeight.Bold, letterSpacing = 1.sp
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                msg.attachments.forEach { att ->
+                    AttachmentCard(
+                        attachment = att,
+                        onDownload = {
+                            scope.launch {
+                                try {
+                                    val service = EmailService(context)
+                                    val file = withContext(Dispatchers.IO) {
+                                        service.downloadAttachment(emailAddr, emailPass, config, uid, att.name)
+                                    }
+                                    if (file != null) {
+                                        Toast.makeText(context, "✅ Guardado: ${file.name}", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(context, "❌ Error descargando", Toast.LENGTH_SHORT).show()
+                                    }
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "❌ ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                        onOpen = {
+                            att.localPath?.let { path ->
+                                val file = File(path)
+                                if (file.exists()) {
+                                    try {
+                                        val uri = androidx.core.content.FileProvider.getUriForFile(
+                                            context, "${context.packageName}.fileprovider", file
+                                        )
+                                        val intent = Intent(Intent.ACTION_VIEW).apply {
+                                            setDataAndType(uri, att.mimeType)
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        }
+                                        context.startActivity(intent)
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "No hay app para abrir este archivo", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                        }
+                    )
+                }
+            }
+
+            // Ask Bee to reply
+            Spacer(modifier = Modifier.height(24.dp))
+            Card(
+                onClick = {
+                    val prompt = "Responde al correo de ${msg.from} con asunto '${msg.subject}'. El mensaje dice: ${cleanBody.take(500)}. Genera una respuesta profesional."
+                    viewModel.openAgentChatWithPrompt("main", prompt)
+                },
+                colors = CardDefaults.cardColors(containerColor = BeeYellow.copy(alpha = 0.12f)),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("🐝", fontSize = 22.sp)
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text("Pedirle a Bee que responda", fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp, color = BeeYellow)
+                        Text("El agente generará una respuesta para este correo",
+                            fontSize = 12.sp, color = BeeGray)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(40.dp))
+        }
+    }
+}
+
+@Composable
+private fun AttachmentCard(
+    attachment: EmailService.EmailAttachment,
+    onDownload: () -> Unit,
+    onOpen: () -> Unit
+) {
+    val icon = when {
+        attachment.mimeType.contains("pdf", true) -> "📄"
+        attachment.mimeType.contains("image", true) -> "🖼️"
+        attachment.mimeType.contains("video", true) -> "🎬"
+        attachment.mimeType.contains("audio", true) -> "🎵"
+        attachment.mimeType.contains("zip", true) || attachment.mimeType.contains("rar", true) -> "📦"
+        attachment.mimeType.contains("spreadsheet", true) || attachment.mimeType.contains("excel", true) -> "📊"
+        attachment.mimeType.contains("document", true) || attachment.mimeType.contains("word", true) -> "📝"
+        else -> "📎"
+    }
+
+    val sizeText = when {
+        attachment.size < 1024 -> "${attachment.size} B"
+        attachment.size < 1024 * 1024 -> "${attachment.size / 1024} KB"
+        else -> "${"%.1f".format(attachment.size / 1024.0 / 1024.0)} MB"
+    }
+
+    val isSaved = attachment.localPath != null
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+        shape = RoundedCornerShape(10.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(icon, fontSize = 24.sp)
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(attachment.name, fontSize = 14.sp, color = Color(0xFFE0E0E0),
+                    fontWeight = FontWeight.Medium)
+                Text("$sizeText · ${attachment.mimeType.split("/").last()}", fontSize = 11.sp, color = BeeGray)
+            }
+            if (isSaved) {
+                IconButton(onClick = onOpen, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Filled.OpenInNew, "Abrir", tint = BeeYellow)
+                }
+            } else {
+                IconButton(onClick = onDownload, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Filled.Download, "Descargar", tint = BeeYellow)
+                }
+            }
+        }
+    }
+}
+
+private fun getDetailAvatarColor(email: String): Color {
+    val colors = listOf(
+        Color(0xFF1565C0), Color(0xFF2E7D32), Color(0xFFC62828),
+        Color(0xFF6A1B9A), Color(0xFFEF6C00), Color(0xFF00838F)
+    )
+    val hash = email.hashCode().let { if (it < 0) -it else it }
+    return colors[hash % colors.size]
+}

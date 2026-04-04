@@ -38,6 +38,19 @@ android {
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.8"
     }
+
+    packaging {
+        resources {
+            excludes += setOf(
+                "META-INF/NOTICE.md",
+                "META-INF/LICENSE.md",
+                "META-INF/NOTICE",
+                "META-INF/LICENSE",
+                "META-INF/mailcap",
+                "META-INF/mimetypes.default"
+            )
+        }
+    }
 }
 
 dependencies {
@@ -75,6 +88,10 @@ dependencies {
 
     // Markdown rendering
     implementation("io.noties.markwon:core:4.6.2")
+
+    // Email (IMAP/SMTP) — Android-compatible JavaMail
+    implementation("com.sun.mail:android-mail:1.6.7")
+    implementation("com.sun.mail:android-activation:1.6.7")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
