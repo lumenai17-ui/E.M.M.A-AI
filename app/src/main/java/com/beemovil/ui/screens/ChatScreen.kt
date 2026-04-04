@@ -114,8 +114,9 @@ fun ChatScreen(viewModel: ChatViewModel, onSettingsClick: () -> Unit = {}) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
-                        .imePadding(),
+                        .navigationBarsPadding()
+                        .imePadding()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.Bottom
                 ) {
                     TextField(
