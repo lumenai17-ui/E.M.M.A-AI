@@ -56,7 +56,7 @@ fun CameraScreen(
 
     // Vision model — separate from global chat model
     var selectedVisionModel by remember {
-        mutableStateOf(prefs.getString("vision_model", "llava") ?: "llava")
+        mutableStateOf(prefs.getString("vision_model", "gemma4:31b-cloud") ?: "gemma4:31b-cloud")
     }
     var showModelPicker by remember { mutableStateOf(false) }
 
@@ -319,9 +319,9 @@ fun CameraScreen(
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Icon(Icons.Filled.CameraAlt, "Camera", modifier = Modifier.size(20.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Cámara", fontWeight = FontWeight.Bold)
+                    Icon(Icons.Filled.CameraAlt, "Camera", modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Foto", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
                 OutlinedButton(
                     onClick = { galleryLauncher.launch("image/*") },
@@ -329,9 +329,19 @@ fun CameraScreen(
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Icon(Icons.Filled.PhotoLibrary, "Gallery", modifier = Modifier.size(20.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Galería")
+                    Icon(Icons.Filled.PhotoLibrary, "Gallery", modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Galería", fontSize = 13.sp)
+                }
+                Button(
+                    onClick = { viewModel.currentScreen.value = "live_vision" },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF44336), contentColor = BeeWhite),
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("🔴", fontSize = 14.sp)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Live", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
             }
 

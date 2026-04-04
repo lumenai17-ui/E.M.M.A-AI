@@ -93,6 +93,12 @@ dependencies {
     implementation("com.sun.mail:android-mail:1.6.7")
     implementation("com.sun.mail:android-activation:1.6.7")
 
+    // CameraX (Live Vision mode)
+    val cameraxVersion = "1.3.1"
+    implementation("androidx.camera:camera-camera2:$cameraxVersion")
+    implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
+    implementation("androidx.camera:camera-view:$cameraxVersion")
+
     // Google Sign-In (Phase 8 - pending Cloud setup)
     // implementation("com.google.android.gms:play-services-auth:21.0.0")
 

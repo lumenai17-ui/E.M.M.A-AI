@@ -288,6 +288,12 @@ class MainActivity : ComponentActivity() {
                                     onBack = { viewModel.currentScreen.value = "dashboard" }
                                 )
                             }
+                            "live_vision" -> {
+                                LiveVisionScreen(
+                                    viewModel = viewModel,
+                                    onBack = { viewModel.currentScreen.value = "camera" }
+                                )
+                            }
                             "settings" -> {
                                 SettingsScreen(
                                     viewModel = viewModel,

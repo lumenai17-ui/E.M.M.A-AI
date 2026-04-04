@@ -145,6 +145,7 @@ object LlmFactory {
         apiKey = "",
         supportsTools = true,
         models = listOf(
+            ModelOption("gemma4:31b-cloud", "Gemma 4 31B (👁️ Vision + Chat)"),
             ModelOption("glm4:32b", "GLM-4 32B"),
             ModelOption("llama3.3", "Llama 3.3 70B"),
             ModelOption("qwen3", "Qwen 3 32B"),
@@ -164,10 +165,13 @@ object LlmFactory {
 
     // Vision models list for CameraScreen
     val VISION_MODELS = listOf(
+        ModelOption("gemma4:31b-cloud", "Gemma 4 31B (Recomendado)"),
+        ModelOption("gemma3:27b", "Gemma 3 27B"),
+        ModelOption("gemma3:12b", "Gemma 3 12B (Ligero)"),
         ModelOption("llava", "LLaVA 7B"),
         ModelOption("llama3.2-vision", "Llama 3.2 Vision 11B"),
         ModelOption("bakllava", "BakLLaVA 7B"),
-        ModelOption("moondream", "Moondream 2")
+        ModelOption("moondream", "Moondream 2 (Ultra-ligero)")
     )
 
     fun createProvider(
