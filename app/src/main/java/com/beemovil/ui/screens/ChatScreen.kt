@@ -36,7 +36,7 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatScreen(viewModel: ChatViewModel, onSettingsClick: () -> Unit = {}) {
+fun ChatScreen(viewModel: ChatViewModel, onSettingsClick: () -> Unit = {}, onBackClick: () -> Unit = {}) {
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -93,6 +93,11 @@ fun ChatScreen(viewModel: ChatViewModel, onSettingsClick: () -> Unit = {}) {
                                     color = BeeGrayLight
                                 )
                             }
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onBackClick) {
+                            Icon(Icons.Filled.ArrowBack, "Back", tint = BeeYellow)
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(

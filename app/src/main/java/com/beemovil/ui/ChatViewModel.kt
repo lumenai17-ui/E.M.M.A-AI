@@ -11,6 +11,7 @@ import com.beemovil.agent.BeeAgent
 import com.beemovil.agent.DefaultAgents
 import com.beemovil.llm.LlmFactory
 import com.beemovil.memory.BeeMemoryDB
+import com.beemovil.memory.ChatHistoryDB
 import com.beemovil.skills.BeeSkill
 
 data class ChatUiMessage(
@@ -37,13 +38,18 @@ class ChatViewModel : ViewModel() {
     val currentProvider = mutableStateOf("openrouter")
     val currentModel = mutableStateOf("qwen/qwen3.6-plus:free")
 
+    // Navigation state
+    val currentScreen = mutableStateOf("conversations") // "conversations" | "chat" | "settings"
+
     private var agents = mutableMapOf<String, BeeAgent>()
     private var skills = mapOf<String, BeeSkill>()
     private var apiKeys = mutableMapOf<String, String>()
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    // Memory system
+    // Memory & History
     var memoryDB: BeeMemoryDB? = null
+        private set
+    var chatHistoryDB: ChatHistoryDB? = null
         private set
 
     // Voice input
@@ -69,7 +75,6 @@ class ChatViewModel : ViewModel() {
                     mainHandler.post {
                         isRecording.value = false
                         onText(text)
-                        // Auto-send voice input
                         sendMessage(text)
                     }
                 }
@@ -77,25 +82,13 @@ class ChatViewModel : ViewModel() {
         }
     }
 
-    fun initialize(skillMap: Map<String, BeeSkill>, openRouterKey: String, ollamaKey: String = "", memory: BeeMemoryDB? = null) {
+    fun initialize(skillMap: Map<String, BeeSkill>, openRouterKey: String, ollamaKey: String = "",
+                   memory: BeeMemoryDB? = null, chatHistory: ChatHistoryDB? = null) {
         this.skills = skillMap
         this.memoryDB = memory
+        this.chatHistoryDB = chatHistory
         if (openRouterKey.isNotBlank()) apiKeys["openrouter"] = openRouterKey
         if (ollamaKey.isNotBlank()) apiKeys["ollama"] = ollamaKey
-
-        if (messages.isEmpty()) {
-            val skillCount = skillMap.size
-            val memCount = memory?.getMemoryCount() ?: 0
-            val memInfo = if (memCount > 0) "\n🧠 **$memCount memorias** almacenadas" else ""
-
-            messages.add(ChatUiMessage(
-                text = "¡Hola! Soy Bee-Movil 🐝\n\n" +
-                        "Tengo **$skillCount skills nativos** listos.\n" +
-                        "Proveedor: **${getProviderDisplayName()}**" +
-                        memInfo + "\n\n¿En qué te puedo ayudar?",
-                isUser = false, agentIcon = "🐝"
-            ))
-        }
     }
 
     fun hasApiKey(): Boolean = apiKeys[currentProvider.value]?.isNotBlank() == true
@@ -111,17 +104,68 @@ class ChatViewModel : ViewModel() {
         currentProvider.value = provider
         currentModel.value = model
         agents.clear()
-        messages.add(ChatUiMessage(
-            text = "🔄 Cambiando a **${getProviderDisplayName()}**\nModelo: `$model`",
-            isUser = false, agentIcon = "⚙️"
-        ))
     }
 
-    private fun getProviderDisplayName(): String {
+    fun getProviderDisplayName(): String {
         return when (currentProvider.value) {
             "ollama" -> "Ollama Cloud"
             else -> "OpenRouter"
         }
+    }
+
+    /**
+     * Open a chat with a specific agent. Loads history from DB.
+     */
+    fun openAgentChat(agentId: String) {
+        val config = availableAgents.find { it.id == agentId } ?: DefaultAgents.MAIN
+        currentAgentConfig.value = config
+
+        // Clear current UI messages
+        messages.clear()
+
+        // Load history from DB
+        chatHistoryDB?.let { db ->
+            val history = db.getMessages(agentId)
+            if (history.isNotEmpty()) {
+                history.forEach { msg ->
+                    val tools = try {
+                        val arr = org.json.JSONArray(msg.toolsUsed)
+                        (0 until arr.length()).map { arr.getString(it) }
+                    } catch (_: Exception) { emptyList() }
+
+                    messages.add(ChatUiMessage(
+                        text = msg.text,
+                        isUser = msg.isUser,
+                        agentIcon = msg.agentIcon,
+                        isError = msg.isError,
+                        toolsUsed = tools
+                    ))
+                }
+            } else {
+                // First time — show welcome
+                val skillCount = skills.size
+                val memCount = memoryDB?.getMemoryCount() ?: 0
+                val memInfo = if (memCount > 0) "\n🧠 **$memCount memorias** almacenadas" else ""
+                val welcome = ChatUiMessage(
+                    text = "¡Hola! Soy ${config.name} ${config.icon}\n\n" +
+                            "Tengo **$skillCount skills nativos** listos.\n" +
+                            "Proveedor: **${getProviderDisplayName()}**" +
+                            memInfo + "\n\n¿En qué te puedo ayudar?",
+                    isUser = false, agentIcon = config.icon
+                )
+                messages.add(welcome)
+                db.saveMessage(agentId, welcome.text, false, config.icon)
+            }
+        }
+
+        currentScreen.value = "chat"
+    }
+
+    /**
+     * Go back to conversations list.
+     */
+    fun navigateToConversations() {
+        currentScreen.value = "conversations"
     }
 
     private fun getOrCreateAgent(config: AgentConfig): BeeAgent {
@@ -139,11 +183,7 @@ class ChatViewModel : ViewModel() {
     }
 
     fun switchAgent(config: AgentConfig) {
-        currentAgentConfig.value = config
-        messages.add(ChatUiMessage(
-            text = "Cambiando a ${config.name} ${config.icon}",
-            isUser = false, agentIcon = config.icon
-        ))
+        openAgentChat(config.id)
     }
 
     fun sendMessage(text: String) {
@@ -152,12 +192,14 @@ class ChatViewModel : ViewModel() {
         val config = currentAgentConfig.value
         messages.add(ChatUiMessage(text = text, isUser = true))
 
+        // Save to DB
+        chatHistoryDB?.saveMessage(config.id, text, true, config.icon)
+
         val apiKey = apiKeys[currentProvider.value] ?: ""
         if (apiKey.isBlank()) {
-            messages.add(ChatUiMessage(
-                text = "⚠️ Configura tu API key para **${getProviderDisplayName()}** primero (⚙️)",
-                isUser = false, agentIcon = "⚠️", isError = true
-            ))
+            val errorMsg = "⚠️ Configura tu API key para **${getProviderDisplayName()}** primero (⚙️)"
+            messages.add(ChatUiMessage(text = errorMsg, isUser = false, agentIcon = "⚠️", isError = true))
+            chatHistoryDB?.saveMessage(config.id, errorMsg, false, "⚠️", true)
             return
         }
 
@@ -180,6 +222,9 @@ class ChatViewModel : ViewModel() {
                 isError = true
             }
 
+            // Save response to DB
+            chatHistoryDB?.saveMessage(config.id, responseText, false, config.icon, isError, toolNames)
+
             mainHandler.post {
                 isLoading.value = false
                 messages.add(ChatUiMessage(
@@ -195,10 +240,13 @@ class ChatViewModel : ViewModel() {
         val config = currentAgentConfig.value
         agents.values.forEach { try { it.clearMemory() } catch (_: Throwable) {} }
         messages.clear()
+        chatHistoryDB?.clearAgent(config.id)
         val memCount = memoryDB?.getMemoryCount() ?: 0
-        messages.add(ChatUiMessage(
+        val clearMsg = ChatUiMessage(
             text = "Chat limpiado ${config.icon}\n🧠 $memCount memorias persisten",
             isUser = false, agentIcon = config.icon
-        ))
+        )
+        messages.add(clearMsg)
+        chatHistoryDB?.saveMessage(config.id, clearMsg.text, false, config.icon)
     }
 }

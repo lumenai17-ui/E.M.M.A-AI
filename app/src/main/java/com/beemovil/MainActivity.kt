@@ -11,10 +11,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import com.beemovil.memory.ChatHistoryDB
 import com.beemovil.skills.*
 import com.beemovil.ui.ChatUiMessage
 import com.beemovil.ui.ChatViewModel
 import com.beemovil.ui.screens.ChatScreen
+import com.beemovil.ui.screens.ConversationsScreen
 import com.beemovil.ui.screens.SettingsScreen
 import com.beemovil.ui.theme.BeeBlack
 import com.beemovil.ui.theme.BeeMovilTheme
@@ -84,9 +86,6 @@ class MainActivity : ComponentActivity() {
         val savedProvider = prefs.getString("selected_provider", "openrouter") ?: "openrouter"
         val savedModel = prefs.getString("selected_model", "qwen/qwen3.6-plus:free") ?: "qwen/qwen3.6-plus:free"
 
-        viewModel.initialize(skills, orKey, olKey, memoryDB)
-        viewModel.currentProvider.value = savedProvider
-        viewModel.currentModel.value = savedModel
 
         // Init voice input
         val voiceManager = com.beemovil.skills.VoiceInputManager(this)
@@ -111,6 +110,16 @@ class MainActivity : ComponentActivity() {
             else -> orKey.isNotBlank()
         }
 
+        // Init chat history DB
+        val chatHistoryDB = ChatHistoryDB(this)
+
+        viewModel.initialize(skills, orKey, olKey, memoryDB, chatHistoryDB)
+        viewModel.currentProvider.value = savedProvider
+        viewModel.currentModel.value = savedModel
+
+        // If no API key, go straight to settings
+        if (!hasKey) viewModel.currentScreen.value = "settings"
+
         // Show crash log
         if (crashMsg != null) {
             val shortCrash = crashMsg.lines().take(5).joinToString("\n")
@@ -122,19 +131,35 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             BeeMovilTheme {
-                var showSettings by remember { mutableStateOf(!hasKey) }
-
                 Surface(modifier = Modifier.fillMaxSize(), color = BeeBlack) {
-                    if (showSettings) {
-                        SettingsScreen(
-                            viewModel = viewModel,
-                            onBack = { if (viewModel.hasApiKey()) showSettings = false }
-                        )
-                    } else {
-                        ChatScreen(
-                            viewModel = viewModel,
-                            onSettingsClick = { showSettings = true }
-                        )
+                    val screen = viewModel.currentScreen.value
+
+                    when (screen) {
+                        "settings" -> {
+                            SettingsScreen(
+                                viewModel = viewModel,
+                                onBack = {
+                                    if (viewModel.hasApiKey()) {
+                                        viewModel.currentScreen.value = "conversations"
+                                    }
+                                }
+                            )
+                        }
+                        "chat" -> {
+                            ChatScreen(
+                                viewModel = viewModel,
+                                onSettingsClick = { viewModel.currentScreen.value = "settings" },
+                                onBackClick = { viewModel.navigateToConversations() }
+                            )
+                        }
+                        else -> { // "conversations"
+                            ConversationsScreen(
+                                chatHistoryDB = chatHistoryDB,
+                                onAgentClick = { agentId -> viewModel.openAgentChat(agentId) },
+                                onSettingsClick = { viewModel.currentScreen.value = "settings" },
+                                skillCount = skills.size
+                            )
+                        }
                     }
                 }
             }
