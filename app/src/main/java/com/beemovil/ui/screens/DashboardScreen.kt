@@ -4,19 +4,17 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,6 +26,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -43,9 +42,20 @@ import com.beemovil.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.*
 
-/**
- * DashboardScreen — Premium Mission Control.
- */
+// Premium palette
+private val Honey = Color(0xFFFFB300)
+private val HoneyLight = Color(0xFFFFD54F)
+private val HoneyDark = Color(0xFFFF8F00)
+private val BeeCard = Color(0xFF111118)
+private val BeeSurface = Color(0xFF0D0D14)
+private val BeeText = Color(0xFFE8E8F0)
+private val BeeSubtext = Color(0xFF6B6B80)
+private val BeeAccentGreen = Color(0xFF66BB6A)
+private val BeeAccentBlue = Color(0xFF42A5F5)
+private val BeeAccentPink = Color(0xFFEC407A)
+private val BeeAccentOrange = Color(0xFFFF7043)
+private val BeeAccentPurple = Color(0xFFAB47BC)
+
 @Composable
 fun DashboardScreen(
     viewModel: ChatViewModel,
@@ -59,7 +69,6 @@ fun DashboardScreen(
 
     val totalMessages = remember { mutableStateOf(0) }
     val memoryCount = remember { mutableStateOf(0) }
-    val agentCount = remember { mutableStateOf(viewModel.availableAgents.size) }
     val recentChats = remember { mutableStateListOf<ChatHistoryDB.ConversationPreview>() }
     val batteryLevel = remember { mutableStateOf(getBatteryLevel(context)) }
 
@@ -88,119 +97,113 @@ fun DashboardScreen(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0A0A14)),
-        contentPadding = PaddingValues(bottom = 32.dp)
+            .background(BeeSurface),
+        contentPadding = PaddingValues(bottom = 40.dp)
     ) {
-        // ═══════════════════════════════════════════
-        // HERO HEADER
-        // ═══════════════════════════════════════════
+        // ─────────────────────────────────────────
+        // HEADER
+        // ─────────────────────────────────────────
         item {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
                         Brush.verticalGradient(
-                            colors = listOf(
-                                Color(0xFF1A1A2E),
-                                Color(0xFF16162A),
-                                Color(0xFF0A0A14)
-                            )
+                            colors = listOf(Color(0xFF18180A), Color(0xFF111110), BeeSurface)
                         )
                     )
             ) {
-                // Subtle accent glow
-                Canvas(modifier = Modifier.fillMaxWidth().height(180.dp)) {
-                    drawCircle(
-                        color = BeeYellow.copy(alpha = 0.06f),
-                        radius = 200f,
-                        center = Offset(size.width * 0.8f, 40f)
-                    )
-                    drawCircle(
-                        color = Color(0xFF4CAF50).copy(alpha = 0.04f),
-                        radius = 150f,
-                        center = Offset(size.width * 0.2f, 120f)
-                    )
+                // Ambient glow
+                Canvas(modifier = Modifier.fillMaxWidth().height(200.dp)) {
+                    drawCircle(Honey.copy(alpha = 0.04f), radius = 240f, center = Offset(size.width * 0.7f, 20f))
+                    drawCircle(HoneyDark.copy(alpha = 0.03f), radius = 180f, center = Offset(size.width * 0.15f, 140f))
                 }
 
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .statusBarsPadding()
-                        .padding(horizontal = 24.dp, vertical = 16.dp)
+                        .padding(horizontal = 24.dp)
+                        .padding(top = 12.dp, bottom = 20.dp)
                 ) {
-                    // Top row: Logo + settings
+                    // Top bar
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Surface(
-                                color = BeeYellow.copy(alpha = 0.15f),
-                                shape = CircleShape,
-                                modifier = Modifier.size(44.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Image(
-                                        painter = painterResource(id = R.drawable.bee_logo),
-                                        contentDescription = "Bee",
-                                        modifier = Modifier.size(36.dp).clip(CircleShape),
-                                        contentScale = ContentScale.Crop
-                                    )
-                                }
-                            }
+                            Image(
+                                painter = painterResource(id = R.drawable.bee_logo),
+                                contentDescription = "Bee-Movil",
+                                modifier = Modifier.size(40.dp).clip(CircleShape),
+                                contentScale = ContentScale.Crop
+                            )
                             Spacer(modifier = Modifier.width(10.dp))
-                            Text("Bee-Movil", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = BeeWhite)
+                            Column {
+                                Text("Bee-Movil", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = BeeText)
+                                Text("v3.7 • $skillCount skills", fontSize = 10.sp, color = BeeSubtext)
+                            }
                         }
-                        IconButton(onClick = onSettingsClick) {
-                            Icon(Icons.Filled.Settings, "Settings", tint = Color(0xFF666688))
+                        Row {
+                            // Status dot
+                            Box(
+                                modifier = Modifier
+                                    .padding(top = 8.dp, end = 8.dp)
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(if (viewModel.hasApiKey()) BeeAccentGreen else Color(0xFFF44336))
+                            )
+                            IconButton(onClick = onSettingsClick) {
+                                Icon(Icons.Outlined.Settings, "Settings", tint = BeeSubtext, modifier = Modifier.size(22.dp))
+                            }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
 
                     // Greeting
-                    Text(greeting, fontSize = 14.sp, color = BeeGray)
-                    Text(now, fontWeight = FontWeight.Bold, fontSize = 26.sp, color = BeeWhite)
-
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    // Stats cards in row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        StatCard(
-                            value = "$skillCount",
-                            label = "Skills",
-                            accent = BeeYellow,
-                            progress = minOf(skillCount / 40f, 1f),
-                            modifier = Modifier.weight(1f)
-                        )
-                        StatCard(
-                            value = "${totalMessages.value}",
-                            label = "Mensajes",
-                            accent = Color(0xFF4CAF50),
-                            progress = minOf(totalMessages.value / 100f, 1f),
-                            modifier = Modifier.weight(1f)
-                        )
-                        StatCard(
-                            value = "${memoryCount.value}",
-                            label = "Memorias",
-                            accent = Color(0xFF9C27B0),
-                            progress = minOf(memoryCount.value / 20f, 1f),
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                    Text(greeting, fontSize = 13.sp, color = BeeSubtext, letterSpacing = 0.5.sp)
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(now, fontWeight = FontWeight.Bold, fontSize = 28.sp, color = BeeText)
                 }
             }
         }
 
-        // ═══════════════════════════════════════════
-        // HERO FEATURES — Big prominent cards
-        // ═══════════════════════════════════════════
+        // ─────────────────────────────────────────
+        // STATS ROW
+        // ─────────────────────────────────────────
         item {
-            Spacer(modifier = Modifier.height(20.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                StatCard(
+                    value = "$skillCount", label = "Skills",
+                    icon = Icons.Outlined.Build, accent = Honey,
+                    progress = minOf(skillCount / 40f, 1f),
+                    modifier = Modifier.weight(1f)
+                )
+                StatCard(
+                    value = "${totalMessages.value}", label = "Mensajes",
+                    icon = Icons.Outlined.ChatBubbleOutline, accent = BeeAccentGreen,
+                    progress = minOf(totalMessages.value / 100f, 1f),
+                    modifier = Modifier.weight(1f)
+                )
+                StatCard(
+                    value = "${memoryCount.value}", label = "Memorias",
+                    icon = Icons.Outlined.Psychology, accent = BeeAccentPurple,
+                    progress = minOf(memoryCount.value / 20f, 1f),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+
+        // ─────────────────────────────────────────
+        // HERO FEATURES
+        // ─────────────────────────────────────────
+        item {
             Column(modifier = Modifier.padding(horizontal = 20.dp)) {
                 // Row 1: Chat AI (wide) + Voice
                 Row(
@@ -208,149 +211,151 @@ fun DashboardScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     HeroCard(
-                        emoji = "🐝",
+                        icon = Icons.Filled.SmartToy,
                         title = "Chat AI",
-                        subtitle = "Tu asistente inteligente",
-                        gradient = listOf(Color(0xFF2A2200), Color(0xFF1A1A00)),
-                        accent = BeeYellow,
-                        modifier = Modifier.weight(1.2f),
+                        subtitle = "Tu asistente personal",
+                        gradient = Brush.linearGradient(listOf(Color(0xFF1A1700), Color(0xFF141400))),
+                        accent = Honey,
+                        modifier = Modifier.weight(1.3f),
                         onClick = { onAgentClick("main") }
                     )
                     HeroCard(
-                        emoji = "🎤",
+                        icon = Icons.Filled.Mic,
                         title = "Voz",
                         subtitle = "Hands-free",
-                        gradient = listOf(Color(0xFF0A2A0A), Color(0xFF0A1A0A)),
-                        accent = Color(0xFF4CAF50),
-                        modifier = Modifier.weight(0.8f),
+                        gradient = Brush.linearGradient(listOf(Color(0xFF0A1A0A), Color(0xFF0A140A))),
+                        accent = BeeAccentGreen,
+                        modifier = Modifier.weight(0.7f),
                         onClick = { viewModel.currentScreen.value = "voice_chat" }
                     )
                 }
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Row 2: Vision AI + Live Vision
+                // Row 2: Vision AI + Live
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     HeroCard(
-                        emoji = "📸",
+                        icon = Icons.Filled.CameraAlt,
                         title = "Visión AI",
-                        subtitle = "Gemma 4 · Analiza fotos",
-                        gradient = listOf(Color(0xFF2A0A1A), Color(0xFF1A0A14)),
-                        accent = Color(0xFFE91E63),
+                        subtitle = "Gemma 4",
+                        gradient = Brush.linearGradient(listOf(Color(0xFF1A0A14), Color(0xFF140A10))),
+                        accent = BeeAccentPink,
                         modifier = Modifier.weight(1f),
                         onClick = { viewModel.currentScreen.value = "camera" }
                     )
                     HeroCard(
-                        emoji = "🔴",
+                        icon = Icons.Filled.Videocam,
                         title = "Live",
-                        subtitle = "Visión en vivo",
-                        gradient = listOf(Color(0xFF2A1A0A), Color(0xFF1A0A0A)),
-                        accent = Color(0xFFFF5722),
+                        subtitle = "Reconocimiento en vivo",
+                        gradient = Brush.linearGradient(listOf(Color(0xFF1A100A), Color(0xFF14080A))),
+                        accent = BeeAccentOrange,
                         modifier = Modifier.weight(1f),
                         onClick = { viewModel.currentScreen.value = "live_vision" }
                     )
                 }
             }
+            Spacer(modifier = Modifier.height(24.dp))
         }
 
-        // ═══════════════════════════════════════════
-        // SECONDARY ACTIONS — 2-column grid
-        // ═══════════════════════════════════════════
+        // ─────────────────────────────────────────
+        // TOOLS
+        // ─────────────────────────────────────────
         item {
-            SectionHeader("Herramientas", modifier = Modifier.padding(start = 24.dp, top = 20.dp, end = 24.dp))
+            SectionHeader(Icons.Outlined.Widgets, "Herramientas")
+            Spacer(modifier = Modifier.height(10.dp))
         }
 
         item {
-            val actions = listOf(
-                ActionItem("📧", "Correo", "Bandeja de entrada", Color(0xFF3F51B5)) { viewModel.currentScreen.value = "email_inbox" },
-                ActionItem("🔍", "Investigar", "Busca en la web", Color(0xFFFF5722)) { viewModel.openAgentChatWithPrompt("main", "Busca las últimas noticias de tecnología") },
-                ActionItem("📄", "Crear PDF", "Genera documentos", Color(0xFF795548)) { viewModel.openAgentChatWithPrompt("main", "Hazme un PDF con un resumen ejecutivo sobre inteligencia artificial") },
-                ActionItem("📅", "Agenda", "Tus eventos de hoy", Color(0xFF9C27B0)) { viewModel.openAgentChatWithPrompt("agenda", "¿Qué tengo programado hoy?") },
-                ActionItem("🌐", "Landing", "Crea una página web", Color(0xFF00BCD4)) { viewModel.openAgentChatWithPrompt("main", "Crea una landing page moderna para un café artesanal") },
-                ActionItem("📊", "Excel", "Genera hojas de cálculo", Color(0xFF388E3C)) { viewModel.openAgentChatWithPrompt("main", "Hazme un spreadsheet comparativo de precios") },
-            )
-
-            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
-                actions.chunked(2).forEach { row ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        row.forEach { action ->
-                            ActionCard(action, Modifier.weight(1f))
-                        }
-                        // Fill empty spot if odd
-                        if (row.size == 1) Spacer(modifier = Modifier.weight(1f))
-                    }
-                    Spacer(modifier = Modifier.height(10.dp))
+            Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ToolCard(Icons.Outlined.Email, "Correo", BeeAccentBlue, Modifier.weight(1f)) { viewModel.currentScreen.value = "email_inbox" }
+                    ToolCard(Icons.Outlined.Search, "Investigar", BeeAccentOrange, Modifier.weight(1f)) { viewModel.openAgentChatWithPrompt("main", "Busca las últimas noticias de tecnología") }
+                    ToolCard(Icons.Outlined.PictureAsPdf, "PDF", Color(0xFFEF5350), Modifier.weight(1f)) { viewModel.openAgentChatWithPrompt("main", "Hazme un PDF resumen ejecutivo sobre inteligencia artificial") }
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ToolCard(Icons.Outlined.CalendarMonth, "Agenda", BeeAccentPurple, Modifier.weight(1f)) { viewModel.openAgentChatWithPrompt("agenda", "¿Qué tengo programado hoy?") }
+                    ToolCard(Icons.Outlined.Language, "Landing", Color(0xFF26C6DA), Modifier.weight(1f)) { viewModel.openAgentChatWithPrompt("main", "Crea una landing page moderna para un café artesanal") }
+                    ToolCard(Icons.Outlined.TableChart, "Excel", BeeAccentGreen, Modifier.weight(1f)) { viewModel.openAgentChatWithPrompt("main", "Hazme un spreadsheet comparativo de precios") }
                 }
             }
+            Spacer(modifier = Modifier.height(24.dp))
         }
 
-        // ═══════════════════════════════════════════
-        // SYSTEM STATUS
-        // ═══════════════════════════════════════════
+        // ─────────────────────────────────────────
+        // SYSTEM
+        // ─────────────────────────────────────────
         item {
-            SectionHeader("Sistema", modifier = Modifier.padding(start = 24.dp, top = 12.dp, end = 24.dp))
+            SectionHeader(Icons.Outlined.SettingsInputAntenna, "Sistema")
+            Spacer(modifier = Modifier.height(10.dp))
         }
 
         item {
             Card(
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF12121E)),
+                colors = CardDefaults.cardColors(containerColor = BeeCard),
                 shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    // Battery + connection row
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    // Status chips
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         val bat = batteryLevel.value
-                        val batColor = when {
-                            bat > 60 -> Color(0xFF4CAF50)
-                            bat > 20 -> BeeYellow
-                            else -> Color(0xFFF44336)
-                        }
-                        SystemChip("🔋", "${bat}%", batColor)
-                        SystemChip("📶", "Online", Color(0xFF4CAF50))
-                        SystemChip(
-                            if (telegramStatus == "online") "🟢" else "⚪",
-                            if (telegramStatus == "online") (if (telegramName.isNotBlank()) "@$telegramName" else "TG ✓") else "TG",
-                            if (telegramStatus == "online") Color(0xFF4CAF50) else Color(0xFF555577)
+                        val batColor = when { bat > 60 -> BeeAccentGreen; bat > 20 -> Honey; else -> Color(0xFFF44336) }
+                        StatusChip(Icons.Outlined.BatteryChargingFull, "${bat}%", batColor, Modifier.weight(1f))
+                        StatusChip(Icons.Outlined.Wifi, "Online", BeeAccentGreen, Modifier.weight(1f))
+                        StatusChip(
+                            Icons.Outlined.Send,
+                            if (telegramStatus == "online") "TG" else "TG",
+                            if (telegramStatus == "online") BeeAccentGreen else BeeSubtext,
+                            Modifier.weight(1f)
                         )
                     }
 
                     Spacer(modifier = Modifier.height(14.dp))
-                    Divider(color = Color(0xFF222240), thickness = 1.dp)
+
+                    // Divider
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(
+                                Brush.horizontalGradient(
+                                    listOf(Color.Transparent, Honey.copy(alpha = 0.15f), Color.Transparent)
+                                )
+                            )
+                    )
+
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // Provider info
+                    // Provider
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(if (viewModel.hasApiKey()) Color(0xFF4CAF50) else Color(0xFFF44336))
-                        )
+                        Icon(Icons.Outlined.Memory, "AI", tint = Honey, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("AI: ", fontSize = 13.sp, color = BeeGray)
-                        Text(viewModel.getProviderDisplayName(), fontSize = 13.sp, color = BeeWhite, fontWeight = FontWeight.Medium)
+                        Text(viewModel.getProviderDisplayName(), fontSize = 13.sp, color = BeeText, fontWeight = FontWeight.Medium)
                         Spacer(modifier = Modifier.weight(1f))
-                        Text("$skillCount skills activos", fontSize = 11.sp, color = Color(0xFF666688))
+                        Surface(color = Honey.copy(alpha = 0.1f), shape = RoundedCornerShape(6.dp)) {
+                            Text("$skillCount activos", fontSize = 10.sp, color = Honey,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
+                        }
                     }
                 }
             }
+            Spacer(modifier = Modifier.height(24.dp))
         }
 
-        // ═══════════════════════════════════════════
-        // RECENT CONVERSATIONS
-        // ═══════════════════════════════════════════
+        // ─────────────────────────────────────────
+        // RECENT CHATS
+        // ─────────────────────────────────────────
         if (recentChats.isNotEmpty()) {
             item {
-                SectionHeader("Recientes", modifier = Modifier.padding(start = 24.dp, top = 16.dp, end = 24.dp))
+                SectionHeader(Icons.Outlined.History, "Recientes")
+                Spacer(modifier = Modifier.height(10.dp))
             }
 
-            recentChats.forEachIndexed { _, preview ->
+            recentChats.forEach { preview ->
                 item {
                     RecentChatCard(
                         agentIcon = preview.agentIcon,
@@ -362,14 +367,16 @@ fun DashboardScreen(
                     )
                 }
             }
+
+            item { Spacer(modifier = Modifier.height(24.dp)) }
         }
 
-        // ═══════════════════════════════════════════
+        // ─────────────────────────────────────────
         // AGENTS
-        // ═══════════════════════════════════════════
+        // ─────────────────────────────────────────
         item {
-            SectionHeader("Agentes", modifier = Modifier.padding(start = 24.dp, top = 16.dp, end = 24.dp))
-            Spacer(modifier = Modifier.height(8.dp))
+            SectionHeader(Icons.Outlined.Groups, "Agentes")
+            Spacer(modifier = Modifier.height(10.dp))
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -388,18 +395,26 @@ fun DashboardScreen(
 
         // Footer
         item {
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Text("Bee-Movil v3.7 · $skillCount skills · Kotlin nativo",
-                    fontSize = 10.sp, color = Color(0xFF333355))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Image(
+                        painter = painterResource(id = R.drawable.bee_logo),
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp).clip(CircleShape),
+                        contentScale = ContentScale.Crop
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Bee-Movil v3.7 • Kotlin nativo", fontSize = 10.sp, color = Color(0xFF333344))
+                }
             }
         }
     }
 }
 
-// ═══════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────
 // COMPONENTS
-// ═══════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────
 
 private fun getBatteryLevel(context: Context): Int {
     return try {
@@ -412,32 +427,80 @@ private fun getBatteryLevel(context: Context): Int {
 }
 
 @Composable
-private fun SectionHeader(title: String, modifier: Modifier = Modifier) {
-    Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+private fun SectionHeader(icon: ImageVector, title: String) {
+    Row(
+        modifier = Modifier.padding(horizontal = 24.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Box(
             modifier = Modifier
                 .width(3.dp)
-                .height(16.dp)
+                .height(14.dp)
                 .clip(RoundedCornerShape(2.dp))
-                .background(BeeYellow)
+                .background(Honey)
         )
         Spacer(modifier = Modifier.width(8.dp))
+        Icon(icon, title, tint = HoneyLight.copy(alpha = 0.5f), modifier = Modifier.size(15.dp))
+        Spacer(modifier = Modifier.width(6.dp))
         Text(
             title.uppercase(),
-            fontSize = 12.sp,
-            color = Color(0xFF888899),
-            fontWeight = FontWeight.Bold,
+            fontSize = 11.sp,
+            color = BeeSubtext,
+            fontWeight = FontWeight.SemiBold,
             letterSpacing = 2.sp
         )
     }
 }
 
 @Composable
+private fun StatCard(
+    value: String, label: String, icon: ImageVector,
+    accent: Color, progress: Float, modifier: Modifier
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = BeeCard),
+        shape = RoundedCornerShape(14.dp),
+        modifier = modifier
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp).fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(modifier = Modifier.size(50.dp), contentAlignment = Alignment.Center) {
+                Canvas(modifier = Modifier.size(50.dp)) {
+                    drawArc(
+                        color = accent.copy(alpha = 0.1f),
+                        startAngle = 135f, sweepAngle = 270f,
+                        useCenter = false,
+                        style = Stroke(width = 4f, cap = StrokeCap.Round),
+                        size = Size(size.width, size.height)
+                    )
+                    drawArc(
+                        color = accent,
+                        startAngle = 135f, sweepAngle = 270f * progress,
+                        useCenter = false,
+                        style = Stroke(width = 4f, cap = StrokeCap.Round),
+                        size = Size(size.width, size.height)
+                    )
+                }
+                Text(value, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = BeeText)
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(icon, label, tint = accent.copy(alpha = 0.5f), modifier = Modifier.size(11.dp))
+                Spacer(modifier = Modifier.width(3.dp))
+                Text(label, fontSize = 10.sp, color = BeeSubtext)
+            }
+        }
+    }
+}
+
+@Composable
 private fun HeroCard(
-    emoji: String,
+    icon: ImageVector,
     title: String,
     subtitle: String,
-    gradient: List<Color>,
+    gradient: Brush,
     accent: Color,
     modifier: Modifier,
     onClick: () -> Unit
@@ -446,141 +509,96 @@ private fun HeroCard(
         onClick = onClick,
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         shape = RoundedCornerShape(18.dp),
-        modifier = modifier.height(100.dp)
+        modifier = modifier.height(96.dp)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Brush.linearGradient(gradient))
+                .background(gradient)
+                .then(
+                    Modifier.background(
+                        Brush.radialGradient(
+                            colors = listOf(accent.copy(alpha = 0.06f), Color.Transparent),
+                            center = Offset(200f, 30f),
+                            radius = 200f
+                        )
+                    )
+                )
                 .padding(16.dp)
         ) {
-            // Decorative accent circle
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                drawCircle(
-                    color = accent.copy(alpha = 0.08f),
-                    radius = 60f,
-                    center = Offset(size.width - 20f, 30f)
-                )
-            }
-            Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Surface(
-                        color = accent.copy(alpha = 0.2f),
+                        color = accent.copy(alpha = 0.15f),
                         shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(34.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Text(emoji, fontSize = 18.sp)
+                            Icon(icon, title, tint = accent, modifier = Modifier.size(18.dp))
                         }
                     }
                     Spacer(modifier = Modifier.width(10.dp))
-                    Text(title, fontWeight = FontWeight.Bold, fontSize = 17.sp, color = BeeWhite)
+                    Text(title, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = BeeText)
                 }
-                Text(subtitle, fontSize = 11.sp, color = accent.copy(alpha = 0.7f))
+                Text(subtitle, fontSize = 11.sp, color = accent.copy(alpha = 0.6f))
             }
-            // Right accent line
+
+            // Accent bar
             Box(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .width(3.dp)
-                    .height(40.dp)
+                    .width(2.5.dp)
+                    .height(36.dp)
                     .clip(RoundedCornerShape(2.dp))
-                    .background(accent.copy(alpha = 0.3f))
+                    .background(accent.copy(alpha = 0.25f))
             )
         }
     }
 }
 
 @Composable
-private fun StatCard(value: String, label: String, accent: Color, progress: Float, modifier: Modifier) {
+private fun ToolCard(icon: ImageVector, label: String, accent: Color, modifier: Modifier, onClick: () -> Unit) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF12121E)),
+        onClick = onClick,
+        colors = CardDefaults.cardColors(containerColor = BeeCard),
         shape = RoundedCornerShape(14.dp),
         modifier = modifier
     ) {
         Column(
-            modifier = Modifier.padding(14.dp).fillMaxWidth(),
+            modifier = Modifier.padding(vertical = 14.dp).fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Mini arc chart
-            Box(modifier = Modifier.size(52.dp), contentAlignment = Alignment.Center) {
-                Canvas(modifier = Modifier.size(52.dp)) {
-                    // Background arc
-                    drawArc(
-                        color = accent.copy(alpha = 0.12f),
-                        startAngle = 135f,
-                        sweepAngle = 270f,
-                        useCenter = false,
-                        style = Stroke(width = 5f, cap = StrokeCap.Round),
-                        size = Size(size.width, size.height)
-                    )
-                    // Progress arc
-                    drawArc(
-                        color = accent,
-                        startAngle = 135f,
-                        sweepAngle = 270f * progress,
-                        useCenter = false,
-                        style = Stroke(width = 5f, cap = StrokeCap.Round),
-                        size = Size(size.width, size.height)
-                    )
+            Surface(
+                color = accent.copy(alpha = 0.1f),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.size(40.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(icon, label, tint = accent, modifier = Modifier.size(20.dp))
                 }
-                Text(value, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = BeeWhite)
             }
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(label, fontSize = 11.sp, color = Color(0xFF777799))
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(label, fontSize = 11.sp, color = BeeSubtext, fontWeight = FontWeight.Medium)
         }
     }
 }
 
-private data class ActionItem(
-    val emoji: String,
-    val title: String,
-    val subtitle: String,
-    val accent: Color,
-    val onClick: () -> Unit
-)
-
 @Composable
-private fun ActionCard(action: ActionItem, modifier: Modifier) {
-    Card(
-        onClick = action.onClick,
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF12121E)),
-        shape = RoundedCornerShape(16.dp),
+private fun StatusChip(icon: ImageVector, label: String, color: Color, modifier: Modifier) {
+    Surface(
+        color = color.copy(alpha = 0.06f),
+        shape = RoundedCornerShape(10.dp),
         modifier = modifier
     ) {
         Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
         ) {
-            Surface(
-                color = action.accent.copy(alpha = 0.15f),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.size(44.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(action.emoji, fontSize = 22.sp)
-                }
-            }
-            Spacer(modifier = Modifier.width(10.dp))
-            Column {
-                Text(action.title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = BeeWhite)
-                Text(action.subtitle, fontSize = 10.sp, color = Color(0xFF666688), maxLines = 1)
-            }
-        }
-    }
-}
-
-@Composable
-private fun SystemChip(icon: String, label: String, color: Color) {
-    Surface(
-        color = color.copy(alpha = 0.08f),
-        shape = RoundedCornerShape(10.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(icon, fontSize = 13.sp)
+            Icon(icon, label, tint = color, modifier = Modifier.size(14.dp))
             Spacer(modifier = Modifier.width(5.dp))
             Text(label, fontSize = 12.sp, color = color, fontWeight = FontWeight.Medium)
         }
@@ -598,27 +616,26 @@ private fun RecentChatCard(
 ) {
     Card(
         onClick = onClick,
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF12121E)),
+        colors = CardDefaults.cardColors(containerColor = BeeCard),
         shape = RoundedCornerShape(14.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 4.dp)
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 3.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
-                color = BeeYellow.copy(alpha = 0.1f),
+                color = Honey.copy(alpha = 0.08f),
                 shape = CircleShape,
-                modifier = Modifier.size(42.dp)
+                modifier = Modifier.size(40.dp)
             ) {
-                Box(contentAlignment = Alignment.Center) { Text(agentIcon, fontSize = 20.sp) }
+                Box(contentAlignment = Alignment.Center) { Text(agentIcon, fontSize = 18.sp) }
             }
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(agentName, fontWeight = FontWeight.Medium, fontSize = 14.sp, color = Color(0xFFE0E0E0))
-                Text(lastMessage, fontSize = 12.sp, color = Color(0xFF555577),
+                Text(agentName, fontWeight = FontWeight.Medium, fontSize = 14.sp, color = BeeText)
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(lastMessage, fontSize = 12.sp, color = BeeSubtext,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Column(horizontalAlignment = Alignment.End) {
@@ -629,11 +646,11 @@ private fun RecentChatCard(
                     diff < 86400_000 -> "${diff / 3600_000}h"
                     else -> "${diff / 86400_000}d"
                 }
-                Text(timeText, fontSize = 11.sp, color = Color(0xFF555577))
+                Text(timeText, fontSize = 10.sp, color = BeeSubtext)
                 if (messageCount > 0) {
-                    Spacer(modifier = Modifier.height(3.dp))
-                    Surface(color = BeeYellow.copy(alpha = 0.15f), shape = CircleShape) {
-                        Text("$messageCount", fontSize = 10.sp, color = BeeYellow,
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Surface(color = Honey.copy(alpha = 0.15f), shape = CircleShape) {
+                        Text("$messageCount", fontSize = 10.sp, color = Honey,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp))
                     }
@@ -647,23 +664,23 @@ private fun RecentChatCard(
 private fun AgentChip(icon: String, name: String, onClick: () -> Unit) {
     Card(
         onClick = onClick,
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF12121E)),
+        colors = CardDefaults.cardColors(containerColor = BeeCard),
         shape = RoundedCornerShape(14.dp),
-        modifier = Modifier.width(110.dp)
+        modifier = Modifier.width(100.dp)
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier.padding(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Surface(
-                color = BeeYellow.copy(alpha = 0.08f),
+                color = Honey.copy(alpha = 0.06f),
                 shape = CircleShape,
-                modifier = Modifier.size(46.dp)
+                modifier = Modifier.size(42.dp)
             ) {
-                Box(contentAlignment = Alignment.Center) { Text(icon, fontSize = 24.sp) }
+                Box(contentAlignment = Alignment.Center) { Text(icon, fontSize = 20.sp) }
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(name, fontSize = 12.sp, color = Color(0xFFB0B0CC),
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(name, fontSize = 11.sp, color = BeeSubtext,
                 fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
