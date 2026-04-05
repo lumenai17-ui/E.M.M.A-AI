@@ -1,9 +1,9 @@
 # 🐝 Bee-Movil Native — Roadmap & Checklist
-### Última actualización: 4 de Abril 2026 · v3.7.3
+### Última actualización: 4 de Abril 2026 · v3.9.0
 
 ---
 
-## ✅ COMPLETADO (Fases 1-11)
+## ✅ COMPLETADO (Fases 1-11 + extras)
 
 ### Core & Infraestructura
 - [x] Proyecto Kotlin nativo + Jetpack Compose
@@ -21,12 +21,12 @@
 - [x] Multi-agente: agentes customs con modelo/personalidad propios
 - [x] Selector dinámico de modelos
 
-### 30 Skills Nativos
+### 31 Skills Nativos
 - [x] **Core (7):** device, clipboard, notify, TTS, browser, share, file
 - [x] **Memoria (1):** memory (SQLite persistente)
 - [x] **Multimedia (10):** camera, image_gen, volume, alarm, flashlight, music, QR, app_launcher, connectivity, brightness
 - [x] **Production (8):** calendar, email, weather, web_search, contacts, calculator, datetime, battery_saver
-- [x] **Productividad (4):** web_fetch, generate_pdf, generate_html, generate_spreadsheet
+- [x] **Productividad (5):** web_fetch, generate_pdf, generate_html, generate_spreadsheet, **read_document**
 
 ### Comunicaciones
 - [x] Email IMAP/SMTP (auto-detección de proveedor, App Password)
@@ -39,6 +39,7 @@
 - [x] Modelo de visión independiente del chat
 - [x] Gemma 4 31B como default
 - [x] Quick prompts (OCR, factura, identificación)
+- [x] **Visión desde el chat** (adjuntar imagen → análisis automático)
 
 ### Voz
 - [x] VoiceInputManager (STT nativo Android)
@@ -54,42 +55,87 @@
 - [x] Status chip (AI activa / Sin API)
 - [x] Bee logo branding
 
----
-
-## 🗺️ ROADMAP — Próximas Fases
-
----
-
-### 🔴 FASE 12 — Automatizaciones (Mission Control)
-> *El diferenciador: cadenas de skills que se ejecutan con 1 tap*
-
-- [ ] Workflow engine (ejecutar lista ordenada de skills)
-- [ ] Workflow builder UI (crear/editar/reordenar pasos)
-- [ ] Templates pre-hechos (ej: "Research & PDF", "Photo → IG Post")
-- [ ] Guardar workflows favoritos
-- [ ] WorkflowScreen nueva (listar, ejecutar, ver progreso)
-- [ ] Scheduler (opcional: ejecutar workflow a X hora)
+### Chat & Archivos (v3.8-v3.9)
+- [x] File cards inline en chat (icono, nombre, tamaño, abrir, compartir)
+- [x] Botón adjuntar (imagen + archivo)
+- [x] Document Reader: PDF, DOCX, XLSX, TXT, CSV, JSON
+- [x] Image preview inline en burbujas
+- [x] FileProvider configurado para Open/Share
 
 ---
 
-### 🟠 FASE 13 — Deploy Skill
-> *Cierra el loop: investigar → crear → publicar*
+## 🗺️ ROADMAP — Paso a Paso
 
-- [ ] Netlify deploy (subir HTML generado con API)
-- [ ] Vercel deploy alternativo
-- [ ] Vista previa en WebView antes de publicar
-- [ ] URL generada automáticamente → share
-- [ ] Historial de deploys
+> Orden optimizado: primero lo que transforma la app de asistente a agente,
+> luego estabilizar, luego pulir, luego expandir.
 
 ---
 
-### 🟡 FASE 14 — Widget Android
-> *Presencia constante en el home screen del usuario*
+### 🔴 FASE 12 — Agent Core: JavaScript Runner
+> *De asistente a agente: el LLM ahora puede EJECUTAR código*
 
-- [ ] Widget pequeño (2x1): quick voice / quick chat
-- [ ] Widget mediano (4x2): 4 quick actions + status
-- [ ] Widget grande (4x4): mini-dashboard con stats
-- [ ] Shortcuts (long press icon → Chat, Voz, Cámara)
+- [ ] WebView invisible para ejecutar JavaScript
+- [ ] Skill `run_code` — recibe código JS, retorna resultado
+- [ ] Captura de console.log, errores, return values
+- [ ] Timeout protection (max 10 segundos)
+- [ ] Sandbox seguro (sin acceso a DOM real)
+
+**El agente podrá:**
+- Hacer cálculos exactos (el LLM se equivoca, el código no)
+- Procesar datos de CSV/JSON
+- Validar con regex
+- Transformar texto programáticamente
+- Prototipar lógica de negocio
+
+**Dependencias:** WebView (ya incluido en Android) · **0 MB extra**
+
+---
+
+### 🟠 FASE 13 — Agent Core: File Manager Pro
+> *El agente puede crear, editar y organizar archivos*
+
+- [ ] Skill `file_manager` — expandir el file skill actual
+  - [ ] list_directory (listar archivos y carpetas)
+  - [ ] create_file (crear archivo con contenido)
+  - [ ] edit_file (leer, modificar, guardar)
+  - [ ] create_directory (crear carpetas)
+  - [ ] move / copy / rename / delete
+- [ ] Soporte para proyectos multi-archivo (HTML+CSS+JS)
+- [ ] Storage Access Framework para acceso a carpetas del usuario
+- [ ] FileExplorerScreen (UI para navegar archivos visualmente)
+
+**El agente podrá:**
+- Crear proyectos web completos (carpeta + múltiples archivos)
+- Editar archivos existentes del usuario
+- Organizar fotos, documentos, descargas
+- Gestionar archivos generados por otros skills
+
+**Dependencias:** java.io.File (ya incluido) · **0 MB extra**
+
+---
+
+### 🟡 FASE 14 — Agent Core: Git Integration
+> *El cel se conecta a todo tu ecosistema de código*
+
+- [ ] Dependencia JGit (~5MB)
+- [ ] Skill `git` con subcomandos:
+  - [ ] clone (clonar repo por URL + token)
+  - [ ] status (ver cambios)
+  - [ ] add + commit (guardar cambios)
+  - [ ] push (subir a GitHub/GitLab)
+  - [ ] pull (bajar cambios)
+  - [ ] log (historial de commits)
+  - [ ] diff (ver qué cambió)
+- [ ] Auth: HTTPS + Personal Access Token
+- [ ] GitScreen (UI para repos, commits, branches)
+
+**El agente podrá:**
+- Clonar repos desde GitHub
+- Hacer cambios y subirlos
+- Code review desde el cel
+- Trigger deploys vía push (GitHub Actions)
+
+**Dependencias:** org.eclipse.jgit · **+5 MB**
 
 ---
 
@@ -121,6 +167,8 @@
 - [ ] VoiceChatScreen → animaciones más fluidas
 - [ ] EmailInboxScreen → look like Apple Mail dark
 - [ ] AgentCreatorScreen → wizard UI paso a paso
+- [ ] **FileExplorerScreen** → diseño clean de navegador de archivos
+- [ ] **GitScreen** → diseño de commits y branches
 - [ ] Tipografía consistente (design tokens)
 - [ ] Paleta de colores centralizada
 - [ ] Animaciones de transición entre pantallas
@@ -134,54 +182,100 @@
 - [ ] Refactor: eliminar código duplicado
 - [ ] Arquitectura: ViewModel separation of concerns
 - [ ] Dependency injection (factory pattern limpio)
-- [ ] Unit tests para skills críticos
+- [ ] Unit tests para skills críticos (code runner, file manager, git)
 - [ ] ProGuard/R8 rules (ofuscación)
 
 **Seguridad:**
 - [ ] API keys: encriptar en EncryptedSharedPreferences
 - [ ] Certificate pinning para API calls
-- [ ] Input sanitization (prevenir injection)
+- [ ] Input sanitization (prevenir injection en code runner)
 - [ ] Permisos mínimos (audit AndroidManifest)
-- [ ] File access: sandboxed directories only
+- [ ] File access: sandboxed por default, SAF para acceso amplio
 - [ ] No API keys en logs
+- [ ] Git tokens encriptados
 
 ---
 
-## ⭐ FASES FUTURAS
+### ⚡ FASE 18 — Deploy & Publish
+> *Cierra el loop: investigar → crear → publicar*
 
-### Fase 18 — Onboarding & Polish
+- [ ] Netlify deploy (subir proyecto HTML generado con API)
+- [ ] Vercel deploy alternativo
+- [ ] Vista previa en WebView antes de publicar
+- [ ] URL generada automáticamente → share
+- [ ] Historial de deploys
+- [ ] Deploy via Git push (GitHub Pages, Netlify Git)
+
+---
+
+### 📱 FASE 19 — Widget Android
+> *Presencia constante en el home screen*
+
+- [ ] Widget pequeño (2x1): quick voice / quick chat
+- [ ] Widget mediano (4x2): 4 quick actions + status
+- [ ] Widget grande (4x4): mini-dashboard con stats
+- [ ] Shortcuts (long press icon → Chat, Voz, Cámara)
+
+---
+
+### 🔄 FASE 20 — Automatizaciones (Workflows)
+> *Cadenas de skills con 1 tap*
+
+- [ ] Workflow engine (ejecutar lista ordenada de skills)
+- [ ] 8 templates sólidos:
+  - [ ] Research & PDF
+  - [ ] Morning Briefing (voz)
+  - [ ] URL → Landing Page
+  - [ ] Foto → IG Post
+  - [ ] Email Digest
+  - [ ] Data Extractor (URL → Excel)
+  - [ ] Blog Writer
+  - [ ] Voice Memo → PDF
+- [ ] Workflow builder UI (crear/editar)
+- [ ] Scheduler (ejecutar a X hora)
+
+---
+
+## ⭐ FASES FUTURAS (priorizar después)
+
+### Fase 21 — Onboarding & Polish
 - [ ] Wizard de primera vez (3-4 pasos: API key, modelo, demo)
 - [ ] Tour guiado de features
 - [ ] Splash screen animada con la abejita
 
-### Fase 19 — Social & Content
+### Fase 22 — Social & Content
 - [ ] Post creator (imagen + caption)
 - [ ] Share directo a IG/Twitter/LinkedIn
 - [ ] Content scheduler
 
-### Fase 20 — LLM Local (on-device)
+### Fase 23 — LLM Local (on-device)
 - [ ] llama.cpp / llama.rn en el celular
 - [ ] Model manager (download/delete)
 - [ ] Fallback: local → cloud
 - [ ] 0 costo, 0 latencia, offline
 
-### Fase 21 — Orquestación Multi-Agente
+### Fase 24 — Orquestación Multi-Agente
 - [ ] Agentes que delegan a otros agentes
 - [ ] Research → Writer → Publisher chain
 - [ ] Modelo por agente especializado
 
-### Fase 22 — RAG & Inteligencia
+### Fase 25 — RAG & Inteligencia
 - [ ] Leer PDFs/docs locales como contexto
 - [ ] Web research chain (buscar → leer → sintetizar)
 - [ ] Resumen de emails largos
 
-### Fase 23 — Play Store & Distribución
+### Fase 26 — Comunicaciones Avanzadas
+- [ ] WhatsApp Business API integration
+- [ ] Discord Bot
+- [ ] Notificaciones push proactivas
+
+### Fase 27 — Play Store & Distribución
 - [ ] Play Store listing + screenshots
 - [ ] Políticas de privacidad
 - [ ] Beta testing (10-20 testers)
 - [ ] Landing page de descarga
 
-### Fase 24 — Desktop (Electron)
+### Fase 28 — Desktop (Electron)
 - [ ] Electron app para Windows/Mac
 - [ ] UI adaptada para pantalla grande
 
@@ -191,10 +285,12 @@
 
 | Métrica | Valor |
 |---|---|
-| Versión | v3.7.3 |
-| Skills | 30 |
+| Versión | v3.9.0 |
+| Skills | 31 |
 | Pantallas | 12 |
 | Providers LLM | 2 (OpenRouter + Ollama Cloud) |
 | Modelos de visión | 6 |
-| Fases completadas | 11 de 24 |
+| Fases completadas | 11 de 28 |
 | Target BEE Smart v2.0 | 58 skills, 20 automations |
+| APK tamaño actual | ~15 MB |
+| APK extra pendiente | +5 MB (JGit) |
