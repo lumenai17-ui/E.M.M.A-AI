@@ -1,9 +1,16 @@
 package com.beemovil.ui.screens
 
+import android.content.Intent
+import android.graphics.BitmapFactory
+import android.net.Uri
+import android.os.Environment
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -12,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,7 +27,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -28,11 +38,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
 import com.beemovil.R
 import com.beemovil.ui.ChatUiMessage
 import com.beemovil.ui.ChatViewModel
 import com.beemovil.ui.theme.*
 import kotlinx.coroutines.launch
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -125,9 +137,16 @@ fun ChatScreen(viewModel: ChatViewModel, onSettingsClick: () -> Unit = {}, onBac
                         .fillMaxWidth()
                         .navigationBarsPadding()
                         .imePadding()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.Bottom
                 ) {
+                    // Attach file button
+                    IconButton(
+                        onClick = { /* TODO: file picker */ },
+                        modifier = Modifier.size(42.dp)
+                    ) {
+                        Icon(Icons.Outlined.AttachFile, "Attach", tint = BeeGrayLight, modifier = Modifier.size(22.dp))
+                    }
                     // Mic button
                     if (viewModel.voiceManager != null) {
                         val isRecording = viewModel.isRecording.value
@@ -306,6 +325,15 @@ fun MessageBubble(message: ChatUiMessage) {
 
                     // Message content with basic markdown
                     RenderMarkdown(message.text, isUser)
+
+                    // File attachments
+                    if (message.filePaths.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        message.filePaths.forEach { path ->
+                            FileAttachmentCard(path)
+                            Spacer(modifier = Modifier.height(4.dp))
+                        }
+                    }
                 }
             }
         }
@@ -515,4 +543,157 @@ fun AgentPickerDialog(
             }
         }
     )
+}
+
+/**
+ * File attachment card — shown inline in chat bubbles.
+ * Displays file icon, name, size, image preview, and action buttons.
+ */
+@Composable
+fun FileAttachmentCard(filePath: String) {
+    val context = LocalContext.current
+    val resolvedPath = resolveFilePath(filePath)
+    val file = File(resolvedPath)
+    val exists = file.exists()
+    val fileName = file.name
+    val ext = fileName.substringAfterLast('.').lowercase()
+    val isImage = ext in listOf("png", "jpg", "jpeg", "webp")
+    val fileSize = if (exists) {
+        val bytes = file.length()
+        when {
+            bytes < 1024 -> "$bytes B"
+            bytes < 1024 * 1024 -> "${bytes / 1024} KB"
+            else -> "${"%.1f".format(bytes / (1024.0 * 1024.0))} MB"
+        }
+    } else "—"
+
+    val fileIcon = when (ext) {
+        "pdf" -> Icons.Outlined.PictureAsPdf
+        "html", "htm" -> Icons.Outlined.Language
+        "csv", "tsv" -> Icons.Outlined.TableChart
+        "txt" -> Icons.Outlined.Description
+        "png", "jpg", "jpeg", "webp" -> Icons.Outlined.Image
+        else -> Icons.Outlined.InsertDriveFile
+    }
+
+    val accentColor = when (ext) {
+        "pdf" -> Color(0xFFFF2D55)
+        "html", "htm" -> Color(0xFF5AC8FA)
+        "csv", "tsv" -> Color(0xFF34C759)
+        "png", "jpg", "jpeg", "webp" -> Color(0xFFBF5AF2)
+        else -> Color(0xFFFF9500)
+    }
+
+    Surface(
+        color = Color(0xFF0E0E18),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column {
+            // Image preview for images
+            if (isImage && exists) {
+                val bitmap = remember(resolvedPath) {
+                    try {
+                        BitmapFactory.decodeFile(resolvedPath)
+                    } catch (_: Exception) { null }
+                }
+                bitmap?.let {
+                    Image(
+                        bitmap = it.asImageBitmap(),
+                        contentDescription = fileName,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 200.dp)
+                            .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)),
+                        contentScale = ContentScale.FillWidth
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // File icon
+                Surface(
+                    color = accentColor.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(fileIcon, fileName, tint = accentColor, modifier = Modifier.size(18.dp))
+                    }
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+
+                // File info
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(fileName, fontSize = 13.sp, color = Color.White, fontWeight = FontWeight.Medium,
+                        maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    Text("${ext.uppercase()} · $fileSize", fontSize = 10.sp, color = Color(0xFF888899))
+                }
+
+                // Action buttons
+                if (exists) {
+                    // Open
+                    IconButton(
+                        onClick = {
+                            try {
+                                val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
+                                val mime = when (ext) {
+                                    "pdf" -> "application/pdf"
+                                    "html", "htm" -> "text/html"
+                                    "csv" -> "text/csv"
+                                    "png" -> "image/png"
+                                    "jpg", "jpeg" -> "image/jpeg"
+                                    "webp" -> "image/webp"
+                                    else -> "*/*"
+                                }
+                                val intent = Intent(Intent.ACTION_VIEW).apply {
+                                    setDataAndType(uri, mime)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                context.startActivity(intent)
+                            } catch (_: Exception) {}
+                        },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(Icons.Outlined.OpenInNew, "Open", tint = accentColor, modifier = Modifier.size(18.dp))
+                    }
+                    // Share
+                    IconButton(
+                        onClick = {
+                            try {
+                                val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
+                                val intent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "*/*"
+                                    putExtra(Intent.EXTRA_STREAM, uri)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                context.startActivity(Intent.createChooser(intent, "Compartir"))
+                            } catch (_: Exception) {}
+                        },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(Icons.Outlined.Share, "Share", tint = Color(0xFF888899), modifier = Modifier.size(18.dp))
+                    }
+                } else {
+                    Text("No encontrado", fontSize = 10.sp, color = Color(0xFFFF6666))
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Resolve a file path — handles relative paths like "Documents/BeeMovil/file.pdf"
+ */
+private fun resolveFilePath(path: String): String {
+    if (path.startsWith("/")) return path
+    // Try Documents directory
+    val docsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
+    if (path.startsWith("Documents/")) {
+        return File(docsDir.parentFile, path.removePrefix("Documents/")).absolutePath
+    }
+    return File(docsDir, path).absolutePath
 }

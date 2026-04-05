@@ -20,7 +20,8 @@ data class ChatUiMessage(
     val agentIcon: String = "🐝",
     val isError: Boolean = false,
     val isLoading: Boolean = false,
-    val toolsUsed: List<String> = emptyList()
+    val toolsUsed: List<String> = emptyList(),
+    val filePaths: List<String> = emptyList()  // Inline file attachments
 )
 
 class ChatViewModel : ViewModel() {
@@ -254,15 +255,43 @@ class ChatViewModel : ViewModel() {
             // Save response to DB
             chatHistoryDB?.saveMessage(config.id, responseText, false, config.icon, isError, toolNames)
 
+            // Extract file paths from response
+            val detectedFiles = extractFilePaths(responseText)
+
             mainHandler.post {
                 isLoading.value = false
                 messages.add(ChatUiMessage(
                     text = responseText,
                     isUser = false, agentIcon = config.icon,
-                    isError = isError, toolsUsed = toolNames
+                    isError = isError, toolsUsed = toolNames,
+                    filePaths = detectedFiles
                 ))
             }
         }.start()
+    }
+
+    /**
+     * Extract file paths from agent response text.
+     * Matches /storage/..., /data/..., Documents/BeeMovil/..., etc.
+     */
+    private fun extractFilePaths(text: String): List<String> {
+        val patterns = listOf(
+            Regex("""(/storage/[^\s\n"')]+\.\w{2,5})"""),
+            Regex("""(/data/[^\s\n"')]+\.\w{2,5})"""),
+            Regex("""(Documents/BeeMovil/[^\s\n"')]+\.\w{2,5})""")
+        )
+        val files = mutableSetOf<String>()
+        for (pattern in patterns) {
+            pattern.findAll(text).forEach { match ->
+                val path = match.groupValues[1]
+                // Only include known file types
+                val ext = path.substringAfterLast('.').lowercase()
+                if (ext in listOf("pdf", "html", "htm", "csv", "tsv", "txt", "png", "jpg", "jpeg", "webp", "json", "xml")) {
+                    files.add(path)
+                }
+            }
+        }
+        return files.toList()
     }
 
     /**
