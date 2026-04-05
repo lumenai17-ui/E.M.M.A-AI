@@ -87,6 +87,7 @@ class MainActivity : ComponentActivity() {
         try { skills["generate_pdf"] = PdfGeneratorSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "PdfGenSkill: ${e.message}") }
         try { skills["generate_html"] = HtmlGeneratorSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "HtmlGenSkill: ${e.message}") }
         try { skills["generate_spreadsheet"] = SpreadsheetSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "SpreadsheetSkill: ${e.message}") }
+        try { skills["read_document"] = DocumentReaderSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "DocReaderSkill: ${e.message}") }
 
         // Load saved preferences
         val prefs = getSharedPreferences("beemovil", Context.MODE_PRIVATE)

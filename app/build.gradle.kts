@@ -47,7 +47,11 @@ android {
                 "META-INF/NOTICE",
                 "META-INF/LICENSE",
                 "META-INF/mailcap",
-                "META-INF/mimetypes.default"
+                "META-INF/mimetypes.default",
+                "META-INF/DEPENDENCIES",
+                "META-INF/*.SF",
+                "META-INF/*.DSA",
+                "META-INF/*.RSA"
             )
         }
     }
@@ -98,6 +102,13 @@ dependencies {
     implementation("androidx.camera:camera-camera2:$cameraxVersion")
     implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
     implementation("androidx.camera:camera-view:$cameraxVersion")
+
+    // Document Reader (PDF text extraction + DOCX/XLSX parsing)
+    implementation("org.apache.poi:poi-ooxml:5.2.5") {
+        // Exclude unused XML schema validation to reduce APK size
+        exclude(group = "org.apache.xmlbeans", module = "xmlbeans")
+    }
+    implementation("org.apache.xmlbeans:xmlbeans:5.1.1")
 
     // Google Sign-In (Phase 8 - pending Cloud setup)
     // implementation("com.google.android.gms:play-services-auth:21.0.0")

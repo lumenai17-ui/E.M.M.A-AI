@@ -56,7 +56,7 @@ fun ChatScreen(viewModel: ChatViewModel, onSettingsClick: () -> Unit = {}, onBac
     var showAttachOptions by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
-    // File picker
+    // File picker — handles PDF, DOCX, XLSX, TXT, CSV, etc.
     val filePickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -69,22 +69,39 @@ fun ChatScreen(viewModel: ChatViewModel, onSettingsClick: () -> Unit = {}, onBac
                     if (idx >= 0) c.getString(idx) else "archivo"
                 } ?: "archivo"
 
-                // Read file content for text files, or note attachment for images
+                val ext = displayName.substringAfterLast('.').lowercase()
                 val mimeType = context.contentResolver.getType(it) ?: ""
-                val prefix = when {
-                    mimeType.startsWith("image/") -> "[Imagen adjunta: $displayName]\nAnálisis: "
-                    mimeType == "application/pdf" -> "[PDF adjunto: $displayName]\nResume el contenido: "
-                    else -> "[Archivo adjunto: $displayName]\n"
-                }
 
-                // For text-based files, read content
-                if (mimeType.startsWith("text/") || mimeType.contains("json") || mimeType.contains("csv")) {
-                    val text = context.contentResolver.openInputStream(it)?.bufferedReader()?.use { r -> r.readText() } ?: ""
-                    val truncated = if (text.length > 3000) text.take(3000) + "\n... (truncado)" else text
-                    viewModel.sendMessage("[Archivo: $displayName]\n```\n$truncated\n```\nAnaliza este archivo")
-                } else {
-                    // For images/PDFs, add as context message
-                    viewModel.sendMessage("${prefix}Analiza este $displayName")
+                when {
+                    // Images → Vision model
+                    mimeType.startsWith("image/") -> {
+                        val tempFile = File(context.cacheDir, "attached_${System.currentTimeMillis()}.$ext")
+                        context.contentResolver.openInputStream(it)?.use { input ->
+                            tempFile.outputStream().use { output -> input.copyTo(output) }
+                        }
+                        viewModel.analyzeImageInChat(context, tempFile.absolutePath)
+                    }
+
+                    // Documents (PDF, DOC, XLSX) → Copy to cache, use read_document skill
+                    ext in listOf("pdf", "docx", "doc", "xlsx", "xls") -> {
+                        val tempFile = File(context.cacheDir, "doc_${System.currentTimeMillis()}_$displayName")
+                        context.contentResolver.openInputStream(it)?.use { input ->
+                            tempFile.outputStream().use { output -> input.copyTo(output) }
+                        }
+                        viewModel.sendMessage("Lee y analiza el archivo ${tempFile.absolutePath}")
+                    }
+
+                    // Text files → Read inline
+                    mimeType.startsWith("text/") || ext in listOf("csv", "json", "xml", "md", "txt", "log") -> {
+                        val text = context.contentResolver.openInputStream(it)?.bufferedReader()?.use { r -> r.readText() } ?: ""
+                        val truncated = if (text.length > 5000) text.take(5000) + "\n... (truncado)" else text
+                        viewModel.sendMessage("[Archivo: $displayName]\n```\n$truncated\n```\nAnaliza este archivo")
+                    }
+
+                    // Fallback
+                    else -> {
+                        viewModel.sendMessage("Formato .$ext no soportado aún. Formatos soportados: PDF, DOCX, XLSX, TXT, CSV, JSON, imágenes.")
+                    }
                 }
             } catch (e: Exception) {
                 viewModel.sendMessage("[Error cargando archivo: ${e.message}]")
