@@ -91,7 +91,7 @@
 - [x] create_project: multi-archivo (HTML+CSS+JS)
 - [x] copy, move, rename, search, tree, info, create_dir
 - [x] Acceso a Downloads, Documents, DCIM, Pictures
-- [ ] FileExplorerScreen (UI para navegar archivos visualmente)
+- [x] FileExplorerScreen (UI para navegar archivos visualmente)
 
 ---
 
@@ -102,8 +102,8 @@
 - [x] Skill `git` con 9 acciones: clone, status, add, commit, push, pull, log, diff, list_repos
 - [x] Auth: HTTPS + Personal Access Token
 - [x] Repos en /sdcard/BeeMovil/repos/
-- [ ] GitScreen (UI para repos, commits, branches)
-- [ ] GitHub Token field en Settings
+- [x] GitScreen (UI para repos, commits, branches)
+- [x] GitHub Token field en Settings
 
 ---
 
@@ -270,12 +270,12 @@
 
 | Métrica | Valor |
 |---|---|
-| Versión | v4.1.0 |
+| Versión | v4.2.0 |
 | Skills | 35 |
-| Pantallas | 13 |
+| Pantallas | 15 |
 | Providers LLM | 2 (OpenRouter + Ollama Cloud) |
 | Modelos de visión | 6 |
 | Fases completadas | 15 de 28 |
 | Target BEE Smart v2.0 | 58 skills, 20 automations |
 | APK tamaño actual | ~20 MB |
-| Hito actual | AGENTE + BROWSER (navega, ejecuta, crea, sube) |
+| Hito actual | AGENTE COMPLETO (browser, code, files, git, UIs) |
