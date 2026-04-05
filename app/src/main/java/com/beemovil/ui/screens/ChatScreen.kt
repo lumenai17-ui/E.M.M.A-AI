@@ -727,7 +727,7 @@ fun FileAttachmentCard(filePath: String) {
                     IconButton(
                         onClick = {
                             try {
-                                val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
+                                val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
                                 val mime = when (ext) {
                                     "pdf" -> "application/pdf"
                                     "html", "htm" -> "text/html"
@@ -752,7 +752,7 @@ fun FileAttachmentCard(filePath: String) {
                     IconButton(
                         onClick = {
                             try {
-                                val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
+                                val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
                                 val intent = Intent(Intent.ACTION_SEND).apply {
                                     type = "*/*"
                                     putExtra(Intent.EXTRA_STREAM, uri)

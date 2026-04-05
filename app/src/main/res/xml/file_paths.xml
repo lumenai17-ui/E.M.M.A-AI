@@ -4,5 +4,6 @@
     <files-path name="files" path="." />
     <files-path name="attachments" path="email_attachments/" />
     <external-path name="external" path="." />
+    <external-path name="documents" path="Documents/BeeMovil/" />
     <external-files-path name="ext_files" path="." />
 </paths>
