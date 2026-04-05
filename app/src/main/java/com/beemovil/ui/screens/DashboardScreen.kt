@@ -212,6 +212,19 @@ fun DashboardScreen(
                         Modifier.weight(1f)
                     ) { viewModel.currentScreen.value = "live_vision" }
                 }
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    HeroCard(
+                        Icons.Filled.Language, "Browser", "Navegador + Agente",
+                        Color(0xFF64B5F6), listOf(Color(0xFF101C24), Color(0xFF1C1C2E)),
+                        Modifier.weight(1f)
+                    ) { viewModel.currentScreen.value = "browser" }
+                    HeroCard(
+                        Icons.Filled.Code, "Code", "Ejecutar JavaScript",
+                        Color(0xFFCE93D8), listOf(Color(0xFF1C1024), Color(0xFF1C1C2E)),
+                        Modifier.weight(1f)
+                    ) { onAgentClick("main") }
+                }
             }
             Spacer(modifier = Modifier.height(28.dp))
         }

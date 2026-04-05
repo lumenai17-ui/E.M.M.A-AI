@@ -91,6 +91,7 @@ class MainActivity : ComponentActivity() {
         try { skills["run_code"] = CodeRunnerSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "CodeRunnerSkill: ${e.message}") }
         try { skills["file_manager"] = FileManagerSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "FileManagerSkill: ${e.message}") }
         try { skills["git"] = GitSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "GitSkill: ${e.message}") }
+        try { skills["browser_agent"] = BrowserSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "BrowserSkill: ${e.message}") }
 
         // Load saved preferences
         val prefs = getSharedPreferences("beemovil", Context.MODE_PRIVATE)
@@ -307,6 +308,12 @@ class MainActivity : ComponentActivity() {
                             "voice_chat" -> {
                                 VoiceChatScreen(
                                     viewModel = viewModel,
+                                    onBack = { viewModel.currentScreen.value = "dashboard" }
+                                )
+                            }
+                            "browser" -> {
+                                BrowserScreen(
+                                    browserSkill = skills["browser_agent"] as? BrowserSkill,
                                     onBack = { viewModel.currentScreen.value = "dashboard" }
                                 )
                             }
