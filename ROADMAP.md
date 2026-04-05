@@ -1,5 +1,5 @@
 # 🐝 Bee-Movil Native — Roadmap & Checklist
-### Última actualización: 4 de Abril 2026 · v3.9.0
+### Última actualización: 5 de Abril 2026 · v4.0.0
 
 ---
 
@@ -21,12 +21,13 @@
 - [x] Multi-agente: agentes customs con modelo/personalidad propios
 - [x] Selector dinámico de modelos
 
-### 31 Skills Nativos
+### 34 Skills Nativos
 - [x] **Core (7):** device, clipboard, notify, TTS, browser, share, file
 - [x] **Memoria (1):** memory (SQLite persistente)
 - [x] **Multimedia (10):** camera, image_gen, volume, alarm, flashlight, music, QR, app_launcher, connectivity, brightness
 - [x] **Production (8):** calendar, email, weather, web_search, contacts, calculator, datetime, battery_saver
 - [x] **Productividad (5):** web_fetch, generate_pdf, generate_html, generate_spreadsheet, **read_document**
+- [x] **Agent Core (3):** **run_code** (JS), **file_manager** (pro), **git** (JGit)
 
 ### Comunicaciones
 - [x] Email IMAP/SMTP (auto-detección de proveedor, App Password)
@@ -71,71 +72,36 @@
 
 ---
 
-### 🔴 FASE 12 — Agent Core: JavaScript Runner
+### ✅ FASE 12 — Agent Core: JavaScript Runner
 > *De asistente a agente: el LLM ahora puede EJECUTAR código*
 
-- [ ] WebView invisible para ejecutar JavaScript
-- [ ] Skill `run_code` — recibe código JS, retorna resultado
-- [ ] Captura de console.log, errores, return values
-- [ ] Timeout protection (max 10 segundos)
-- [ ] Sandbox seguro (sin acceso a DOM real)
-
-**El agente podrá:**
-- Hacer cálculos exactos (el LLM se equivoca, el código no)
-- Procesar datos de CSV/JSON
-- Validar con regex
-- Transformar texto programáticamente
-- Prototipar lógica de negocio
-
-**Dependencias:** WebView (ya incluido en Android) · **0 MB extra**
+- [x] WebView invisible para ejecutar JavaScript
+- [x] Skill `run_code` — recibe código JS, retorna resultado
+- [x] Captura de console.log, errores, return values
+- [x] Timeout protection (max 10 segundos)
+- [x] Sandbox seguro (sin acceso a DOM real)
 
 ---
 
-### 🟠 FASE 13 — Agent Core: File Manager Pro
+### ✅ FASE 13 — Agent Core: File Manager Pro
 > *El agente puede crear, editar y organizar archivos*
 
-- [ ] Skill `file_manager` — expandir el file skill actual
-  - [ ] list_directory (listar archivos y carpetas)
-  - [ ] create_file (crear archivo con contenido)
-  - [ ] edit_file (leer, modificar, guardar)
-  - [ ] create_directory (crear carpetas)
-  - [ ] move / copy / rename / delete
-- [ ] Soporte para proyectos multi-archivo (HTML+CSS+JS)
-- [ ] Storage Access Framework para acceso a carpetas del usuario
+- [x] Skill `file_manager` con 8 acciones
+- [x] create_project: multi-archivo (HTML+CSS+JS)
+- [x] copy, move, rename, search, tree, info, create_dir
+- [x] Acceso a Downloads, Documents, DCIM, Pictures
 - [ ] FileExplorerScreen (UI para navegar archivos visualmente)
-
-**El agente podrá:**
-- Crear proyectos web completos (carpeta + múltiples archivos)
-- Editar archivos existentes del usuario
-- Organizar fotos, documentos, descargas
-- Gestionar archivos generados por otros skills
-
-**Dependencias:** java.io.File (ya incluido) · **0 MB extra**
 
 ---
 
-### 🟡 FASE 14 — Agent Core: Git Integration
+### ✅ FASE 14 — Agent Core: Git Integration
 > *El cel se conecta a todo tu ecosistema de código*
 
-- [ ] Dependencia JGit (~5MB)
-- [ ] Skill `git` con subcomandos:
-  - [ ] clone (clonar repo por URL + token)
-  - [ ] status (ver cambios)
-  - [ ] add + commit (guardar cambios)
-  - [ ] push (subir a GitHub/GitLab)
-  - [ ] pull (bajar cambios)
-  - [ ] log (historial de commits)
-  - [ ] diff (ver qué cambió)
-- [ ] Auth: HTTPS + Personal Access Token
+- [x] JGit dependency integrada
+- [x] Skill `git` con 9 acciones: clone, status, add, commit, push, pull, log, diff, list_repos
+- [x] Auth: HTTPS + Personal Access Token
+- [x] Repos en /sdcard/BeeMovil/repos/
 - [ ] GitScreen (UI para repos, commits, branches)
-
-**El agente podrá:**
-- Clonar repos desde GitHub
-- Hacer cambios y subirlos
-- Code review desde el cel
-- Trigger deploys vía push (GitHub Actions)
-
-**Dependencias:** org.eclipse.jgit · **+5 MB**
 
 ---
 
@@ -285,12 +251,12 @@
 
 | Métrica | Valor |
 |---|---|
-| Versión | v3.9.0 |
-| Skills | 31 |
+| Versión | v4.0.0 |
+| Skills | 34 |
 | Pantallas | 12 |
 | Providers LLM | 2 (OpenRouter + Ollama Cloud) |
 | Modelos de visión | 6 |
-| Fases completadas | 11 de 28 |
+| Fases completadas | 14 de 28 |
 | Target BEE Smart v2.0 | 58 skills, 20 automations |
-| APK tamaño actual | ~15 MB |
-| APK extra pendiente | +5 MB (JGit) |
+| APK tamaño actual | ~20 MB |
+| Hito actual | AGENTE (ejecuta código + crea archivos + git) |
