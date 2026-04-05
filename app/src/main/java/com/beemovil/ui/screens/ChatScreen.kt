@@ -98,18 +98,13 @@ fun ChatScreen(viewModel: ChatViewModel, onSettingsClick: () -> Unit = {}, onBac
     ) { uri: Uri? ->
         uri?.let {
             try {
-                // Copy to temp and get path for vision
+                // Copy to temp file
                 val inputStream = context.contentResolver.openInputStream(it)
                 val tempFile = File(context.cacheDir, "attached_image_${System.currentTimeMillis()}.jpg")
                 inputStream?.use { input -> tempFile.outputStream().use { output -> input.copyTo(output) } }
 
-                // Add as user message with file reference
-                viewModel.messages.add(ChatUiMessage(
-                    text = "Analiza esta imagen",
-                    isUser = true,
-                    filePaths = listOf(tempFile.absolutePath)
-                ))
-                viewModel.sendMessage("Se adjuntó una imagen en ${tempFile.absolutePath}. Analízala.")
+                // Route to vision model (not text model)
+                viewModel.analyzeImageInChat(context, tempFile.absolutePath)
             } catch (e: Exception) {
                 viewModel.sendMessage("[Error cargando imagen: ${e.message}]")
             }

@@ -1,7 +1,11 @@
 package com.beemovil.ui
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.os.Handler
 import android.os.Looper
+import android.util.Base64
 import android.util.Log
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -9,10 +13,14 @@ import androidx.lifecycle.ViewModel
 import com.beemovil.agent.AgentConfig
 import com.beemovil.agent.BeeAgent
 import com.beemovil.agent.DefaultAgents
+import com.beemovil.llm.ChatMessage
 import com.beemovil.llm.LlmFactory
+import com.beemovil.llm.OllamaCloudProvider
 import com.beemovil.memory.BeeMemoryDB
 import com.beemovil.memory.ChatHistoryDB
 import com.beemovil.skills.BeeSkill
+import java.io.ByteArrayOutputStream
+import java.io.File
 
 data class ChatUiMessage(
     val text: String,
@@ -294,6 +302,72 @@ class ChatViewModel : ViewModel() {
             files.add(match.groupValues[1])
         }
         return files.toList()
+    }
+
+    /**
+     * Analyze an image using the vision model (Gemma 4).
+     * Called when user attaches an image in chat.
+     */
+    fun analyzeImageInChat(context: Context, imagePath: String, prompt: String = "Describe detalladamente lo que ves en esta imagen.") {
+        val config = currentAgentConfig.value
+        isLoading.value = true
+
+        // Add user message
+        messages.add(ChatUiMessage(
+            text = prompt,
+            isUser = true,
+            filePaths = listOf(imagePath)
+        ))
+
+        Thread {
+            try {
+                val prefs = context.getSharedPreferences("beemovil", Context.MODE_PRIVATE)
+                val apiKey = prefs.getString("ollama_api_key", "") ?: ""
+
+                if (apiKey.isBlank()) {
+                    mainHandler.post {
+                        isLoading.value = false
+                        messages.add(ChatUiMessage(
+                            text = "⚠️ Configura tu API key de Ollama en Settings para analizar imágenes",
+                            isUser = false, agentIcon = config.icon, isError = true
+                        ))
+                    }
+                    return@Thread
+                }
+
+                // Read and encode image
+                val bitmap = BitmapFactory.decodeFile(imagePath) ?: throw Exception("No se pudo leer la imagen")
+                val scale = minOf(800f / bitmap.width, 800f / bitmap.height, 1f)
+                val resized = Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).toInt(), (bitmap.height * scale).toInt(), true)
+                val baos = ByteArrayOutputStream()
+                resized.compress(Bitmap.CompressFormat.JPEG, 85, baos)
+                val base64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
+
+                // Use vision model
+                val visionModel = prefs.getString("vision_model", "gemma4:31b-cloud") ?: "gemma4:31b-cloud"
+                val visionProvider = OllamaCloudProvider(apiKey = apiKey, model = visionModel)
+                val visionMessages = listOf(ChatMessage(role = "user", content = prompt, images = listOf(base64)))
+                val response = visionProvider.complete(visionMessages, emptyList())
+
+                mainHandler.post {
+                    isLoading.value = false
+                    messages.add(ChatUiMessage(
+                        text = response.text ?: "Sin respuesta del modelo de visión",
+                        isUser = false, agentIcon = "👁️",
+                        toolsUsed = listOf("vision:$visionModel")
+                    ))
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Vision error: ${e.message}", e)
+                mainHandler.post {
+                    isLoading.value = false
+                    messages.add(ChatUiMessage(
+                        text = "❌ Error de visión: ${e.message}",
+                        isUser = false, agentIcon = config.icon, isError = true
+                    ))
+                }
+            }
+        }.start()
     }
 
     /**
