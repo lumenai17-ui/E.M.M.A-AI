@@ -53,6 +53,68 @@ fun ChatScreen(viewModel: ChatViewModel, onSettingsClick: () -> Unit = {}, onBac
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var showAgentPicker by remember { mutableStateOf(false) }
+    var showAttachOptions by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    // File picker
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            try {
+                val cursor = context.contentResolver.query(it, null, null, null, null)
+                val displayName = cursor?.use { c ->
+                    val idx = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    c.moveToFirst()
+                    if (idx >= 0) c.getString(idx) else "archivo"
+                } ?: "archivo"
+
+                // Read file content for text files, or note attachment for images
+                val mimeType = context.contentResolver.getType(it) ?: ""
+                val prefix = when {
+                    mimeType.startsWith("image/") -> "[Imagen adjunta: $displayName]\nAnálisis: "
+                    mimeType == "application/pdf" -> "[PDF adjunto: $displayName]\nResume el contenido: "
+                    else -> "[Archivo adjunto: $displayName]\n"
+                }
+
+                // For text-based files, read content
+                if (mimeType.startsWith("text/") || mimeType.contains("json") || mimeType.contains("csv")) {
+                    val text = context.contentResolver.openInputStream(it)?.bufferedReader()?.use { r -> r.readText() } ?: ""
+                    val truncated = if (text.length > 3000) text.take(3000) + "\n... (truncado)" else text
+                    viewModel.sendMessage("[Archivo: $displayName]\n```\n$truncated\n```\nAnaliza este archivo")
+                } else {
+                    // For images/PDFs, add as context message
+                    viewModel.sendMessage("${prefix}Analiza este $displayName")
+                }
+            } catch (e: Exception) {
+                viewModel.sendMessage("[Error cargando archivo: ${e.message}]")
+            }
+        }
+    }
+
+    // Image picker
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            try {
+                // Copy to temp and get path for vision
+                val inputStream = context.contentResolver.openInputStream(it)
+                val tempFile = File(context.cacheDir, "attached_image_${System.currentTimeMillis()}.jpg")
+                inputStream?.use { input -> tempFile.outputStream().use { output -> input.copyTo(output) } }
+
+                // Add as user message with file reference
+                viewModel.messages.add(ChatUiMessage(
+                    text = "Analiza esta imagen",
+                    isUser = true,
+                    filePaths = listOf(tempFile.absolutePath)
+                ))
+                viewModel.sendMessage("Se adjuntó una imagen en ${tempFile.absolutePath}. Analízala.")
+            } catch (e: Exception) {
+                viewModel.sendMessage("[Error cargando imagen: ${e.message}]")
+            }
+        }
+    }
 
     // Auto-scroll on new messages
     LaunchedEffect(viewModel.messages.size) {
@@ -140,12 +202,38 @@ fun ChatScreen(viewModel: ChatViewModel, onSettingsClick: () -> Unit = {}, onBac
                         .padding(horizontal = 8.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.Bottom
                 ) {
-                    // Attach file button
-                    IconButton(
-                        onClick = { /* TODO: file picker */ },
-                        modifier = Modifier.size(42.dp)
-                    ) {
-                        Icon(Icons.Outlined.AttachFile, "Attach", tint = BeeGrayLight, modifier = Modifier.size(22.dp))
+                    // Attach file button with dropdown
+                    Box {
+                        IconButton(
+                            onClick = { showAttachOptions = !showAttachOptions },
+                            modifier = Modifier.size(42.dp)
+                        ) {
+                            Icon(Icons.Outlined.AttachFile, "Attach",
+                                tint = if (showAttachOptions) BeeYellow else BeeGrayLight,
+                                modifier = Modifier.size(22.dp))
+                        }
+                        DropdownMenu(
+                            expanded = showAttachOptions,
+                            onDismissRequest = { showAttachOptions = false },
+                            modifier = Modifier.background(BeeBlackLight)
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Imagen", color = BeeWhite) },
+                                leadingIcon = { Icon(Icons.Outlined.Image, "Imagen", tint = BeeYellow) },
+                                onClick = {
+                                    showAttachOptions = false
+                                    imagePickerLauncher.launch("image/*")
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Archivo", color = BeeWhite) },
+                                leadingIcon = { Icon(Icons.Outlined.InsertDriveFile, "Archivo", tint = BeeYellow) },
+                                onClick = {
+                                    showAttachOptions = false
+                                    filePickerLauncher.launch("*/*")
+                                }
+                            )
+                        }
                     }
                     // Mic button
                     if (viewModel.voiceManager != null) {

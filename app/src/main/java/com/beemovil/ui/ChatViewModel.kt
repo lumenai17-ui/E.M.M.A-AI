@@ -239,6 +239,7 @@ class ChatViewModel : ViewModel() {
             var responseText: String
             var isError = false
             var toolNames = emptyList<String>()
+            var detectedFiles = emptyList<String>()
 
             try {
                 val agent = getOrCreateAgent(config)
@@ -246,6 +247,22 @@ class ChatViewModel : ViewModel() {
                 responseText = response.text
                 isError = response.isError
                 toolNames = response.toolExecutions.map { it.skillName }
+
+                // PRIMARY: Extract file paths from tool execution results
+                val toolFiles = mutableSetOf<String>()
+                response.toolExecutions.forEach { exec ->
+                    val result = exec.result
+                    // Check common keys where skills return file paths
+                    arrayOf("path", "file_path", "filepath", "filePath", "output_path").forEach { key ->
+                        if (result.has(key)) {
+                            toolFiles.add(result.getString(key))
+                        }
+                    }
+                }
+                // FALLBACK: Also search text for paths
+                toolFiles.addAll(extractFilePaths(responseText))
+                detectedFiles = toolFiles.toList()
+
             } catch (e: Throwable) {
                 Log.e(TAG, "Chat error: ${e.message}", e)
                 responseText = "❌ ${e.javaClass.simpleName}: ${e.message}"
@@ -254,9 +271,6 @@ class ChatViewModel : ViewModel() {
 
             // Save response to DB
             chatHistoryDB?.saveMessage(config.id, responseText, false, config.icon, isError, toolNames)
-
-            // Extract file paths from response
-            val detectedFiles = extractFilePaths(responseText)
 
             mainHandler.post {
                 isLoading.value = false
@@ -271,25 +285,13 @@ class ChatViewModel : ViewModel() {
     }
 
     /**
-     * Extract file paths from agent response text.
-     * Matches /storage/..., /data/..., Documents/BeeMovil/..., etc.
+     * Extract file paths from agent response text (fallback).
      */
     private fun extractFilePaths(text: String): List<String> {
-        val patterns = listOf(
-            Regex("""(/storage/[^\s\n"')]+\.\w{2,5})"""),
-            Regex("""(/data/[^\s\n"')]+\.\w{2,5})"""),
-            Regex("""(Documents/BeeMovil/[^\s\n"')]+\.\w{2,5})""")
-        )
+        val pattern = Regex("""(/storage/emulated/0/[^\s\n"')`,]+\.\w{2,5})""")
         val files = mutableSetOf<String>()
-        for (pattern in patterns) {
-            pattern.findAll(text).forEach { match ->
-                val path = match.groupValues[1]
-                // Only include known file types
-                val ext = path.substringAfterLast('.').lowercase()
-                if (ext in listOf("pdf", "html", "htm", "csv", "tsv", "txt", "png", "jpg", "jpeg", "webp", "json", "xml")) {
-                    files.add(path)
-                }
-            }
+        pattern.findAll(text).forEach { match ->
+            files.add(match.groupValues[1])
         }
         return files.toList()
     }
