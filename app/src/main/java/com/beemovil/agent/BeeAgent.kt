@@ -63,6 +63,7 @@ class BeeAgent(
         }
 
         messages.add(ChatMessage(role = "user", content = userMessage))
+        trimHistory() // Prevent unbounded growth
         Log.i(TAG, "[${config.id}] User: ${userMessage.take(80)}")
 
         return processChat(userMessage)
@@ -157,6 +158,22 @@ class BeeAgent(
         val systemMsg = messages.first()
         messages.clear()
         messages.add(systemMsg)
+    }
+
+    /**
+     * Trim message history to prevent unbounded memory growth.
+     * Keeps system prompt + last N messages.
+     */
+    private fun trimHistory() {
+        val maxMessages = 40 // system + 20 exchanges
+        if (messages.size > maxMessages) {
+            val systemMsg = messages.first()
+            val recent = messages.takeLast(maxMessages - 1)
+            messages.clear()
+            messages.add(systemMsg)
+            messages.addAll(recent)
+            Log.d(TAG, "[${config.id}] Trimmed history to $maxMessages messages")
+        }
     }
 }
 

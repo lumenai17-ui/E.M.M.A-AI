@@ -38,6 +38,7 @@ fun BrowserScreen(
     var pageTitle by remember { mutableStateOf("Browser") }
     var isLoading by remember { mutableStateOf(false) }
     var progress by remember { mutableStateOf(0) }
+    var lastLoadedUrl by remember { mutableStateOf("") } // Prevent infinite reload
 
     Column(
         modifier = Modifier
@@ -163,8 +164,8 @@ fun BrowserScreen(
                 }
             },
             update = { webView ->
-                val current = webView.url ?: ""
-                if (currentUrl != current && currentUrl.isNotBlank()) {
+                if (currentUrl != lastLoadedUrl && currentUrl.isNotBlank()) {
+                    lastLoadedUrl = currentUrl
                     webView.loadUrl(currentUrl)
                 }
             },

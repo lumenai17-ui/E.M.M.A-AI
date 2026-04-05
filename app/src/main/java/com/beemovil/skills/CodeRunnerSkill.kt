@@ -101,7 +101,7 @@ class CodeRunnerSkill(private val context: Context) : BeeSkill {
             // Give WebView time to load
             Thread.sleep(300)
         }
-        return webView!!
+        return webView ?: throw Exception("WebView failed to initialize")
     }
 
     // Accumulated console logs for current execution

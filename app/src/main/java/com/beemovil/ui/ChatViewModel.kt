@@ -337,6 +337,7 @@ class ChatViewModel : ViewModel() {
 
                 // Read and encode image
                 val bitmap = BitmapFactory.decodeFile(imagePath) ?: throw Exception("No se pudo leer la imagen")
+                if (bitmap.width == 0 || bitmap.height == 0) throw Exception("Imagen corrupta o vacía")
                 val scale = minOf(800f / bitmap.width, 800f / bitmap.height, 1f)
                 val resized = Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).toInt(), (bitmap.height * scale).toInt(), true)
                 val baos = ByteArrayOutputStream()

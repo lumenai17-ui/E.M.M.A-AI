@@ -350,6 +350,10 @@ class BrowserSkill(private val context: Context) : BeeSkill {
 
         mainHandler.post {
             webView?.let { wv ->
+                if (wv.width <= 0 || wv.height <= 0) {
+                    latch.countDown()
+                    return@let
+                }
                 val bitmap = Bitmap.createBitmap(wv.width, wv.height, Bitmap.Config.ARGB_8888)
                 val canvas = Canvas(bitmap)
                 wv.draw(canvas)
@@ -386,7 +390,12 @@ class BrowserSkill(private val context: Context) : BeeSkill {
         var result: String? = null
 
         mainHandler.post {
-            webView?.evaluateJavascript(code) { value ->
+            val wv = webView
+            if (wv == null) {
+                latch.countDown()
+                return@post
+            }
+            wv.evaluateJavascript(code) { value ->
                 result = value
                     ?.removeSurrounding("\"")
                     ?.replace("\\n", "\n")
@@ -397,7 +406,8 @@ class BrowserSkill(private val context: Context) : BeeSkill {
             }
         }
 
-        latch.await(TIMEOUT, TimeUnit.SECONDS)
+        val completed = latch.await(TIMEOUT, TimeUnit.SECONDS)
+        if (!completed) Log.w(TAG, "evalJs timed out")
         return result
     }
 
