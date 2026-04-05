@@ -1,5 +1,5 @@
 # 🐝 Bee-Movil Native — Roadmap & Checklist
-### Última actualización: 5 de Abril 2026 · v4.0.0
+### Última actualización: 5 de Abril 2026 · v4.1.0
 
 ---
 
@@ -21,13 +21,14 @@
 - [x] Multi-agente: agentes customs con modelo/personalidad propios
 - [x] Selector dinámico de modelos
 
-### 34 Skills Nativos
+### 35 Skills Nativos
 - [x] **Core (7):** device, clipboard, notify, TTS, browser, share, file
 - [x] **Memoria (1):** memory (SQLite persistente)
 - [x] **Multimedia (10):** camera, image_gen, volume, alarm, flashlight, music, QR, app_launcher, connectivity, brightness
 - [x] **Production (8):** calendar, email, weather, web_search, contacts, calculator, datetime, battery_saver
 - [x] **Productividad (5):** web_fetch, generate_pdf, generate_html, generate_spreadsheet, **read_document**
-- [x] **Agent Core (3):** **run_code** (JS), **file_manager** (pro), **git** (JGit)
+- [x] **Agent Core (4):** **run_code** (JS), **file_manager** (pro), **git** (JGit), **browser_agent**
+
 
 ### Comunicaciones
 - [x] Email IMAP/SMTP (auto-detección de proveedor, App Password)
@@ -102,12 +103,28 @@
 - [x] Auth: HTTPS + Personal Access Token
 - [x] Repos en /sdcard/BeeMovil/repos/
 - [ ] GitScreen (UI para repos, commits, branches)
+- [ ] GitHub Token field en Settings
 
 ---
 
-### 🟢 FASE 15 — Bug Sweep & Fixes
-> *Estabilizar todo antes de seguir construyendo*
+### ✅ FASE 14B — Browser Built-in + Agent Navigation
+> *Chrome interno que tu AI también controla*
 
+- [x] BrowserSkill con 13 acciones (navigate, read, click, type, fill_form, extract, screenshot...)
+- [x] BrowserScreen con URL bar, loading indicator, WebView completo
+- [x] Hero card en Dashboard (Browser + Code)
+- [x] Preview de proyectos HTML (file:// URLs)
+- [x] Cookies persistentes (sesiones se mantienen)
+- [ ] Google Sign-In → compartir sesión al WebView
+
+---
+
+### 🟢 FASE 15 — Bug Sweep, Settings & Fixes
+> *Estabilizar todo + campo GitHub token en Settings*
+
+- [ ] **Settings nuevos campos:**
+  - [ ] GitHub Personal Access Token
+  - [ ] Default browser homepage
 - [ ] Auditoría de bugs por pantalla:
   - [ ] Settings: campos email SMTP, selector de modelo
   - [ ] Camera: flow de permisos, modelo de visión
@@ -115,6 +132,7 @@
   - [ ] Chat: manejo de errores de API, timeouts
   - [ ] Voice: reconocimiento en español, edge cases
   - [ ] Telegram: reconexión automática
+  - [ ] Browser: edge cases de navegación
 - [ ] Crash reporting (try/catch en todos los skills)
 - [ ] Error messages claros (no stack traces)
 - [ ] Manejo de permisos (camera, mic, storage, contacts, calendar)
@@ -133,6 +151,7 @@
 - [ ] VoiceChatScreen → animaciones más fluidas
 - [ ] EmailInboxScreen → look like Apple Mail dark
 - [ ] AgentCreatorScreen → wizard UI paso a paso
+- [ ] **BrowserScreen** → mejorar UI (tabs, bookmarks, history)
 - [ ] **FileExplorerScreen** → diseño clean de navegador de archivos
 - [ ] **GitScreen** → diseño de commits y branches
 - [ ] Tipografía consistente (design tokens)
@@ -251,12 +270,12 @@
 
 | Métrica | Valor |
 |---|---|
-| Versión | v4.0.0 |
-| Skills | 34 |
-| Pantallas | 12 |
+| Versión | v4.1.0 |
+| Skills | 35 |
+| Pantallas | 13 |
 | Providers LLM | 2 (OpenRouter + Ollama Cloud) |
 | Modelos de visión | 6 |
-| Fases completadas | 14 de 28 |
+| Fases completadas | 15 de 28 |
 | Target BEE Smart v2.0 | 58 skills, 20 automations |
 | APK tamaño actual | ~20 MB |
-| Hito actual | AGENTE (ejecuta código + crea archivos + git) |
+| Hito actual | AGENTE + BROWSER (navega, ejecuta, crea, sube) |
