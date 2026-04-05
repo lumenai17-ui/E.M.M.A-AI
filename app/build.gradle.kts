@@ -110,6 +110,9 @@ dependencies {
     }
     implementation("org.apache.xmlbeans:xmlbeans:5.1.1")
 
+    // Git operations (clone, commit, push, pull)
+    implementation("org.eclipse.jgit:org.eclipse.jgit:6.8.0.202311291450-r")
+
     // Google Sign-In (Phase 8 - pending Cloud setup)
     // implementation("com.google.android.gms:play-services-auth:21.0.0")
 
