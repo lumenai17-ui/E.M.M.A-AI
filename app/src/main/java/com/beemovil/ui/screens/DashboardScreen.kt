@@ -220,10 +220,10 @@ fun DashboardScreen(
                         Modifier.weight(1f)
                     ) { viewModel.currentScreen.value = "browser" }
                     HeroCard(
-                        Icons.Filled.Code, "Code", "Ejecutar JavaScript",
+                        Icons.Filled.Folder, "Archivos", "Explorador de archivos",
                         Color(0xFFCE93D8), listOf(Color(0xFF1C1024), Color(0xFF1C1C2E)),
                         Modifier.weight(1f)
-                    ) { onAgentClick("main") }
+                    ) { viewModel.currentScreen.value = "file_explorer" }
                 }
             }
             Spacer(modifier = Modifier.height(28.dp))
@@ -246,6 +246,11 @@ fun DashboardScreen(
                     ToolCard(Icons.Outlined.CalendarMonth, "Agenda", AccentPurple, Modifier.weight(1f)) { viewModel.openAgentChatWithPrompt("agenda", "¿Qué tengo programado hoy?") }
                     ToolCard(Icons.Outlined.Language, "Landing", AccentTeal, Modifier.weight(1f)) { viewModel.openAgentChatWithPrompt("main", "Crea una landing page moderna para un café artesanal") }
                     ToolCard(Icons.Outlined.TableChart, "Excel", AccentGreen, Modifier.weight(1f)) { viewModel.openAgentChatWithPrompt("main", "Hazme un spreadsheet comparativo de precios") }
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    ToolCard(Icons.Outlined.Storage, "Git", Color(0xFFFF7043), Modifier.weight(1f)) { viewModel.currentScreen.value = "git_repos" }
+                    ToolCard(Icons.Outlined.Code, "Code", Color(0xFFCE93D8), Modifier.weight(1f)) { viewModel.openAgentChatWithPrompt("main", "Ayúdame a escribir código") }
+                    ToolCard(Icons.Outlined.Architecture, "Deploy", Color(0xFF4DD0E1), Modifier.weight(1f)) { viewModel.openAgentChatWithPrompt("main", "Quiero publicar un proyecto web") }
                 }
             }
             Spacer(modifier = Modifier.height(28.dp))

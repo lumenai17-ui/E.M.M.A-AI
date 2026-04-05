@@ -394,10 +394,75 @@ fun SettingsScreen(
             }
 
             // ═══════════════════════════════════════
+            // DEVELOPER / GIT / BROWSER
+            // ═══════════════════════════════════════
+            SectionCard {
+                SectionTitle("DEVELOPER & GIT")
+                Text("Configura GitHub y herramientas de desarrollo", fontSize = 12.sp, color = BeeGray)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                var githubToken by remember { mutableStateOf(prefs.getString("github_token", "") ?: "") }
+                var showGithubToken by remember { mutableStateOf(false) }
+                var browserHomepage by remember { mutableStateOf(prefs.getString("browser_homepage", "https://www.google.com") ?: "https://www.google.com") }
+
+                OutlinedTextField(
+                    value = githubToken,
+                    onValueChange = { githubToken = it },
+                    label = { Text("GitHub Personal Access Token") },
+                    placeholder = { Text("ghp_xxxxxxxxxxxx", color = BeeGray) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    visualTransformation = if (showGithubToken) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { showGithubToken = !showGithubToken }) {
+                            Icon(
+                                if (showGithubToken) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                "Toggle", tint = BeeGray
+                            )
+                        }
+                    },
+                    colors = fieldColors()
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+                OutlinedTextField(
+                    value = browserHomepage,
+                    onValueChange = { browserHomepage = it },
+                    label = { Text("Browser Homepage") },
+                    placeholder = { Text("https://www.google.com", color = BeeGray) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    colors = fieldColors()
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        prefs.edit()
+                            .putString("github_token", githubToken.trim())
+                            .putString("browser_homepage", browserHomepage.trim())
+                            .apply()
+                        Toast.makeText(context, "Developer settings guardados", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = BeeGray.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Guardar Developer Settings", color = BeeWhite, fontSize = 13.sp)
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    "1. GitHub → Settings → Developer Settings → Personal Access Tokens\n2. Generate new token (classic) → permisos: repo\n3. Copia el token → pega aqui",
+                    fontSize = 11.sp, color = BeeGray
+                )
+            }
+
+            // ═══════════════════════════════════════
             // EMAIL CONFIG
             // ═══════════════════════════════════════
             SectionCard {
-                SectionTitle("CORREO ELECTRÓNICO")
+                SectionTitle("CORREO ELECTRONICO")
                 Text("Configura tu email para usar la bandeja de entrada", fontSize = 12.sp, color = BeeGray)
                 Spacer(modifier = Modifier.height(8.dp))
 

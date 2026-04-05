@@ -317,6 +317,21 @@ class MainActivity : ComponentActivity() {
                                     onBack = { viewModel.currentScreen.value = "dashboard" }
                                 )
                             }
+                            "file_explorer" -> {
+                                FileExplorerScreen(
+                                    onBack = { viewModel.currentScreen.value = "dashboard" },
+                                    onOpenFile = { path ->
+                                        if (path.endsWith(".html") || path.endsWith(".htm")) {
+                                            viewModel.currentScreen.value = "browser"
+                                        }
+                                    }
+                                )
+                            }
+                            "git_repos" -> {
+                                GitScreen(
+                                    onBack = { viewModel.currentScreen.value = "dashboard" }
+                                )
+                            }
                             "settings" -> {
                                 SettingsScreen(
                                     viewModel = viewModel,
