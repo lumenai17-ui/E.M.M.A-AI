@@ -22,6 +22,7 @@ import com.beemovil.skills.*
 import com.beemovil.ui.ChatUiMessage
 import com.beemovil.ui.ChatViewModel
 import com.beemovil.ui.screens.*
+import com.beemovil.ui.components.PremiumBottomNav
 import com.beemovil.ui.theme.*
 import java.io.File
 
@@ -172,64 +173,10 @@ class MainActivity : ComponentActivity() {
                         val screen = viewModel.currentScreen.value
                         // Show bottom bar only on main screens
                         if (screen in listOf("dashboard", "conversations", "email_inbox", "settings")) {
-                            NavigationBar(
-                                containerColor = BeeBlackLight,
-                                contentColor = BeeYellow,
-                                tonalElevation = 0.dp
-                            ) {
-                                NavigationBarItem(
-                                    selected = screen == "dashboard",
-                                    onClick = { viewModel.currentScreen.value = "dashboard" },
-                                    icon = { Icon(Icons.Filled.Home, "Home") },
-                                    label = { Text("Home", fontSize = 11.sp) },
-                                    colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = BeeYellow,
-                                        selectedTextColor = BeeYellow,
-                                        unselectedIconColor = BeeGray,
-                                        unselectedTextColor = BeeGray,
-                                        indicatorColor = BeeYellow.copy(alpha = 0.12f)
-                                    )
-                                )
-                                NavigationBarItem(
-                                    selected = screen == "conversations",
-                                    onClick = { viewModel.currentScreen.value = "conversations" },
-                                    icon = { Icon(Icons.Filled.Forum, "Agentes") },
-                                    label = { Text("Agentes", fontSize = 11.sp) },
-                                    colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = BeeYellow,
-                                        selectedTextColor = BeeYellow,
-                                        unselectedIconColor = BeeGray,
-                                        unselectedTextColor = BeeGray,
-                                        indicatorColor = BeeYellow.copy(alpha = 0.12f)
-                                    )
-                                )
-                                NavigationBarItem(
-                                    selected = screen == "email_inbox",
-                                    onClick = { viewModel.currentScreen.value = "email_inbox" },
-                                    icon = { Icon(Icons.Filled.Email, "Email") },
-                                    label = { Text("Correo", fontSize = 11.sp) },
-                                    colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = BeeYellow,
-                                        selectedTextColor = BeeYellow,
-                                        unselectedIconColor = BeeGray,
-                                        unselectedTextColor = BeeGray,
-                                        indicatorColor = BeeYellow.copy(alpha = 0.12f)
-                                    )
-                                )
-                                NavigationBarItem(
-                                    selected = screen == "settings",
-                                    onClick = { viewModel.currentScreen.value = "settings" },
-                                    icon = { Icon(Icons.Filled.Settings, "Settings") },
-                                    label = { Text("Config", fontSize = 11.sp) },
-                                    colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = BeeYellow,
-                                        selectedTextColor = BeeYellow,
-                                        unselectedIconColor = BeeGray,
-                                        unselectedTextColor = BeeGray,
-                                        indicatorColor = BeeYellow.copy(alpha = 0.12f)
-                                    )
-                                )
-                            }
+                            PremiumBottomNav(
+                                currentScreen = screen,
+                                onNavigate = { viewModel.currentScreen.value = it }
+                            )
                         }
                     }
                 ) { innerPadding ->
