@@ -1,4 +1,4 @@
-package com.beemovil.llm.local
+﻿package com.beemovil.llm.local
 
 import android.content.Context
 import android.os.Handler
@@ -164,8 +164,8 @@ object LocalModelManager {
 
         if (hfToken.isNullOrBlank()) {
             mainHandler.post {
-                onComplete(false, "🤗 Necesitas un HuggingFace Token para descargar Gemma 4.\n" +
-                    "Ve a Settings → Proveedor AI → 📱 Local y pega tu token.\n" +
+                onComplete(false, "[HF] Necesitas un HuggingFace Token para descargar Gemma 4.\n" +
+                    "Ve a Settings → Proveedor AI → [DEV] Local y pega tu token.\n" +
                     "Obtener en: huggingface.co/settings/tokens")
             }
             return
@@ -206,9 +206,9 @@ object LocalModelManager {
                     val code = response.code
                     response.close()
                     val errorMsg = when (code) {
-                        401, 403 -> "🔑 Token de HuggingFace inválido o sin acceso a Gemma.\n" +
+                        401, 403 -> "[KEY] Token de HuggingFace inválido o sin acceso a Gemma.\n" +
                             "Acepta la licencia en huggingface.co/litert-community"
-                        404 -> "❌ Modelo no encontrado en HuggingFace"
+                        404 -> "[ERR] Modelo no encontrado en HuggingFace"
                         else -> "Error HTTP $code"
                     }
                     mainHandler.post { onComplete(false, errorMsg) }
@@ -227,7 +227,7 @@ object LocalModelManager {
                 if (contentType.contains("text/html")) {
                     response.close()
                     mainHandler.post {
-                        onComplete(false, "🔑 HuggingFace requiere aceptar la licencia de Gemma.\n" +
+                        onComplete(false, "[KEY] HuggingFace requiere aceptar la licencia de Gemma.\n" +
                             "Visita: huggingface.co/litert-community y acepta los términos.")
                     }
                     return@Thread
@@ -263,7 +263,7 @@ object LocalModelManager {
                 if (tempFile.length() < 100_000_000L) {
                     tempFile.delete()
                     mainHandler.post {
-                        onComplete(false, "❌ Archivo descargado es demasiado pequeño (${tempFile.length() / 1024} KB).\n" +
+                        onComplete(false, "[ERR] Archivo descargado es demasiado pequeño (${tempFile.length() / 1024} KB).\n" +
                             "Posible error de autenticación. Verifica tu token HuggingFace.")
                     }
                     return@Thread
@@ -275,7 +275,7 @@ object LocalModelManager {
                 if (renamed) {
                     Log.i(TAG, "Download complete: ${targetFile.absolutePath} (${downloaded / 1_048_576} MB)")
                     mainHandler.post {
-                        onComplete(true, "✅ ${model.name} descargado (${downloaded / 1_048_576} MB)")
+                        onComplete(true, "[OK] ${model.name} descargado (${downloaded / 1_048_576} MB)")
                     }
                 } else {
                     Log.e(TAG, "Failed to rename temp file")
@@ -288,11 +288,11 @@ object LocalModelManager {
 
                 val errorMsg = when {
                     e.message?.contains("timeout", true) == true ->
-                        "⏱️ Timeout — conexión muy lenta. Intenta con WiFi."
+                        "[TIMER] Timeout — conexión muy lenta. Intenta con WiFi."
                     e.message?.contains("Unable to resolve", true) == true ->
-                        "📡 Sin conexión a internet"
+                        "[NET] Sin conexión a internet"
                     e.message?.contains("Permission", true) == true ->
-                        "🔒 Sin permiso de almacenamiento"
+                        "[LOCK] Sin permiso de almacenamiento"
                     else -> "Error: ${e.message?.take(100)}"
                 }
                 mainHandler.post { onComplete(false, errorMsg) }

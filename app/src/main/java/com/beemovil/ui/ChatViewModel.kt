@@ -29,7 +29,7 @@ import java.io.File
 data class ChatUiMessage(
     val text: String,
     val isUser: Boolean,
-    val agentIcon: String = "🐝",
+    val agentIcon: String = "BEE",
     val isError: Boolean = false,
     val isLoading: Boolean = false,
     val toolsUsed: List<String> = emptyList(),
@@ -96,7 +96,7 @@ class ChatViewModel : ViewModel() {
                 onErrorCallback = { error ->
                     mainHandler.post {
                         isRecording.value = false
-                        messages.add(ChatUiMessage("🎙️ $error", isUser = false, agentIcon = "⚠️", isError = true))
+                        messages.add(ChatUiMessage("$error", isUser = false, agentIcon = "ERR", isError = true))
                     }
                 },
                 onFinalResult = { text ->
@@ -288,7 +288,7 @@ class ChatViewModel : ViewModel() {
                 // First time — show welcome
                 val skillCount = skills.size
                 val memCount = memoryDB?.getMemoryCount() ?: 0
-                val memInfo = if (memCount > 0) "\n🧠 **$memCount memorias** almacenadas" else ""
+                val memInfo = if (memCount > 0) "\n**$memCount memorias** almacenadas" else ""
                 val welcome = ChatUiMessage(
                     text = "¡Hola! Soy ${config.name} ${config.icon}\n\n" +
                             "Tengo **$skillCount skills nativos** listos.\n" +
@@ -365,9 +365,9 @@ class ChatViewModel : ViewModel() {
                 // Throw with user-friendly message
                 throw Exception(when {
                     e.message?.contains("no descargado") == true ->
-                        "📱 Modelo local no descargado.\nVe a Settings → 📱 Local → Descargar"
+                        "Modelo local no descargado. Ve a Settings para descargarlo."
                     e.message?.contains("appContext") == true ->
-                        "📱 Error de inicialización. Reinicia la app."
+                        "Error de inicializacion. Reinicia la app."
                     else -> "Error de proveedor: ${e.message}"
                 })
             }
@@ -389,9 +389,9 @@ class ChatViewModel : ViewModel() {
 
         val apiKey = apiKeys[currentProvider.value] ?: ""
         if (apiKey.isBlank() && currentProvider.value != "local") {
-            val errorMsg = "⚠️ Configura tu API key para **${getProviderDisplayName()}** primero (⚙️)"
-            messages.add(ChatUiMessage(text = errorMsg, isUser = false, agentIcon = "⚠️", isError = true))
-            chatHistoryDB?.saveMessage(config.id, errorMsg, false, "⚠️", true)
+            val errorMsg = "Configura tu API key para **${getProviderDisplayName()}** primero"
+            messages.add(ChatUiMessage(text = errorMsg, isUser = false, agentIcon = "ERR", isError = true))
+            chatHistoryDB?.saveMessage(config.id, errorMsg, false, "ERR", true)
             return
         }
 
@@ -407,10 +407,10 @@ class ChatViewModel : ViewModel() {
                 // Show loading message for local models (engine.initialize can take 15-60s)
                 if (currentProvider.value == "local") {
                     mainHandler.post {
-                        if (messages.lastOrNull()?.text?.startsWith("🔄") != true) {
+                        if (messages.lastOrNull()?.text?.startsWith("Cargando") != true) {
                             messages.add(ChatUiMessage(
-                                text = "🔄 Cargando modelo local en memoria (~15-30s la primera vez)...",
-                                isUser = false, agentIcon = "⏳"
+                                text = "Cargando modelo local en memoria (~15-30s la primera vez)...",
+                                isUser = false, agentIcon = "WAIT"
                             ))
                         }
                     }
@@ -421,7 +421,7 @@ class ChatViewModel : ViewModel() {
                 // Remove loading message if we added one
                 if (currentProvider.value == "local") {
                     mainHandler.post {
-                        messages.removeAll { it.text.startsWith("🔄 Cargando modelo") }
+                        messages.removeAll { it.text.startsWith("Cargando modelo") }
                     }
                 }
 
@@ -447,7 +447,7 @@ class ChatViewModel : ViewModel() {
 
             } catch (e: Throwable) {
                 Log.e(TAG, "Chat error: ${e.message}", e)
-                responseText = "❌ ${e.javaClass.simpleName}: ${e.message}"
+                responseText = "Error: ${e.javaClass.simpleName}: ${e.message}"
                 isError = true
             }
 
@@ -502,7 +502,7 @@ class ChatViewModel : ViewModel() {
                     mainHandler.post {
                         isLoading.value = false
                         messages.add(ChatUiMessage(
-                            text = "⚠️ Configura tu API key de Ollama en Settings para analizar imágenes",
+                            text = "Configura tu API key de Ollama en Settings para analizar imagenes",
                             isUser = false, agentIcon = config.icon, isError = true
                         ))
                     }
@@ -528,7 +528,7 @@ class ChatViewModel : ViewModel() {
                     isLoading.value = false
                     messages.add(ChatUiMessage(
                         text = response.text ?: "Sin respuesta del modelo de visión",
-                        isUser = false, agentIcon = "👁️",
+                        isUser = false, agentIcon = "VIS",
                         toolsUsed = listOf("vision:$visionModel")
                     ))
                 }
@@ -537,7 +537,7 @@ class ChatViewModel : ViewModel() {
                 mainHandler.post {
                     isLoading.value = false
                     messages.add(ChatUiMessage(
-                        text = "❌ Error de visión: ${e.message}",
+                        text = "Error de vision: ${e.message}",
                         isUser = false, agentIcon = config.icon, isError = true
                     ))
                 }
@@ -579,7 +579,7 @@ class ChatViewModel : ViewModel() {
         } catch (e: Throwable) {
             val err = "Error: ${e.message}"
             mainHandler.post {
-                messages.add(ChatUiMessage(text = err, isUser = false, agentIcon = "❌", isError = true))
+                messages.add(ChatUiMessage(text = err, isUser = false, agentIcon = "ERR", isError = true))
             }
             err
         }
@@ -592,13 +592,13 @@ class ChatViewModel : ViewModel() {
         if (text.isBlank() || isLoading.value) return
 
         val config = currentAgentConfig.value
-        messages.add(ChatUiMessage(text = "📷 $text", isUser = true))
-        chatHistoryDB?.saveMessage(config.id, "📷 $text", true, config.icon)
+        messages.add(ChatUiMessage(text = "[IMG] $text", isUser = true))
+        chatHistoryDB?.saveMessage(config.id, "[IMG] $text", true, config.icon)
 
         val apiKey = apiKeys[currentProvider.value] ?: ""
         if (apiKey.isBlank()) {
-            val errorMsg = "⚠️ Configura tu API key primero (⚙️)"
-            messages.add(ChatUiMessage(text = errorMsg, isUser = false, agentIcon = "⚠️", isError = true))
+            val errorMsg = "Configura tu API key primero"
+            messages.add(ChatUiMessage(text = errorMsg, isUser = false, agentIcon = "ERR", isError = true))
             return
         }
 
@@ -617,7 +617,7 @@ class ChatViewModel : ViewModel() {
                 toolNames = response.toolExecutions.map { it.skillName }
             } catch (e: Throwable) {
                 Log.e(TAG, "Vision error: ${e.message}", e)
-                responseText = "❌ ${e.javaClass.simpleName}: ${e.message}"
+                responseText = "Error: ${e.javaClass.simpleName}: ${e.message}"
                 isError = true
             }
 
@@ -641,7 +641,7 @@ class ChatViewModel : ViewModel() {
         chatHistoryDB?.clearAgent(config.id)
         val memCount = memoryDB?.getMemoryCount() ?: 0
         val clearMsg = ChatUiMessage(
-            text = "Chat limpiado ${config.icon}\n🧠 $memCount memorias persisten",
+            text = "Chat limpiado\n$memCount memorias persisten",
             isUser = false, agentIcon = config.icon
         )
         messages.add(clearMsg)

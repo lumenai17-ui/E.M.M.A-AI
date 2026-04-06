@@ -63,7 +63,7 @@ class A2AServer(
             AgentSkillInfo("delegate_to_agent", "Delegar a agentes especializados")
         ),
         provider = "Bee-Movil",
-        icon = "🐝"
+        icon = "BEE"
     )
 
     fun start() {

@@ -116,7 +116,7 @@ fun EmailDetailScreen(
 
         if (error != null) {
             Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-                Text("⚠️ $error", color = Color(0xFFF44336))
+                Text("$error", color = Color(0xFFF44336))
             }
             return
         }
@@ -192,12 +192,12 @@ fun EmailDetailScreen(
                                         service.downloadAttachment(emailAddr, emailPass, config, uid, att.name)
                                     }
                                     if (file != null) {
-                                        Toast.makeText(context, "✅ Guardado: ${file.name}", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "Guardado: ${file.name}", Toast.LENGTH_SHORT).show()
                                     } else {
-                                        Toast.makeText(context, "❌ Error descargando", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "Error descargando", Toast.LENGTH_SHORT).show()
                                     }
                                 } catch (e: Exception) {
-                                    Toast.makeText(context, "❌ ${e.message}", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                                 }
                             }
                         },
@@ -239,7 +239,7 @@ fun EmailDetailScreen(
                     modifier = Modifier.padding(14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("🐝", fontSize = 22.sp)
+                    Icon(Icons.Filled.SmartToy, "Bee", tint = BeeYellow, modifier = Modifier.size(22.dp))
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text("Pedirle a Bee que responda", fontWeight = FontWeight.Bold,
@@ -261,15 +261,15 @@ private fun AttachmentCard(
     onDownload: () -> Unit,
     onOpen: () -> Unit
 ) {
-    val icon = when {
-        attachment.mimeType.contains("pdf", true) -> "📄"
-        attachment.mimeType.contains("image", true) -> "🖼️"
-        attachment.mimeType.contains("video", true) -> "🎬"
-        attachment.mimeType.contains("audio", true) -> "🎵"
-        attachment.mimeType.contains("zip", true) || attachment.mimeType.contains("rar", true) -> "📦"
-        attachment.mimeType.contains("spreadsheet", true) || attachment.mimeType.contains("excel", true) -> "📊"
-        attachment.mimeType.contains("document", true) || attachment.mimeType.contains("word", true) -> "📝"
-        else -> "📎"
+    val iconVector = when {
+        attachment.mimeType.contains("pdf", true) -> Icons.Filled.PictureAsPdf
+        attachment.mimeType.contains("image", true) -> Icons.Filled.Image
+        attachment.mimeType.contains("video", true) -> Icons.Filled.VideoFile
+        attachment.mimeType.contains("audio", true) -> Icons.Filled.AudioFile
+        attachment.mimeType.contains("zip", true) || attachment.mimeType.contains("rar", true) -> Icons.Filled.FolderZip
+        attachment.mimeType.contains("spreadsheet", true) || attachment.mimeType.contains("excel", true) -> Icons.Filled.TableChart
+        attachment.mimeType.contains("document", true) || attachment.mimeType.contains("word", true) -> Icons.Filled.Description
+        else -> Icons.Filled.AttachFile
     }
 
     val sizeText = when {
@@ -289,7 +289,7 @@ private fun AttachmentCard(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(icon, fontSize = 24.sp)
+            Icon(iconVector, attachment.name, tint = BeeYellow, modifier = Modifier.size(24.dp))
             Spacer(modifier = Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(attachment.name, fontSize = 14.sp, color = Color(0xFFE0E0E0),

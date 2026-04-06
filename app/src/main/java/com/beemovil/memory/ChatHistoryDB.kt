@@ -1,4 +1,4 @@
-package com.beemovil.memory
+﻿package com.beemovil.memory
 
 import android.content.ContentValues
 import android.content.Context
@@ -40,7 +40,7 @@ class ChatHistoryDB(context: Context) : SQLiteOpenHelper(context, "bee_chat_hist
                 agent_id TEXT NOT NULL,
                 text TEXT NOT NULL,
                 is_user INTEGER NOT NULL DEFAULT 0,
-                agent_icon TEXT DEFAULT '🐝',
+                agent_icon TEXT DEFAULT 'BEE',
                 is_error INTEGER NOT NULL DEFAULT 0,
                 tools_used TEXT DEFAULT '[]',
                 timestamp INTEGER NOT NULL
@@ -55,7 +55,7 @@ class ChatHistoryDB(context: Context) : SQLiteOpenHelper(context, "bee_chat_hist
     /**
      * Save a message to the history.
      */
-    fun saveMessage(agentId: String, text: String, isUser: Boolean, agentIcon: String = "🐝",
+    fun saveMessage(agentId: String, text: String, isUser: Boolean, agentIcon: String = "BEE",
                     isError: Boolean = false, toolsUsed: List<String> = emptyList()): Long {
         val db = writableDatabase
         val values = ContentValues().apply {

@@ -1,4 +1,4 @@
-package com.beemovil.skills
+﻿package com.beemovil.skills
 
 import android.content.Context
 import android.media.AudioManager
@@ -65,12 +65,12 @@ class VolumeSkill(private val context: Context) : BeeSkill {
             }
             "mute" -> {
                 audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0)
-                JSONObject().put("success", true).put("message", "🔇 Silenciado")
+                JSONObject().put("success", true).put("message", "[MUTE] Silenciado")
             }
             "unmute" -> {
                 val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
                 audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, max / 2, 0)
-                JSONObject().put("success", true).put("message", "🔊 Volumen restaurado")
+                JSONObject().put("success", true).put("message", "[VOL] Volumen restaurado")
             }
             else -> JSONObject().put("error", "Action not supported")
         }

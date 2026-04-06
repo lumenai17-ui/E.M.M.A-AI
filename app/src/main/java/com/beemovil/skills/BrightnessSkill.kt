@@ -1,4 +1,4 @@
-package com.beemovil.skills
+﻿package com.beemovil.skills
 
 import android.content.Context
 import android.provider.Settings
@@ -49,7 +49,7 @@ class BrightnessSkill(private val context: Context) : BeeSkill {
                     JSONObject()
                         .put("success", true)
                         .put("brightness", level)
-                        .put("message", "🔆 Brillo: $level%")
+                        .put("message", "[BRIGHT] Brillo: $level%")
                 } catch (e: Exception) {
                     JSONObject().put("error", "Cannot set brightness: ${e.message}")
                 }
@@ -60,7 +60,7 @@ class BrightnessSkill(private val context: Context) : BeeSkill {
                         return JSONObject().put("error", "Necesita permiso de escritura de sistema")
                     }
                     Settings.System.putInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS_MODE, Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC)
-                    JSONObject().put("success", true).put("message", "🔆 Brillo automático activado")
+                    JSONObject().put("success", true).put("message", "[BRIGHT] Brillo automático activado")
                 } catch (e: Exception) {
                     JSONObject().put("error", "Error: ${e.message}")
                 }
@@ -71,7 +71,7 @@ class BrightnessSkill(private val context: Context) : BeeSkill {
                         return JSONObject().put("error", "Necesita permiso de escritura de sistema")
                     }
                     Settings.System.putInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS_MODE, Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL)
-                    JSONObject().put("success", true).put("message", "🔆 Brillo manual activado")
+                    JSONObject().put("success", true).put("message", "[BRIGHT] Brillo manual activado")
                 } catch (e: Exception) {
                     JSONObject().put("error", "Error: ${e.message}")
                 }

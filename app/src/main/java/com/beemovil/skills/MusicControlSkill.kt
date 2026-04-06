@@ -1,4 +1,4 @@
-package com.beemovil.skills
+﻿package com.beemovil.skills
 
 import android.content.Context
 import android.media.AudioManager
@@ -40,13 +40,13 @@ class MusicControlSkill(private val context: Context) : BeeSkill {
             audioManager.dispatchMediaKeyEvent(upEvent)
 
             val emoji = when (action) {
-                "play" -> "▶️"
-                "pause" -> "⏸️"
-                "toggle" -> "⏯️"
-                "next" -> "⏭️"
-                "previous" -> "⏮️"
-                "stop" -> "⏹️"
-                else -> "🎵"
+                "play" -> "[PLAY]"
+                "pause" -> "[PAUSE]"
+                "toggle" -> "[TOGGLE]"
+                "next" -> "[NEXT]"
+                "previous" -> "[PREV]"
+                "stop" -> "[STOP]"
+                else -> "[MUSIC]"
             }
 
             JSONObject()

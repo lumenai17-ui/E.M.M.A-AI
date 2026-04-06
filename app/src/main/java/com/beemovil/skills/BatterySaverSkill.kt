@@ -1,4 +1,4 @@
-package com.beemovil.skills
+﻿package com.beemovil.skills
 
 import android.content.Context
 import android.content.Intent
@@ -45,9 +45,9 @@ class BatterySaverSkill(private val context: Context) : BeeSkill {
             val health = batteryStatus?.getIntExtra(BatteryManager.EXTRA_HEALTH, -1) ?: -1
             val healthStr = when (health) {
                 BatteryManager.BATTERY_HEALTH_GOOD -> "Buena"
-                BatteryManager.BATTERY_HEALTH_OVERHEAT -> "⚠️ Sobrecalentamiento"
-                BatteryManager.BATTERY_HEALTH_OVER_VOLTAGE -> "⚠️ Sobrevoltaje"
-                BatteryManager.BATTERY_HEALTH_COLD -> "❄️ Fría"
+                BatteryManager.BATTERY_HEALTH_OVERHEAT -> "[WARN] Sobrecalentamiento"
+                BatteryManager.BATTERY_HEALTH_OVER_VOLTAGE -> "[WARN] Sobrevoltaje"
+                BatteryManager.BATTERY_HEALTH_COLD -> "[COLD] Fría"
                 else -> "Desconocida"
             }
 
@@ -56,26 +56,26 @@ class BatterySaverSkill(private val context: Context) : BeeSkill {
             // Generate tips based on current state
             val tips = mutableListOf<String>()
             if (percent < 20 && !isCharging) {
-                tips.add("🔴 Batería baja. Activa el ahorro de batería.")
+                tips.add("[CRIT] Batería baja. Activa el ahorro de batería.")
                 tips.add("Reduce el brillo de pantalla al mínimo.")
                 tips.add("Desactiva WiFi y Bluetooth si no los usas.")
                 tips.add("Cierra apps en segundo plano.")
             } else if (percent < 50) {
-                tips.add("🟡 Batería media. Modera el uso de apps pesadas.")
+                tips.add("[WARN-Y] Batería media. Modera el uso de apps pesadas.")
                 tips.add("Considera reducir el brillo.")
             } else {
-                tips.add("🟢 Batería en buen nivel.")
+                tips.add("[OK-G] Batería en buen nivel.")
             }
             if (temp > 40) {
-                tips.add("⚠️ Temperatura alta (${temp}°C). Evita cargar y jugar al mismo tiempo.")
+                tips.add("[WARN] Temperatura alta (${temp}°C). Evita cargar y jugar al mismo tiempo.")
             }
 
             val emoji = when {
-                isCharging -> "🔌"
-                percent > 80 -> "🔋"
-                percent > 50 -> "🔋"
-                percent > 20 -> "🪫"
-                else -> "🪫"
+                isCharging -> "[CHARG]"
+                percent > 80 -> "[BAT]"
+                percent > 50 -> "[BAT]"
+                percent > 20 -> "[LOW]"
+                else -> "[LOW]"
             }
 
             JSONObject()

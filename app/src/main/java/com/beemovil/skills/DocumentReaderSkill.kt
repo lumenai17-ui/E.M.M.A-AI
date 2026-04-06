@@ -1,4 +1,4 @@
-package com.beemovil.skills
+﻿package com.beemovil.skills
 
 import android.content.Context
 import android.graphics.pdf.PdfRenderer
@@ -66,8 +66,8 @@ class DocumentReaderSkill(private val context: Context) : BeeSkill {
                 "pdf" -> readPdf(file)
                 "docx" -> readDocx(file)
                 "xlsx" -> readXlsx(file)
-                "doc" -> "⚠️ Formato DOC (antiguo) detectado. Convierte a DOCX para leerlo."
-                "xls" -> "⚠️ Formato XLS (antiguo) detectado. Convierte a XLSX para leerlo."
+                "doc" -> "[WARN] Formato DOC (antiguo) detectado. Convierte a DOCX para leerlo."
+                "xls" -> "[WARN] Formato XLS (antiguo) detectado. Convierte a XLSX para leerlo."
                 "txt", "csv", "json", "xml", "md", "html", "htm", "log" -> readPlainText(file)
                 else -> return JSONObject().put("error", "Unsupported format: .$ext. Supported: PDF, DOCX, XLSX, TXT, CSV, JSON, XML")
             }

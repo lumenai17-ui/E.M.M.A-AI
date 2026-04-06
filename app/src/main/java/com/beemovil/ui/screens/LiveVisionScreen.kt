@@ -1,4 +1,4 @@
-package com.beemovil.ui.screens
+﻿package com.beemovil.ui.screens
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -111,7 +111,7 @@ fun LiveVisionScreen(
                                 try {
                                     val apiKey = com.beemovil.security.SecurePrefs.get(context).getString("ollama_api_key", "") ?: ""
                                     if (apiKey.isBlank()) {
-                                        liveResult = "⚠️ Configura API key de Ollama"
+                                        liveResult = "[WARN] Configura API key de Ollama"
                                         isProcessing = false
                                         return@Thread
                                     }
@@ -123,19 +123,19 @@ fun LiveVisionScreen(
                                     liveResult = response.text ?: ""
                                     frameCount++
                                 } catch (e: Exception) {
-                                    liveResult = "❌ ${e.message?.take(80)}"
+                                    liveResult = "[ERR] ${e.message?.take(80)}"
                                 }
                                 isProcessing = false
                             }.start()
                         } catch (e: Exception) {
-                            liveResult = "❌ Frame: ${e.message}"
+                            liveResult = "[ERR] Frame: ${e.message}"
                             isProcessing = false
                         }
                         imageProxy.close()
                     }
 
                     override fun onError(exception: ImageCaptureException) {
-                        liveResult = "❌ Capture: ${exception.message}"
+                        liveResult = "[ERR] Capture: ${exception.message}"
                         isProcessing = false
                     }
                 }
@@ -158,7 +158,7 @@ fun LiveVisionScreen(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("📸", fontSize = 64.sp)
+            Icon(Icons.Filled.CameraAlt, "Camera", tint = BeeGray, modifier = Modifier.size(64.dp))
             Spacer(modifier = Modifier.height(16.dp))
             Text("Permiso de cámara necesario", fontWeight = FontWeight.Bold,
                 fontSize = 18.sp, color = BeeWhite)
@@ -229,7 +229,7 @@ fun LiveVisionScreen(
                     Icon(Icons.Filled.ArrowBack, "Back", tint = BeeWhite)
                 }
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("🔴 Live Vision", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = BeeWhite)
+                    Text("Live Vision", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = BeeWhite)
                     val modelName = LlmFactory.VISION_MODELS.find { it.id == selectedModel }?.name ?: selectedModel
                     Text("$modelName · ${intervalSeconds}s", fontSize = 11.sp, color = BeeGray)
                 }
@@ -239,7 +239,7 @@ fun LiveVisionScreen(
                         color = Color(0xFFF44336).copy(alpha = 0.8f),
                         shape = CircleShape
                     ) {
-                        Text("● $frameCount", fontSize = 11.sp, color = BeeWhite,
+                        Text("$frameCount", fontSize = 11.sp, color = BeeWhite,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
                     }
                     Spacer(modifier = Modifier.width(6.dp))
@@ -281,7 +281,7 @@ fun LiveVisionScreen(
                                 Text(model.name, fontSize = 12.sp,
                                     color = if (isSelected) BeeYellow else Color(0xFFE0E0E0))
                                 Spacer(modifier = Modifier.weight(1f))
-                                if (isSelected) Text("✓", color = BeeYellow, fontSize = 12.sp)
+                                if (isSelected) Icon(Icons.Filled.CheckCircle, "Selected", tint = BeeYellow, modifier = Modifier.size(14.dp))
                             }
                         }
                     }
@@ -343,7 +343,7 @@ fun LiveVisionScreen(
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("🐝", fontSize = 14.sp)
+                            Icon(Icons.Filled.SmartToy, "Bee", tint = BeeYellow, modifier = Modifier.size(14.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text("RECONOCIMIENTO", fontSize = 10.sp, color = BeeYellow,
                                 fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
@@ -381,7 +381,7 @@ fun LiveVisionScreen(
                     onClick = {
                         val capture = imageCapture ?: return@OutlinedButton
                         isProcessing = true
-                        liveResult = "📸 Capturando..."
+                        liveResult = "[SNAP] Capturando..."
 
                         capture.takePicture(
                             cameraExecutor,
@@ -405,19 +405,19 @@ fun LiveVisionScreen(
                                                 liveResult = response.text ?: ""
                                                 frameCount++
                                             } catch (e: Exception) {
-                                                liveResult = "❌ ${e.message?.take(80)}"
+                                                liveResult = "[ERR] ${e.message?.take(80)}"
                                             }
                                             isProcessing = false
                                         }.start()
                                     } catch (e: Exception) {
-                                        liveResult = "❌ ${e.message}"
+                                        liveResult = "[ERR] ${e.message}"
                                         isProcessing = false
                                     }
                                     imageProxy.close()
                                 }
 
                                 override fun onError(exception: ImageCaptureException) {
-                                    liveResult = "❌ ${exception.message}"
+                                    liveResult = "[ERR] ${exception.message}"
                                     isProcessing = false
                                 }
                             }
@@ -454,7 +454,7 @@ fun LiveVisionScreen(
                         if (liveResult.isNotBlank()) {
                             val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                             clipboard.setPrimaryClip(android.content.ClipData.newPlainText("vision", liveResult))
-                            Toast.makeText(context, "📋 Copiado", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Copiado", Toast.LENGTH_SHORT).show()
                         }
                     },
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = BeeWhite),

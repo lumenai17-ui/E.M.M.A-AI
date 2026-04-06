@@ -1,4 +1,4 @@
-package com.beemovil.skills
+﻿package com.beemovil.skills
 
 import android.content.Context
 import android.content.Intent
@@ -72,7 +72,7 @@ class ContactsSkill(private val context: Context) : BeeSkill {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(intent)
-            JSONObject().put("success", true).put("message", "📞 Marcando $number")
+            JSONObject().put("success", true).put("message", "[CALL] Marcando $number")
         } catch (e: Exception) {
             JSONObject().put("error", "Error: ${e.message}")
         }
@@ -86,7 +86,7 @@ class ContactsSkill(private val context: Context) : BeeSkill {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(intent)
-            JSONObject().put("success", true).put("message", "💬 Abriendo SMS para $number")
+            JSONObject().put("success", true).put("message", "[SMS] Abriendo SMS para $number")
         } catch (e: Exception) {
             JSONObject().put("error", "Error: ${e.message}")
         }

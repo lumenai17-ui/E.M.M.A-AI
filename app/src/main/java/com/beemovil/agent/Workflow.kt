@@ -11,7 +11,7 @@ import org.json.JSONObject
  *
  * Example workflow: "Research → Write → PDF → Email"
  * Step 1: web_search("latest AI trends") → research text
- * Step 2: 🐝 Main Agent("write article from this research: {prev}") → article text
+ * Step 2: Main Agent("write article from this research: {prev}") -> article text
  * Step 3: generate_pdf(content={prev}) → PDF file path
  * Step 4: email(attach={prev}) → sent confirmation
  */
@@ -66,9 +66,9 @@ data class StepState(
 )
 
 enum class StepStatus {
-    PENDING,    // ⏳ Waiting
-    RUNNING,    // 🔄 Executing
-    COMPLETED,  // ✅ Done
-    FAILED,     // ❌ Error
-    SKIPPED     // ⏭️ Skipped
+    PENDING,    // Waiting
+    RUNNING,    // Executing
+    COMPLETED,  // Done
+    FAILED,     // Error
+    SKIPPED     // Skipped
 }

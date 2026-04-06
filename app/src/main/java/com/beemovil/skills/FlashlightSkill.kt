@@ -1,4 +1,4 @@
-package com.beemovil.skills
+﻿package com.beemovil.skills
 
 import android.content.Context
 import android.hardware.camera2.CameraManager
@@ -39,7 +39,7 @@ class FlashlightSkill(private val context: Context) : BeeSkill {
             JSONObject()
                 .put("success", true)
                 .put("state", if (isOn) "on" else "off")
-                .put("message", if (isOn) "🔦 Linterna encendida" else "🔦 Linterna apagada")
+                .put("message", if (isOn) "[LIGHT] Linterna encendida" else "[LIGHT] Linterna apagada")
         } catch (e: Exception) {
             JSONObject().put("error", "Flashlight error: ${e.message}")
         }

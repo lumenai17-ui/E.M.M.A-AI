@@ -22,7 +22,7 @@ class CustomAgentDB(context: Context) : SQLiteOpenHelper(context, "bee_custom_ag
             CREATE TABLE IF NOT EXISTS custom_agents (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
-                icon TEXT NOT NULL DEFAULT '🤖',
+                icon TEXT NOT NULL DEFAULT 'AI',
                 description TEXT DEFAULT '',
                 system_prompt TEXT NOT NULL,
                 enabled_tools TEXT DEFAULT '*',
@@ -121,7 +121,7 @@ class CustomAgentDB(context: Context) : SQLiteOpenHelper(context, "bee_custom_ag
         return AgentConfig(
             id = cursor.getString(cursor.getColumnIndexOrThrow("id")),
             name = cursor.getString(cursor.getColumnIndexOrThrow("name")) ?: "Agent",
-            icon = cursor.getString(cursor.getColumnIndexOrThrow("icon")) ?: "🤖",
+            icon = cursor.getString(cursor.getColumnIndexOrThrow("icon")) ?: "AI",
             description = cursor.getString(cursor.getColumnIndexOrThrow("description")) ?: "",
             systemPrompt = cursor.getString(cursor.getColumnIndexOrThrow("system_prompt")) ?: "",
             enabledTools = tools,

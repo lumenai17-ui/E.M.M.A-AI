@@ -1,4 +1,4 @@
-package com.beemovil.skills
+﻿package com.beemovil.skills
 
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -42,7 +42,7 @@ class QrGeneratorSkill : BeeSkill {
                 .put("success", true)
                 .put("path", file.absolutePath)
                 .put("content", content)
-                .put("message", "📱 QR generado: ${file.absolutePath}")
+                .put("message", "[DEV] QR generado: ${file.absolutePath}")
         } catch (e: Exception) {
             JSONObject().put("error", "QR error: ${e.message}")
         }

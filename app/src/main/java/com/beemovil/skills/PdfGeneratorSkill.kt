@@ -1,4 +1,4 @@
-package com.beemovil.skills
+﻿package com.beemovil.skills
 
 import android.content.Context
 import android.graphics.Canvas
@@ -182,7 +182,7 @@ class PdfGeneratorSkill(private val context: Context) : BeeSkill {
                 .put("path", file.absolutePath)
                 .put("filename", file.name)
                 .put("pages", pageNumber - 1)
-                .put("message", "📄 PDF generado: ${file.name} (${pageNumber - 1} páginas)")
+                .put("message", "[DOC] PDF generado: ${file.name} (${pageNumber - 1} páginas)")
         } catch (e: Exception) {
             Log.e(TAG, "PDF error: ${e.message}")
             JSONObject().put("error", "PDF generation failed: ${e.message}")

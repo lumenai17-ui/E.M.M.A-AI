@@ -1,4 +1,4 @@
-package com.beemovil.skills
+﻿package com.beemovil.skills
 
 import android.content.Context
 import android.content.Intent
@@ -42,7 +42,7 @@ class AlarmSkill(private val context: Context) : BeeSkill {
                     context.startActivity(intent)
                     JSONObject()
                         .put("success", true)
-                        .put("message", "⏰ Alarma configurada: ${String.format("%02d:%02d", hour, minute)} - $label")
+                        .put("message", "[ALARM] Alarma configurada: ${String.format("%02d:%02d", hour, minute)} - $label")
                 } catch (e: Exception) {
                     JSONObject().put("error", "No se pudo crear alarma: ${e.message}")
                 }
@@ -62,7 +62,7 @@ class AlarmSkill(private val context: Context) : BeeSkill {
                     val sec = seconds % 60
                     JSONObject()
                         .put("success", true)
-                        .put("message", "⏱️ Timer: ${min}m ${sec}s - $label")
+                        .put("message", "[TIMER] Timer: ${min}m ${sec}s - $label")
                 } catch (e: Exception) {
                     JSONObject().put("error", "No se pudo crear timer: ${e.message}")
                 }

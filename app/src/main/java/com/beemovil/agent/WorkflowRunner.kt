@@ -88,7 +88,7 @@ class WorkflowRunner(
                 }
 
                 run.isFailed = true
-                run.finalOutput = "❌ Workflow falló en paso ${i + 1} (${step.label}): ${e.message}"
+                run.finalOutput = "Error: Workflow fallo en paso ${i + 1} (${step.label}): ${e.message}"
                 notifyChange(run)
                 return run
             }
@@ -122,7 +122,7 @@ class WorkflowRunner(
         }
 
         return if (files.isNotEmpty()) {
-            "${response.text}\n\n📎 Archivos: ${files.joinToString(", ")}"
+            "${response.text}\n\nArchivos: ${files.joinToString(", ")}"
         } else {
             response.text
         }
@@ -150,7 +150,7 @@ class WorkflowRunner(
         return when {
             result.has("error") -> throw Exception(result.getString("error"))
             result.has("result") -> result.getString("result")
-            result.has("path") -> "📄 ${result.getString("path")}"
+            result.has("path") -> "Archivo: ${result.getString("path")}"
             result.has("text") -> result.getString("text")
             else -> result.toString(2)
         }

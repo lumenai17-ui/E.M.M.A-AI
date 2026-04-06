@@ -77,7 +77,7 @@ fun EmailComposeScreen(
                 Button(
                     onClick = {
                         if (to.isBlank()) {
-                            Toast.makeText(context, "⚠️ Escribe un destinatario", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Escribe un destinatario", Toast.LENGTH_SHORT).show()
                             return@Button
                         }
                         isSending = true
@@ -94,13 +94,13 @@ fun EmailComposeScreen(
                                     )
                                 }
                                 if (sent) {
-                                    Toast.makeText(context, "✅ Correo enviado", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Correo enviado", Toast.LENGTH_SHORT).show()
                                     onBack()
                                 } else {
-                                    Toast.makeText(context, "❌ Error al enviar", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Error al enviar", Toast.LENGTH_SHORT).show()
                                 }
                             } catch (e: Exception) {
-                                Toast.makeText(context, "❌ ${e.message}", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                             } finally {
                                 isSending = false
                             }
@@ -203,7 +203,7 @@ fun EmailComposeScreen(
                         modifier = Modifier.padding(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("📎", fontSize = 16.sp)
+                        Icon(Icons.Filled.AttachFile, "Attach", tint = BeeGray, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(name, fontSize = 13.sp, color = Color(0xFFE0E0E0), modifier = Modifier.weight(1f))
                         IconButton(onClick = { attachedFiles.remove(path) }, modifier = Modifier.size(24.dp)) {
@@ -230,7 +230,10 @@ fun EmailComposeScreen(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
                     ) {
                         Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(if (isAttached) "✅" else "📄", fontSize = 14.sp)
+                            Icon(if (isAttached) Icons.Filled.CheckCircle else Icons.Filled.Description, 
+                                if (isAttached) "Attached" else "File",
+                                tint = if (isAttached) BeeYellow else BeeGray,
+                                modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(name, fontSize = 13.sp, color = Color(0xFFE0E0E0))
                         }

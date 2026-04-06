@@ -1,4 +1,4 @@
-package com.beemovil.skills
+﻿package com.beemovil.skills
 
 import android.content.Context
 import android.os.Environment
@@ -88,7 +88,7 @@ class SpreadsheetSkill(private val context: Context) : BeeSkill {
                 .put("filename", file.name)
                 .put("columns", headers.length())
                 .put("rows", rowCount)
-                .put("message", "📊 Hoja de cálculo generada: ${file.name} (${headers.length()} columnas × $rowCount filas)")
+                .put("message", "[SHEET] Hoja de cálculo generada: ${file.name} (${headers.length()} columnas × $rowCount filas)")
         } catch (e: Exception) {
             Log.e(TAG, "Spreadsheet error: ${e.message}")
             JSONObject().put("error", "Spreadsheet generation failed: ${e.message}")

@@ -1,4 +1,4 @@
-package com.beemovil.skills
+﻿package com.beemovil.skills
 
 import android.content.ContentValues
 import android.content.Context
@@ -67,7 +67,7 @@ class CalendarSkill(private val context: Context) : BeeSkill {
 
             JSONObject()
                 .put("success", true)
-                .put("message", "📅 Creando evento: $title")
+                .put("message", "[CAL] Creando evento: $title")
                 .put("start", startStr)
                 .put("end", endStr.ifBlank { "1 hora después" })
         } catch (e: Exception) {

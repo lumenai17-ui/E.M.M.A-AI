@@ -1,4 +1,4 @@
-package com.beemovil.memory
+﻿package com.beemovil.memory
 
 import android.content.ContentValues
 import android.content.Context
@@ -16,12 +16,12 @@ import org.json.JSONObject
  *
  * Architecture:
  *   ┌─────────────────┐
- *   │  conversations   │  Full chat history (messages)
- *   ├─────────────────┤
- *   │   memories       │  Key facts extracted from chats (RAG knowledge base)
- *   ├─────────────────┤
- *   │     soul         │  Persistent user profile (name, preferences, routines)
- *   └─────────────────┘
+ *   I  conversations   I  Full chat history (messages)
+ *   T─────────────────┤
+ *   I   memories       I  Key facts extracted from chats (RAG knowledge base)
+ *   T─────────────────┤
+ *   I     soul         I  Persistent user profile (name, preferences, routines)
+ *   L─────────────────┘
  */
 class BeeMemoryDB(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VERSION) {
 

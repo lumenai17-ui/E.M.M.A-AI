@@ -1,4 +1,4 @@
-package com.beemovil.skills
+﻿package com.beemovil.skills
 
 import android.content.Context
 import android.content.Intent
@@ -39,7 +39,7 @@ class AppLauncherSkill(private val context: Context) : BeeSkill {
                     if (intent != null) {
                         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         context.startActivity(intent)
-                        JSONObject().put("success", true).put("message", "📱 Abriendo $targetPkg")
+                        JSONObject().put("success", true).put("message", "[DEV] Abriendo $targetPkg")
                     } else {
                         JSONObject().put("error", "No se puede abrir $targetPkg")
                     }

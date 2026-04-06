@@ -1,4 +1,4 @@
-package com.beemovil.skills
+﻿package com.beemovil.skills
 
 import android.content.Context
 import android.os.Environment
@@ -228,15 +228,15 @@ class FileManagerSkill(private val context: Context) : BeeSkill {
         var dirCount = 0
 
         fun buildTree(d: File, indent: String, isLast: Boolean) {
-            val prefix = if (indent.isEmpty()) "" else if (isLast) "└── " else "├── "
-            val icon = if (d.isDirectory) "📁" else "📄"
+            val prefix = if (indent.isEmpty()) "" else if (isLast) "L── " else "T── "
+            val icon = if (d.isDirectory) "[DIR]" else "[DOC]"
             sb.appendLine("$indent$prefix$icon ${d.name}" + if (d.isFile) " (${humanSize(d.length())})" else "")
 
             if (d.isDirectory) {
                 dirCount++
                 val children = d.listFiles()?.sortedWith(compareBy({ !it.isDirectory }, { it.name })) ?: return
                 children.forEachIndexed { idx, child ->
-                    val newIndent = indent + if (indent.isEmpty()) "" else if (isLast) "    " else "│   "
+                    val newIndent = indent + if (indent.isEmpty()) "" else if (isLast) "    " else "I   "
                     buildTree(child, newIndent, idx == children.lastIndex)
                 }
             } else {

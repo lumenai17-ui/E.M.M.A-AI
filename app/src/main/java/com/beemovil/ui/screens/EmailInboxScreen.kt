@@ -145,7 +145,7 @@ fun EmailInboxScreen(
                 colors = CardDefaults.cardColors(containerColor = Color(0xFFF44336).copy(alpha = 0.12f)),
                 modifier = Modifier.fillMaxWidth().padding(16.dp)
             ) {
-                Text("⚠️ $error", color = Color(0xFFF44336), fontSize = 13.sp,
+                Text("$error", color = Color(0xFFF44336), fontSize = 13.sp,
                     modifier = Modifier.padding(12.dp))
             }
         }
@@ -161,7 +161,7 @@ fun EmailInboxScreen(
                         modifier = Modifier.padding(24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text("📧", fontSize = 48.sp)
+                        Icon(Icons.Filled.Email, "Email", tint = BeeGray, modifier = Modifier.size(48.dp))
                         Spacer(modifier = Modifier.height(12.dp))
                         Text("Configura tu correo", fontWeight = FontWeight.Bold,
                             fontSize = 18.sp, color = BeeWhite)
@@ -178,7 +178,7 @@ fun EmailInboxScreen(
         // Email list
         if (emails.isEmpty() && !isLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("📭 Bandeja vacía", fontSize = 16.sp, color = BeeGray)
+                Text("Bandeja vacia", fontSize = 16.sp, color = BeeGray)
             }
         } else {
             LazyColumn(contentPadding = PaddingValues(bottom = 16.dp)) {
@@ -285,11 +285,11 @@ private fun EmailRow(email: EmailService.EmailMessage, onClick: () -> Unit) {
                     )
                     if (email.hasAttachments) {
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("📎", fontSize = 12.sp)
+                        Icon(Icons.Filled.AttachFile, "Attachment", tint = BeeGray, modifier = Modifier.size(12.dp))
                     }
                     if (email.isStarred) {
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("⭐", fontSize = 12.sp)
+                        Icon(Icons.Filled.Star, "Starred", tint = BeeYellow, modifier = Modifier.size(12.dp))
                     }
                 }
             }

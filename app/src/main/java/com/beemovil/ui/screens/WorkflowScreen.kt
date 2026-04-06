@@ -75,7 +75,7 @@ fun WorkflowScreen(
                     Icon(Icons.Filled.ArrowBack, "Back", tint = BeeWhite)
                 }
                 Text(
-                    "⚡ Workflows",
+                    "Workflows",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = BeeWhite,
@@ -165,7 +165,7 @@ private fun WorkflowGallery(onSelect: (Workflow) -> Unit) {
                     modifier = Modifier.padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text("🔧", fontSize = 28.sp)
+                    Icon(Icons.Filled.Build, "Custom", tint = BeeGray, modifier = Modifier.size(28.dp))
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         "Workflows custom — próximamente",
@@ -195,7 +195,7 @@ private fun WorkflowTemplateCard(workflow: Workflow, onClick: () -> Unit) {
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(workflow.icon, fontSize = 28.sp)
+                Icon(Icons.Filled.AccountTree, workflow.name, tint = BeeYellow, modifier = Modifier.size(28.dp))
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -226,14 +226,14 @@ private fun WorkflowTemplateCard(workflow: Workflow, onClick: () -> Unit) {
                         shape = RoundedCornerShape(6.dp)
                     ) {
                         Text(
-                            "${step.icon} ${step.label}",
+                            step.label,
                             fontSize = 9.sp, color = BeeGrayLight,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
                             maxLines = 1
                         )
                     }
                     if (index < workflow.steps.lastIndex) {
-                        Text("→", fontSize = 10.sp, color = BeeGray.copy(alpha = 0.5f))
+                        Icon(Icons.Filled.ArrowForward, "Next", tint = BeeGray.copy(alpha = 0.5f), modifier = Modifier.size(10.dp))
                     }
                 }
             }
@@ -262,7 +262,7 @@ private fun WorkflowInputView(
             IconButton(onClick = onBack) {
                 Icon(Icons.Filled.ArrowBack, "Back", tint = BeeGray)
             }
-            Text(workflow.icon, fontSize = 24.sp)
+            Icon(Icons.Filled.AccountTree, workflow.name, tint = BeeYellow, modifier = Modifier.size(24.dp))
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 workflow.name,
@@ -294,11 +294,13 @@ private fun WorkflowInputView(
                     }
                 }
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("${step.icon} ${step.label}", fontSize = 13.sp, color = BeeWhite)
+                Text(step.label, fontSize = 13.sp, color = BeeWhite)
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    if (step.type == StepType.AGENT) "🤖" else "🔧",
-                    fontSize = 10.sp
+                    if (step.type == StepType.AGENT) "Agent" else "Skill",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (step.type == StepType.AGENT) Color(0xFF5AC8FA) else BeeYellow
                 )
             }
         }
@@ -306,7 +308,7 @@ private fun WorkflowInputView(
         Spacer(modifier = Modifier.height(20.dp))
 
         // Input field
-        Text("📝 ¿QUÉ QUIERES HACER?", fontSize = 10.sp, color = BeeYellow, fontWeight = FontWeight.Bold)
+        Text("INPUT", fontSize = 10.sp, color = BeeYellow, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(8.dp))
         OutlinedTextField(
             value = userInput,
@@ -377,7 +379,7 @@ private fun WorkflowExecutionView(
     ) {
         // Header
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(run.workflow.icon, fontSize = 24.sp)
+            Icon(Icons.Filled.AccountTree, run.workflow.name, tint = BeeYellow, modifier = Modifier.size(24.dp))
             Spacer(modifier = Modifier.width(8.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -387,10 +389,10 @@ private fun WorkflowExecutionView(
                 )
                 Text(
                     when {
-                        run.isComplete -> "✅ Completado"
-                        run.isFailed -> "❌ Falló"
-                        isRunning -> "🔄 Ejecutando..."
-                        else -> "⏳ Preparando..."
+                        run.isComplete -> "Completado"
+                        run.isFailed -> "Error"
+                        isRunning -> "Ejecutando..."
+                        else -> "Preparando..."
                     },
                     fontSize = 12.sp,
                     color = when {
@@ -442,7 +444,7 @@ private fun WorkflowExecutionView(
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
                     Text(
-                        if (run.isComplete) "📋 RESULTADO FINAL" else "❌ ERROR",
+                        if (run.isComplete) "RESULTADO FINAL" else "ERROR",
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (run.isComplete) Color(0xFF4CAF50) else Color(0xFFF44336)
@@ -469,7 +471,7 @@ private fun WorkflowExecutionView(
                 modifier = Modifier.fillMaxWidth().height(44.dp),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Text("← Volver a Workflows", fontSize = 14.sp)
+                Text("Volver a Workflows", fontSize = 14.sp)
             }
         }
     }
@@ -497,12 +499,19 @@ private fun WorkflowNode(stepState: StepState, stepNumber: Int) {
         else -> BeeBlackLight
     }
 
-    val statusIcon = when (stepState.status) {
-        StepStatus.PENDING -> "⏳"
-        StepStatus.RUNNING -> "🔄"
-        StepStatus.COMPLETED -> "✅"
-        StepStatus.FAILED -> "❌"
-        StepStatus.SKIPPED -> "⏭️"
+    val statusText = when (stepState.status) {
+        StepStatus.PENDING -> "..."
+        StepStatus.RUNNING -> "RUN"
+        StepStatus.COMPLETED -> "OK"
+        StepStatus.FAILED -> "ERR"
+        StepStatus.SKIPPED -> "SKIP"
+    }
+    val statusColor = when (stepState.status) {
+        StepStatus.PENDING -> BeeGray
+        StepStatus.RUNNING -> BeeYellow
+        StepStatus.COMPLETED -> Color(0xFF4CAF50)
+        StepStatus.FAILED -> Color(0xFFF44336)
+        StepStatus.SKIPPED -> BeeGray.copy(alpha = 0.5f)
     }
 
     Surface(
@@ -520,7 +529,7 @@ private fun WorkflowNode(stepState: StepState, stepNumber: Int) {
                     modifier = Modifier.size(32.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                        Text(step.icon, fontSize = 16.sp)
+                        Text("$stepNumber", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = BeeWhite)
                     }
                 }
 
@@ -535,7 +544,7 @@ private fun WorkflowNode(stepState: StepState, stepNumber: Int) {
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            if (step.type == StepType.AGENT) "🤖 ${step.agentId}" else "🔧 ${step.skillName}",
+                            if (step.type == StepType.AGENT) "Agent: ${step.agentId}" else "Skill: ${step.skillName}",
                             fontSize = 9.sp, color = BeeGray
                         )
                     }
@@ -547,7 +556,7 @@ private fun WorkflowNode(stepState: StepState, stepNumber: Int) {
                     }
                 }
 
-                Text(statusIcon, fontSize = 18.sp)
+                Text(statusText, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = statusColor)
             }
 
             // Output preview (when completed)

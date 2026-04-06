@@ -160,8 +160,8 @@ class MainActivity : ComponentActivity() {
         if (crashMsg != null) {
             val shortCrash = crashMsg.lines().take(5).joinToString("\n")
             viewModel.messages.add(0, ChatUiMessage(
-                text = "⚠️ Crash detectado:\n```\n$shortCrash\n```",
-                isUser = false, agentIcon = "💥", isError = true
+                text = "Crash detectado:\n```\n$shortCrash\n```",
+                isUser = false, agentIcon = "ERR", isError = true
             ))
         }
 

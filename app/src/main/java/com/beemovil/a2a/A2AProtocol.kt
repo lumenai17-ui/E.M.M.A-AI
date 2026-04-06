@@ -29,7 +29,7 @@ data class AgentCard(
     val capabilities: List<String> = emptyList(),  // e.g. ["text", "file", "vision"]
     val skills: List<AgentSkillInfo> = emptyList(),
     val provider: String = "",              // Organization name
-    val icon: String = "🤖"
+    val icon: String = "AI"
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("name", name)
@@ -58,7 +58,7 @@ data class AgentCard(
                     (0 until arr.length()).map { AgentSkillInfo.fromJson(arr.getJSONObject(it)) }
                 } ?: emptyList(),
                 provider = json.optString("provider", ""),
-                icon = json.optString("icon", "🤖")
+                icon = json.optString("icon", "AI")
             )
         }
     }

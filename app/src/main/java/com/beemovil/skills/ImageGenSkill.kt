@@ -1,4 +1,4 @@
-package com.beemovil.skills
+﻿package com.beemovil.skills
 
 import android.util.Log
 import okhttp3.MediaType.Companion.toMediaType
@@ -99,7 +99,7 @@ class ImageGenSkill(
                 .put("success", true)
                 .put("image_url", imageUrl)
                 .put("prompt", prompt)
-                .put("message", "🎨 Imagen generada! URL: $imageUrl")
+                .put("message", "[ART] Imagen generada! URL: $imageUrl")
         }
 
         return JSONObject().put("error", "No image data in response")

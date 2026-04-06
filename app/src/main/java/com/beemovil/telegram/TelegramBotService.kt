@@ -84,22 +84,22 @@ class TelegramBotService : Service() {
                 val apiKey = intent.getStringExtra(EXTRA_API_KEY) ?: ""
 
                 if (botToken.isBlank()) {
-                    showToast("❌ Token de bot vacío")
+                    showToast("Token de bot vacío")
                     reportStatus("error", "", 0)
                     stopSelf()
                     return START_NOT_STICKY
                 }
                 if (apiKey.isBlank()) {
-                    showToast("❌ API key vacía, configura primero tu proveedor")
+                    showToast("API key vacia, configura primero tu proveedor")
                     reportStatus("error", "", 0)
                     stopSelf()
                     return START_NOT_STICKY
                 }
 
                 // Start foreground IMMEDIATELY
-                startForeground(NOTIFICATION_ID, buildNotification("🐝 Conectando a Telegram..."))
+                startForeground(NOTIFICATION_ID, buildNotification("Conectando a Telegram..."))
                 reportStatus("connecting", "", 0)
-                showToast("🐝 Conectando a Telegram...")
+                showToast("Conectando a Telegram...")
                 loadAllowedChats()
 
                 // Setup async to not block
@@ -111,17 +111,17 @@ class TelegramBotService : Service() {
                         val botName = getBotInfo()
                         if (botName != null) {
                             mainHandler.post {
-                                showToast("✅ Conectado: @$botName")
+                                showToast("Conectado: @$botName")
                             }
-                            updateNotification("🐝 @$botName — activo y escuchando")
+                            updateNotification("@$botName — activo y escuchando")
                             reportStatus("online", botName, 0)
                             startPolling()
                         } else {
                             mainHandler.post {
-                                showToast("❌ Token inválido. Verifica en @BotFather")
+                                showToast("Token invalido. Verifica en @BotFather")
                             }
                             reportStatus("error", "", 0)
-                            updateNotification("❌ Token inválido")
+                            updateNotification("Token invalido")
                             // Stop after 3 seconds
                             Thread.sleep(3000)
                             mainHandler.post { stopBot() }
@@ -129,7 +129,7 @@ class TelegramBotService : Service() {
                     } catch (e: Exception) {
                         Log.e(TAG, "Setup failed: ${e.message}", e)
                         mainHandler.post {
-                            showToast("❌ Error: ${e.message}")
+                            showToast("Error: ${e.message}")
                         }
                         reportStatus("error", "", 0)
                         mainHandler.post { stopBot() }
@@ -147,10 +147,10 @@ class TelegramBotService : Service() {
         val config = AgentConfig(
             id = "telegram",
             name = "Bee Telegram",
-            icon = "🤖",
-            description = "Agente Bee-Movil vía Telegram",
+            icon = "TG",
+            description = "Agente Bee-Movil via Telegram",
             systemPrompt = """
-                Eres Bee-Movil 🐝 respondiendo vía Telegram.
+                Eres Bee-Movil respondiendo via Telegram.
                 Eres el asistente personal del dueño de este teléfono.
                 Responde de forma amigable, concisa y útil.
                 Puedes usar herramientas como: calculator, datetime, weather, web_search, memory.
@@ -242,7 +242,7 @@ class TelegramBotService : Service() {
             // Guardrail: check allowlist
             if (!isAllowed(chatId, fromUser)) {
                 Log.w(TAG, "Blocked message from $fromUser ($chatId) - not in allowlist")
-                sendMessage(chatId, "🔒 No tienes acceso a este bot. Contacta al dueño.")
+                sendMessage(chatId, "No tienes acceso a este bot. Contacta al dueno.")
                 continue
             }
 
@@ -264,7 +264,7 @@ class TelegramBotService : Service() {
             ownerSet = true
             saveAllowedChats()
             Log.i(TAG, "Owner auto-paired: $userName ($chatId)")
-            mainHandler.post { showToast("👤 Dueño registrado: $userName") }
+            mainHandler.post { showToast("Dueno registrado: $userName") }
             return true
         }
         return false
@@ -298,10 +298,10 @@ class TelegramBotService : Service() {
                 sendMessage(chatId, reply)
                 messagesHandled++
                 reportStatus("online", "", messagesHandled)
-                updateNotification("🐝 $messagesHandled mensajes procesados")
+                updateNotification("$messagesHandled mensajes procesados")
             } catch (e: Exception) {
                 Log.e(TAG, "Handle error: ${e.message}", e)
-                sendMessage(chatId, "❌ Error: ${e.message?.take(200)}")
+                sendMessage(chatId, "Error: ${e.message?.take(200)}")
             }
         }
     }

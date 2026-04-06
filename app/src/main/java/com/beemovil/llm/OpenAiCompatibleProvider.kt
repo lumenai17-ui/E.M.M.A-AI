@@ -1,4 +1,4 @@
-package com.beemovil.llm
+﻿package com.beemovil.llm
 
 import android.util.Log
 import com.beemovil.network.BeeHttpClient
@@ -143,7 +143,7 @@ object LlmFactory {
 
     val LOCAL = ProviderConfig(
         id = "local",
-        name = "📱 Local (Sin Internet)",
+        name = "[DEV] Local (Sin Internet)",
         baseUrl = "",
         apiKey = "",
         supportsTools = true,

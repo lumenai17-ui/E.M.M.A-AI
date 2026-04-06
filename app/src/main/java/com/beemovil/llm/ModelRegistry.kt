@@ -24,12 +24,12 @@ object ModelRegistry {
     )
 
     enum class Category(val label: String, val icon: String) {
-        CHAT("Chat General", "💬"),
-        CODE("Código", "💻"),
-        VISION("Visión", "👁️"),
-        REASONING("Razonamiento", "🧠"),
-        AGENT("Agente", "🤖"),
-        LOCAL("📱 Local", "📱")
+        CHAT("Chat General", "CHAT"),
+        CODE("Codigo", "CODE"),
+        VISION("Vision", "VIS"),
+        REASONING("Razonamiento", "THINK"),
+        AGENT("Agente", "AGENT"),
+        LOCAL("Local", "LOCAL")
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -180,12 +180,12 @@ object ModelRegistry {
     // ═══════════════════════════════════════════════════════════
 
     val LOCAL = listOf(
-        ModelEntry("gemma4-e2b", "⚡ Gemma 4 E2B (Rápido)", "local",
+        ModelEntry("gemma4-e2b", "Gemma 4 E2B (Rapido)", "local",
             Category.LOCAL,
             sizeLabel = "~2.6 GB", description = "Optimizado para velocidad. Chat general."),
-        ModelEntry("gemma4-e4b", "🧠 Gemma 4 E4B (Inteligente)", "local",
+        ModelEntry("gemma4-e4b", "Gemma 4 E4B (Inteligente)", "local",
             Category.LOCAL,
-            sizeLabel = "~3.7 GB", description = "Mayor razonamiento. Requiere más RAM.")
+            sizeLabel = "~3.7 GB", description = "Mayor razonamiento. Requiere mas RAM.")
     )
 
     // ═══════════════════════════════════════════════════════════

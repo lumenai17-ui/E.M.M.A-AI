@@ -27,9 +27,9 @@ import com.beemovil.ui.ChatViewModel
 import com.beemovil.ui.theme.*
 
 private val ICON_OPTIONS = listOf(
-    "💰", "📈", "🏦", "🤑", "👨‍💼", "🔬", "📚", "🎯", "🛡️", "🌍",
-    "🎮", "🎵", "✈️", "🏠", "🍕", "📷", "💊", "🏋️", "🚗", "⚡",
-    "🤖", "🧪", "📊", "🎭", "🌐", "🔐", "📝", "🗂️", "☕", "🧑‍🔧"
+    "FIN", "MKT", "DEV", "MED", "EDU", "LAW", "ART", "SCI", "SEC", "WEB",
+    "BOT", "LAB", "BIZ", "SPT", "TRV", "FOD", "CAM", "FIT", "CAR", "PWR",
+    "AI", "RES", "DAT", "ENT", "NET", "KEY", "DOC", "ORG", "CFE", "ENG"
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -46,7 +46,7 @@ fun AgentCreatorScreen(
     val isEditing = existingAgent != null
 
     var name by remember { mutableStateOf(existingAgent?.name ?: "") }
-    var selectedIcon by remember { mutableStateOf(existingAgent?.icon ?: "🤖") }
+    var selectedIcon by remember { mutableStateOf(existingAgent?.icon ?: "AI") }
     var systemPrompt by remember { mutableStateOf(existingAgent?.systemPrompt ?: "") }
     var useGlobalModel by remember { mutableStateOf(existingAgent?.model.isNullOrBlank()) }
     var customModel by remember { mutableStateOf(existingAgent?.model ?: "qwen/qwen3.6-plus:free") }
@@ -114,7 +114,8 @@ fun AgentCreatorScreen(
                             .clickable { selectedIcon = icon }
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Text(icon, fontSize = 18.sp)
+                            Text(icon, fontSize = 8.sp, fontWeight = FontWeight.Bold,
+                                color = if (isSelected) BeeYellow else Color(0xFFB0B0B0))
                         }
                     }
                 }
@@ -167,7 +168,7 @@ fun AgentCreatorScreen(
                 val allProviders = listOf(
                     Triple("OpenRouter", "openrouter", com.beemovil.llm.ModelRegistry.OPENROUTER),
                     Triple("Ollama Cloud", "ollama", com.beemovil.llm.ModelRegistry.OLLAMA_CLOUD),
-                    Triple("📱 Local", "local", com.beemovil.llm.ModelRegistry.LOCAL)
+                    Triple("Local", "local", com.beemovil.llm.ModelRegistry.LOCAL)
                 )
 
                 allProviders.forEach { (providerName, _, entries) ->
@@ -182,7 +183,7 @@ fun AgentCreatorScreen(
                     val grouped = entries.groupBy { it.category }
                     grouped.forEach { (category, models) ->
                         Text(
-                            "${category.icon} ${category.label}",
+                            category.label.uppercase(),
                             fontSize = 9.sp, color = BeeGray.copy(alpha = 0.8f),
                             fontWeight = FontWeight.Medium,
                             modifier = Modifier.padding(start = 4.dp, top = 4.dp)
@@ -201,12 +202,19 @@ fun AgentCreatorScreen(
                                 ) {
                                     Text(
                                         when {
-                                            entry.free -> "🆓"
-                                            entry.hasVision -> "👁️"
-                                            entry.hasThinking -> "🧠"
-                                            else -> "🤖"
+                                            entry.free -> "Free"
+                                            entry.hasVision -> "Vis"
+                                            entry.hasThinking -> "Think"
+                                            else -> "Pro"
                                         },
-                                        fontSize = 14.sp
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = when {
+                                            entry.free -> BeeYellow
+                                            entry.hasVision -> Color(0xFF5AC8FA)
+                                            entry.hasThinking -> Color(0xFFBF5AF2)
+                                            else -> Color(0xFF4CAF50)
+                                        }
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Column(modifier = Modifier.weight(1f)) {
@@ -220,7 +228,7 @@ fun AgentCreatorScreen(
                                             Text(entry.id, fontSize = 9.sp, color = BeeGray.copy(alpha = 0.6f))
                                         }
                                     }
-                                    if (isSelected) Text("✓", color = BeeYellow, fontWeight = FontWeight.Bold)
+                                    if (isSelected) Icon(Icons.Filled.CheckCircle, "Selected", tint = BeeYellow, modifier = Modifier.size(18.dp))
                                 }
                             }
                         }
@@ -312,8 +320,8 @@ fun AgentCreatorScreen(
             Button(
                 onClick = {
                     when {
-                        name.isBlank() -> showError = "⚠️ Escribe un nombre"
-                        systemPrompt.isBlank() -> showError = "⚠️ Escribe la personalidad"
+                        name.isBlank() -> showError = "Escribe un nombre"
+                        systemPrompt.isBlank() -> showError = "Escribe la personalidad"
                         else -> {
                             val agentId = existingAgent?.id ?: "custom_${System.currentTimeMillis()}"
                             val config = AgentConfig(
@@ -332,7 +340,7 @@ fun AgentCreatorScreen(
                                 viewModel.reloadCustomAgents(customAgentDB)
                                 onSaved()
                             } else {
-                                showError = "⚠️ Máximo ${ CustomAgentDB.MAX_CUSTOM_AGENTS} agentes alcanzado"
+                                showError = "Maximo ${ CustomAgentDB.MAX_CUSTOM_AGENTS} agentes alcanzado"
                             }
                         }
                     }
@@ -342,7 +350,7 @@ fun AgentCreatorScreen(
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Text(
-                    if (isEditing) "💾  Guardar Cambios" else "💾  Crear Agente",
+                    if (isEditing) "Guardar Cambios" else "Crear Agente",
                     fontWeight = FontWeight.Bold, fontSize = 16.sp
                 )
             }
@@ -366,7 +374,7 @@ fun AgentCreatorScreen(
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFF44336)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("🗑️  Eliminar Agente")
+                    Text("Eliminar Agente")
                 }
             }
 

@@ -1,4 +1,4 @@
-package com.beemovil.skills
+﻿package com.beemovil.skills
 
 import android.content.Context
 import android.content.Intent
@@ -76,7 +76,7 @@ class HtmlGeneratorSkill(private val context: Context) : BeeSkill {
                 .put("path", file.absolutePath)
                 .put("filename", file.name)
                 .put("size", file.length())
-                .put("message", "🖥️ Página HTML generada: ${file.name}${if (openAfter) " · Abriendo en navegador" else "" }")
+                .put("message", "[HTML] Página HTML generada: ${file.name}${if (openAfter) " · Abriendo en navegador" else "" }")
         } catch (e: Exception) {
             Log.e(TAG, "HTML error: ${e.message}")
             JSONObject().put("error", "HTML generation failed: ${e.message}")

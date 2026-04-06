@@ -1,4 +1,4 @@
-package com.beemovil.ui.screens
+﻿package com.beemovil.ui.screens
 
 import android.content.Context
 import android.content.Intent
@@ -1010,7 +1010,7 @@ fun SettingsScreen(
                 Text("Asistente AI que vive en tu teléfono.\nSin servidores. Sin tracking. 100% tuyo.",
                     fontSize = 12.sp, color = Color(0xFFB0B0B0))
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("🐝 Powered by Bee-Movil Team", fontSize = 11.sp, color = BeeYellow)
+                Text("BEE Powered by Bee-Movil Team", fontSize = 11.sp, color = BeeYellow)
             }
 
             Spacer(modifier = Modifier.height(40.dp))

@@ -1,4 +1,4 @@
-package com.beemovil.skills
+﻿package com.beemovil.skills
 
 import android.content.Context
 import android.content.Intent
@@ -44,7 +44,7 @@ class EmailSkill(private val context: Context) : BeeSkill {
             context.startActivity(intent)
             JSONObject()
                 .put("success", true)
-                .put("message", "📧 Email listo para enviar a: $to")
+                .put("message", "[MAIL] Email listo para enviar a: $to")
                 .put("subject", subject)
         } catch (e: Exception) {
             JSONObject().put("error", "Error: ${e.message}")

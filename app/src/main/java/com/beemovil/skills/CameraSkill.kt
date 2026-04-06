@@ -1,4 +1,4 @@
-package com.beemovil.skills
+﻿package com.beemovil.skills
 
 import android.app.Activity
 import android.content.Context
@@ -59,7 +59,7 @@ class CameraSkill(private val context: Context) : BeeSkill {
                         context.startActivity(intent)
                         JSONObject()
                             .put("success", true)
-                            .put("message", "📸 Cámara abierta. La foto se guardará en: ${photoFile.name}")
+                            .put("message", "[SNAP] Cámara abierta. La foto se guardará en: ${photoFile.name}")
                             .put("path", photoFile.absolutePath)
                     } else {
                         JSONObject().put("error", "No se encontró app de cámara")

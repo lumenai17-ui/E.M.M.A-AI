@@ -1,4 +1,4 @@
-package com.beemovil.llm.local
+﻿package com.beemovil.llm.local
 
 import android.content.Context
 import android.util.Log
@@ -97,7 +97,7 @@ class LocalGemmaProvider(
                 future.get(INIT_TIMEOUT_SEC, TimeUnit.SECONDS)
             } catch (e: TimeoutException) {
                 future.cancel(true)
-                throw RuntimeException("⏱️ El modelo tardó más de ${INIT_TIMEOUT_SEC}s en cargar. Tu dispositivo puede no tener suficiente RAM.")
+                throw RuntimeException("[TIMER] El modelo tardó más de ${INIT_TIMEOUT_SEC}s en cargar. Tu dispositivo puede no tener suficiente RAM.")
             } finally {
                 executor.shutdown()
             }
@@ -115,7 +115,7 @@ class LocalGemmaProvider(
             isInitializing = false
             releaseEngine()
             System.gc()
-            throw RuntimeException("📱 Sin memoria RAM suficiente para este modelo. Cierra otras apps e intenta de nuevo, o usa un modelo en la nube.")
+            throw RuntimeException("[DEV] Sin memoria RAM suficiente para este modelo. Cierra otras apps e intenta de nuevo, o usa un modelo en la nube.")
         } catch (e: Exception) {
             isInitializing = false
             releaseEngine()
@@ -147,7 +147,7 @@ class LocalGemmaProvider(
                 future.get(INFERENCE_TIMEOUT_SEC, TimeUnit.SECONDS)
             } catch (e: TimeoutException) {
                 future.cancel(true)
-                "⏱️ El modelo tardó demasiado en responder. Intenta con un mensaje más corto."
+                "[TIMER] El modelo tardó demasiado en responder. Intenta con un mensaje más corto."
             } catch (e: ExecutionException) {
                 throw e.cause ?: e
             } finally {
@@ -157,7 +157,7 @@ class LocalGemmaProvider(
         } catch (e: OutOfMemoryError) {
             releaseEngine()
             System.gc()
-            "📱 Sin memoria. Cierra otras apps e intenta de nuevo."
+            "[DEV] Sin memoria. Cierra otras apps e intenta de nuevo."
         } catch (e: Exception) {
             Log.e(TAG, "Inference failed: ${e.message}", e)
 
@@ -174,7 +174,7 @@ class LocalGemmaProvider(
                 }
             } catch (e2: Exception) {
                 Log.e(TAG, "Retry also failed: ${e2.message}", e2)
-                "⚠️ Error en modelo local: ${e.message?.take(200)}"
+                "[WARN] Error en modelo local: ${e.message?.take(200)}"
             }
         }
 

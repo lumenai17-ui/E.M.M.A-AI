@@ -129,12 +129,12 @@ fun CameraScreen(
 
     // Quick prompts
     val quickPrompts = listOf(
-        "🔍" to "¿Qué es esto? Descríbelo en detalle.",
-        "📝" to "Extrae todo el texto visible en esta imagen (OCR).",
-        "💰" to "Analiza esta factura o recibo. Extrae monto, fecha, concepto.",
-        "📊" to "Analiza los datos o gráficos en esta imagen.",
-        "🏷️" to "Identifica la marca, producto o modelo que ves.",
-        "🌿" to "Identifica esta planta, animal o elemento natural."
+        "Describir" to "Que es esto? Describelo en detalle.",
+        "OCR" to "Extrae todo el texto visible en esta imagen (OCR).",
+        "Factura" to "Analiza esta factura o recibo. Extrae monto, fecha, concepto.",
+        "Datos" to "Analiza los datos o graficos en esta imagen.",
+        "Marca" to "Identifica la marca, producto o modelo que ves.",
+        "Natural" to "Identifica esta planta, animal o elemento natural."
     )
 
     // ── Analysis function using dedicated vision model ──
@@ -148,7 +148,7 @@ fun CameraScreen(
                 // Get Ollama API key
                 val apiKey = com.beemovil.security.SecurePrefs.get(context).getString("ollama_api_key", "") ?: ""
                 if (apiKey.isBlank()) {
-                    analysisResult = "⚠️ Configura tu API key de Ollama en Settings"
+                    analysisResult = "Configura tu API key de Ollama en Settings"
                     isAnalyzing = false
                     return@Thread
                 }
@@ -169,10 +169,10 @@ fun CameraScreen(
                 val msg = e.message ?: "Error desconocido"
                 analysisResult = when {
                     msg.contains("404") || msg.contains("not found", true) ->
-                        "❌ Modelo '$selectedVisionModel' no encontrado en Ollama Cloud.\nPrueba con 'llava' o 'llama3.2-vision'"
+                        "Error: Modelo '$selectedVisionModel' no encontrado en Ollama Cloud.\nPrueba con 'llava' o 'llama3.2-vision'"
                     msg.contains("timeout", true) ->
-                        "❌ Timeout - la imagen puede ser muy grande o el modelo tarda"
-                    else -> "❌ ${msg.take(120)}"
+                        "Error: Timeout - la imagen puede ser muy grande o el modelo tarda"
+                    else -> "Error: ${msg.take(120)}"
                 }
             }
             isAnalyzing = false
@@ -187,7 +187,7 @@ fun CameraScreen(
             title = {
                 Column {
                     Text("Visión AI", fontWeight = FontWeight.Bold)
-                    Text("👁️ $selectedVisionModel · Analiza imágenes", fontSize = 11.sp, color = BeeGray)
+                    Text("$selectedVisionModel", fontSize = 11.sp, color = BeeGray)
                 }
             },
             navigationIcon = {
@@ -218,7 +218,7 @@ fun CameraScreen(
                     modifier = Modifier.padding(14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("👁️", fontSize = 20.sp)
+                    Icon(Icons.Filled.Visibility, "Vision", tint = BeeYellow, modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(10.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text("MODELO DE VISIÓN", fontSize = 10.sp, color = BeeYellow,
@@ -247,14 +247,14 @@ fun CameraScreen(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
                     ) {
                         Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("👁️", fontSize = 16.sp)
+                            Icon(Icons.Filled.Visibility, "Vision", tint = BeeYellow, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(10.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(model.name, fontSize = 14.sp,
                                     color = if (isSelected) BeeYellow else Color(0xFFE0E0E0))
                                 Text(model.id, fontSize = 10.sp, color = BeeGray)
                             }
-                            if (isSelected) Text("✓", color = BeeYellow, fontWeight = FontWeight.Bold)
+                            if (isSelected) Icon(Icons.Filled.CheckCircle, "Selected", tint = BeeYellow, modifier = Modifier.size(18.dp))
                         }
                     }
                 }
@@ -302,7 +302,7 @@ fun CameraScreen(
                         modifier = Modifier.fillMaxWidth().padding(32.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text("📸", fontSize = 56.sp)
+                        Icon(Icons.Filled.CameraAlt, "Camera", tint = BeeGray, modifier = Modifier.size(56.dp))
                         Spacer(modifier = Modifier.height(12.dp))
                         Text("Captura o selecciona una imagen", fontWeight = FontWeight.Bold,
                             fontSize = 16.sp, color = BeeWhite)
@@ -347,7 +347,7 @@ fun CameraScreen(
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text("🔴", fontSize = 14.sp)
+                    Icon(Icons.Filled.FiberManualRecord, "Live", tint = Color.White, modifier = Modifier.size(14.dp))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("Live", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
@@ -364,7 +364,7 @@ fun CameraScreen(
                 val rows = quickPrompts.chunked(2)
                 rows.forEach { row ->
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        row.forEach { (icon, p) ->
+                        row.forEach { (label, p) ->
                             Surface(
                                 onClick = {
                                     prompt = p
@@ -375,7 +375,7 @@ fun CameraScreen(
                                 modifier = Modifier.weight(1f).padding(vertical = 3.dp)
                             ) {
                                 Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Text(icon, fontSize = 20.sp)
+                                    Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = BeeYellow)
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(p.take(25) + if (p.length > 25) "..." else "",
                                         fontSize = 12.sp, color = Color(0xFFE0E0E0))
@@ -440,7 +440,7 @@ fun CameraScreen(
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("🐝 RESULTADO", fontSize = 11.sp, color = BeeYellow,
+                            Text("RESULTADO", fontSize = 11.sp, color = BeeYellow,
                                 fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                             Spacer(modifier = Modifier.weight(1f))
                             Text("via $selectedVisionModel", fontSize = 9.sp, color = BeeGray)
@@ -459,19 +459,19 @@ fun CameraScreen(
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(10.dp)
                             ) {
-                                Text("🐝 Chat", fontSize = 12.sp)
+                                Text("Chat", fontSize = 12.sp)
                             }
                             OutlinedButton(
                                 onClick = {
                                     val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                                     clipboard.setPrimaryClip(android.content.ClipData.newPlainText("result", analysisResult))
-                                    Toast.makeText(context, "📋 Copiado", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Copiado", Toast.LENGTH_SHORT).show()
                                 },
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = BeeGray),
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(10.dp)
                             ) {
-                                Text("📋 Copiar", fontSize = 12.sp)
+                                Text("Copiar", fontSize = 12.sp)
                             }
                         }
                     }
@@ -485,7 +485,7 @@ fun CameraScreen(
                     color = BeeYellow, trackColor = Color(0xFF1A1A2E)
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("👁️ Analizando con $selectedVisionModel...",
+                Text("Analizando con $selectedVisionModel...",
                     fontSize = 13.sp, color = BeeGray,
                     modifier = Modifier.align(Alignment.CenterHorizontally))
             }

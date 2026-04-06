@@ -247,7 +247,7 @@ fun VoiceChatScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text("🎤", fontSize = 48.sp)
+                        Icon(Icons.Filled.Mic, "Mic", tint = BeeGray, modifier = Modifier.size(48.dp))
                         Spacer(modifier = Modifier.height(12.dp))
                         Text("Conversación por voz", fontWeight = FontWeight.Bold,
                             fontSize = 20.sp, color = BeeWhite)
@@ -259,7 +259,7 @@ fun VoiceChatScreen(
                             shape = RoundedCornerShape(10.dp)
                         ) {
                             Text(
-                                if (autoListen) "🔄 Modo continuo activado" else "🎤 Toca el botón para hablar",
+                                if (autoListen) "Modo continuo activado" else "Toca el boton para hablar",
                                 fontSize = 12.sp, color = BeeYellow,
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                             )
@@ -276,7 +276,7 @@ fun VoiceChatScreen(
                         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
                     ) {
                         if (!isUser) {
-                            Text("🐝", fontSize = 20.sp, modifier = Modifier.padding(top = 4.dp))
+                            Icon(Icons.Filled.SmartToy, "Bee", tint = BeeYellow, modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                         }
                         Card(
@@ -300,7 +300,7 @@ fun VoiceChatScreen(
                         }
                         if (isUser) {
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("🎤", fontSize = 16.sp, modifier = Modifier.padding(top = 4.dp))
+                            Icon(Icons.Filled.Mic, "User", tint = BeeYellow, modifier = Modifier.size(16.dp))
                         }
                     }
                 }
@@ -324,7 +324,7 @@ fun VoiceChatScreen(
                 // Error
                 if (errorText.isNotBlank()) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("⚠️ $errorText", fontSize = 12.sp, color = Color(0xFFF44336))
+                    Text("$errorText", fontSize = 12.sp, color = Color(0xFFF44336))
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -346,9 +346,9 @@ fun VoiceChatScreen(
                 Text(
                     when (voiceState) {
                         VoiceState.IDLE -> if (autoListen) "Toca para iniciar conversación" else "Toca para hablar"
-                        VoiceState.LISTENING -> "🎙️ Escuchando..."
-                        VoiceState.THINKING -> "🧠 Procesando respuesta..."
-                        VoiceState.SPEAKING -> "🔊 Hablando..."
+                        VoiceState.LISTENING -> "Escuchando..."
+                        VoiceState.THINKING -> "Procesando respuesta..."
+                        VoiceState.SPEAKING -> "Hablando..."
                     },
                     fontSize = 13.sp,
                     color = when (voiceState) {
