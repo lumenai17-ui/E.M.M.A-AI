@@ -137,7 +137,7 @@ fun CameraScreen(
         "Natural" to "Identifica esta planta, animal o elemento natural."
     )
 
-    // ── Analysis function using dedicated vision model ──
+    // ── Analysis function using smart provider routing ──
     fun analyzeImage(question: String) {
         if (imageBase64.isBlank()) return
         isAnalyzing = true
@@ -145,31 +145,36 @@ fun CameraScreen(
 
         Thread {
             try {
-                // Get Ollama API key
-                val apiKey = com.beemovil.security.SecurePrefs.get(context).getString("ollama_api_key", "") ?: ""
-                if (apiKey.isBlank()) {
-                    analysisResult = "Configura tu API key de Ollama en Settings"
+                // Try current provider first (respects user's model selection)
+                val currentProvider = viewModel.currentProvider.value
+                val apiKey = when (currentProvider) {
+                    "openrouter" -> com.beemovil.security.SecurePrefs.get(context).getString("openrouter_api_key", "") ?: ""
+                    "ollama" -> com.beemovil.security.SecurePrefs.get(context).getString("ollama_api_key", "") ?: ""
+                    else -> ""
+                }
+
+                if (apiKey.isBlank() && currentProvider != "local") {
+                    analysisResult = "Configura tu API key de ${currentProvider} en Settings"
                     isAnalyzing = false
                     return@Thread
                 }
 
-                // Create a DEDICATED vision provider (not the global chat one)
-                val visionProvider = OllamaCloudProvider(
+                val provider = LlmFactory.createProvider(
+                    providerType = currentProvider,
                     apiKey = apiKey,
                     model = selectedVisionModel
                 )
 
-                // Send image + question directly
                 val messages = listOf(
                     ChatMessage(role = "user", content = question, images = listOf(imageBase64))
                 )
-                val response = visionProvider.complete(messages, emptyList())
+                val response = provider.complete(messages, emptyList())
                 analysisResult = response.text ?: "Sin respuesta del modelo"
             } catch (e: Exception) {
                 val msg = e.message ?: "Error desconocido"
                 analysisResult = when {
                     msg.contains("404") || msg.contains("not found", true) ->
-                        "Error: Modelo '$selectedVisionModel' no encontrado en Ollama Cloud.\nPrueba con 'llava' o 'llama3.2-vision'"
+                        "Error: Modelo '$selectedVisionModel' no encontrado.\nPrueba otro modelo de vision"
                     msg.contains("timeout", true) ->
                         "Error: Timeout - la imagen puede ser muy grande o el modelo tarda"
                     else -> "Error: ${msg.take(120)}"

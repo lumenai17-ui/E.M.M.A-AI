@@ -240,15 +240,16 @@ class ChatViewModel : ViewModel() {
      */
     fun resolveAgent(agentId: String): com.beemovil.agent.BeeAgent? {
         val config = availableAgents.find { it.id == agentId } ?: return null
-        val apiKey = apiKeys[currentProvider.value] ?: ""
-        // Agent uses its own model if configured, else inherits global
-        val model = config.model.ifBlank { currentModel.value }
-        val provider = LlmFactory.createProvider(
-            providerType = currentProvider.value,
-            apiKey = apiKey,
-            model = model
-        )
-        return com.beemovil.agent.BeeAgent(config, provider, skills, memoryDB)
+        // Use the agent's own model if configured, else inherit global
+        val resolvedConfig = if (config.model.isBlank()) {
+            config.copy(model = currentModel.value)
+        } else config
+        return try {
+            getOrCreateAgent(resolvedConfig)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to resolve agent '${agentId}': ${e.message}")
+            null
+        }
     }
 
     /** Get all agent configs (for DelegateSkill to list available agents) */
@@ -262,6 +263,10 @@ class ChatViewModel : ViewModel() {
     fun openAgentChat(agentId: String) {
         val config = availableAgents.find { it.id == agentId } ?: DefaultAgents.MAIN
         currentAgentConfig.value = config
+
+        // Invalidate cached agent so it gets recreated with current systemPrompt
+        val cacheKey = "${config.id}_${currentProvider.value}_${currentModel.value}"
+        agents.remove(cacheKey)
 
         // Clear current UI messages
         messages.clear()
@@ -479,61 +484,90 @@ class ChatViewModel : ViewModel() {
     }
 
     /**
-     * Analyze an image using the vision model (Gemma 4).
-     * Called when user attaches an image in chat.
+     * Analyze an image using the current agent's vision capability.
+     * Falls back to Ollama Cloud vision model if the current provider doesn't support images.
+     * Images are now part of the conversation history for multi-turn context.
      */
     fun analyzeImageInChat(context: Context, imagePath: String, prompt: String = "Describe detalladamente lo que ves en esta imagen.") {
         val config = currentAgentConfig.value
         isLoading.value = true
 
-        // Add user message
+        // Add user message with image
         messages.add(ChatUiMessage(
             text = prompt,
             isUser = true,
             filePaths = listOf(imagePath)
         ))
+        chatHistoryDB?.saveMessage(config.id, "[IMG] $prompt", true, config.icon)
 
         Thread {
             try {
-                val prefs = context.getSharedPreferences("beemovil", Context.MODE_PRIVATE)
-                val apiKey = SecurePrefs.get(context).getString("ollama_api_key", "") ?: ""
-
-                if (apiKey.isBlank()) {
-                    mainHandler.post {
-                        isLoading.value = false
-                        messages.add(ChatUiMessage(
-                            text = "Configura tu API key de Ollama en Settings para analizar imagenes",
-                            isUser = false, agentIcon = config.icon, isError = true
-                        ))
-                    }
-                    return@Thread
-                }
-
                 // Read and encode image
                 val bitmap = BitmapFactory.decodeFile(imagePath) ?: throw Exception("No se pudo leer la imagen")
-                if (bitmap.width == 0 || bitmap.height == 0) throw Exception("Imagen corrupta o vacía")
+                if (bitmap.width == 0 || bitmap.height == 0) throw Exception("Imagen corrupta o vacia")
                 val scale = minOf(800f / bitmap.width, 800f / bitmap.height, 1f)
                 val resized = Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).toInt(), (bitmap.height * scale).toInt(), true)
                 val baos = ByteArrayOutputStream()
                 resized.compress(Bitmap.CompressFormat.JPEG, 85, baos)
                 val base64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
 
-                // Use vision model
-                val visionModel = prefs.getString("vision_model", "gemma4:31b-cloud") ?: "gemma4:31b-cloud"
-                val visionProvider = OllamaCloudProvider(apiKey = apiKey, model = visionModel)
-                val visionMessages = listOf(ChatMessage(role = "user", content = prompt, images = listOf(base64)))
-                val response = visionProvider.complete(visionMessages, emptyList())
+                // Try to use the current agent (preserves conversation context)
+                val agent = getOrCreateAgent(config)
+                val response = agent.chatWithImage(prompt, base64)
 
                 mainHandler.post {
                     isLoading.value = false
+                    val files = response.toolExecutions.mapNotNull { exec ->
+                        arrayOf("path", "file_path", "filepath").firstNotNullOfOrNull { key ->
+                            if (exec.result.has(key)) exec.result.getString(key) else null
+                        }
+                    }
                     messages.add(ChatUiMessage(
-                        text = response.text ?: "Sin respuesta del modelo de visión",
-                        isUser = false, agentIcon = "VIS",
-                        toolsUsed = listOf("vision:$visionModel")
+                        text = response.text,
+                        isUser = false, agentIcon = config.icon,
+                        isError = response.isError,
+                        toolsUsed = response.toolExecutions.map { it.skillName },
+                        filePaths = files
                     ))
+                    chatHistoryDB?.saveMessage(config.id, response.text, false, config.icon,
+                        response.isError, response.toolExecutions.map { it.skillName })
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Vision error: ${e.message}", e)
+
+                // Fallback: try Ollama Cloud vision model if current provider failed
+                if (currentProvider.value != "ollama") {
+                    try {
+                        val ollamaKey = SecurePrefs.get(context).getString("ollama_api_key", "") ?: ""
+                        if (ollamaKey.isNotBlank()) {
+                            val prefs = context.getSharedPreferences("beemovil", Context.MODE_PRIVATE)
+                            val visionModel = prefs.getString("vision_model", "gemma4:31b-cloud") ?: "gemma4:31b-cloud"
+                            val bitmap = BitmapFactory.decodeFile(imagePath)
+                            val scale = minOf(800f / bitmap.width, 800f / bitmap.height, 1f)
+                            val resized = Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).toInt(), (bitmap.height * scale).toInt(), true)
+                            val baos = ByteArrayOutputStream()
+                            resized.compress(Bitmap.CompressFormat.JPEG, 85, baos)
+                            val base64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
+
+                            val visionProvider = OllamaCloudProvider(apiKey = ollamaKey, model = visionModel)
+                            val visionMessages = listOf(ChatMessage(role = "user", content = prompt, images = listOf(base64)))
+                            val response = visionProvider.complete(visionMessages, emptyList())
+
+                            mainHandler.post {
+                                isLoading.value = false
+                                messages.add(ChatUiMessage(
+                                    text = response.text ?: "Sin respuesta",
+                                    isUser = false, agentIcon = "VIS",
+                                    toolsUsed = listOf("vision:$visionModel")
+                                ))
+                            }
+                            return@Thread
+                        }
+                    } catch (fallbackErr: Exception) {
+                        Log.e(TAG, "Vision fallback also failed: ${fallbackErr.message}")
+                    }
+                }
+
                 mainHandler.post {
                     isLoading.value = false
                     messages.add(ChatUiMessage(
@@ -554,7 +588,7 @@ class ChatViewModel : ViewModel() {
 
         val config = currentAgentConfig.value
         val apiKey = apiKeys[currentProvider.value] ?: ""
-        if (apiKey.isBlank()) return "Configura tu API key primero"
+        if (apiKey.isBlank() && currentProvider.value != "local") return "Configura tu API key primero"
 
         // Add to UI on main thread
         mainHandler.post {

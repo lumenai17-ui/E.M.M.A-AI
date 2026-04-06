@@ -1,4 +1,4 @@
-﻿package com.beemovil.ui.screens
+package com.beemovil.ui.screens
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -109,13 +109,22 @@ fun LiveVisionScreen(
                             // Send to vision model
                             Thread {
                                 try {
-                                    val apiKey = com.beemovil.security.SecurePrefs.get(context).getString("ollama_api_key", "") ?: ""
-                                    if (apiKey.isBlank()) {
-                                        liveResult = "[WARN] Configura API key de Ollama"
+                                    val currentProviderType = viewModel.currentProvider.value
+                                    val apiKey = when (currentProviderType) {
+                                        "openrouter" -> com.beemovil.security.SecurePrefs.get(context).getString("openrouter_api_key", "") ?: ""
+                                        "ollama" -> com.beemovil.security.SecurePrefs.get(context).getString("ollama_api_key", "") ?: ""
+                                        else -> ""
+                                    }
+                                    if (apiKey.isBlank() && currentProviderType != "local") {
+                                        liveResult = "[WARN] Configura API key de ${currentProviderType}"
                                         isProcessing = false
                                         return@Thread
                                     }
-                                    val provider = OllamaCloudProvider(apiKey, selectedModel)
+                                    val provider = LlmFactory.createProvider(
+                                        providerType = currentProviderType,
+                                        apiKey = apiKey,
+                                        model = selectedModel
+                                    )
                                     val msgs = listOf(
                                         ChatMessage(role = "user", content = customPrompt, images = listOf(b64))
                                     )
@@ -398,8 +407,17 @@ fun LiveVisionScreen(
 
                                         Thread {
                                             try {
-                                                val apiKey = com.beemovil.security.SecurePrefs.get(context).getString("ollama_api_key", "") ?: ""
-                                                val provider = OllamaCloudProvider(apiKey, selectedModel)
+                                                val currentProviderType = viewModel.currentProvider.value
+                                                val apiKey = when (currentProviderType) {
+                                                    "openrouter" -> com.beemovil.security.SecurePrefs.get(context).getString("openrouter_api_key", "") ?: ""
+                                                    "ollama" -> com.beemovil.security.SecurePrefs.get(context).getString("ollama_api_key", "") ?: ""
+                                                    else -> ""
+                                                }
+                                                val provider = LlmFactory.createProvider(
+                                                    providerType = currentProviderType,
+                                                    apiKey = apiKey,
+                                                    model = selectedModel
+                                                )
                                                 val msgs = listOf(ChatMessage(role = "user", content = customPrompt, images = listOf(b64)))
                                                 val response = provider.complete(msgs, emptyList())
                                                 liveResult = response.text ?: ""

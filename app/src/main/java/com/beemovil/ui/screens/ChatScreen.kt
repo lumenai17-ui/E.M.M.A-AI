@@ -125,18 +125,15 @@ fun ChatScreen(viewModel: ChatViewModel, onSettingsClick: () -> Unit = {}, onBac
         }
     }
 
-    // Image picker
+    // Image picker (multi-select)
     val imagePickerLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri?.let {
+        ActivityResultContracts.GetMultipleContents()
+    ) { uris: List<Uri> ->
+        uris.forEach { uri ->
             try {
-                // Copy to temp file
-                val inputStream = context.contentResolver.openInputStream(it)
+                val inputStream = context.contentResolver.openInputStream(uri)
                 val tempFile = File(context.cacheDir, "attached_image_${System.currentTimeMillis()}.jpg")
                 inputStream?.use { input -> tempFile.outputStream().use { output -> input.copyTo(output) } }
-
-                // Route to vision model (not text model)
                 viewModel.analyzeImageInChat(context, tempFile.absolutePath)
             } catch (e: Exception) {
                 viewModel.sendMessage("[Error cargando imagen: ${e.message}]")

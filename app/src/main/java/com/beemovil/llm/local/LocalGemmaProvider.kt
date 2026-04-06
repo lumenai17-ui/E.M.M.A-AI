@@ -1,4 +1,4 @@
-﻿package com.beemovil.llm.local
+package com.beemovil.llm.local
 
 import android.content.Context
 import android.util.Log
@@ -238,10 +238,10 @@ class LocalGemmaProvider(
         messages.forEach { msg ->
             when (msg.role) {
                 "system" -> {
-                    // Compact system prompt — keep personality but remove verbose tool listings
+                    // Compact system prompt — keep personality but trim verbose parts
                     val compact = (msg.content ?: "")
                         .substringBefore("## Tus 3") // Cut before the huge tool list
-                        .take(300) // Max 300 chars
+                        .take(800) // Enough for custom agent personality
                         .trim()
                     sb.appendLine("<start_of_turn>user")
                     sb.appendLine("[System] $compact")
@@ -269,10 +269,9 @@ class LocalGemmaProvider(
 
         // Safety check: if prompt is still too long, truncate middle messages
         val prompt = sb.toString()
-        if (prompt.length > 12000) { // ~3000 tokens at 4 chars/token
+        if (prompt.length > 24000) { // ~6000 tokens — fits E4B (8192 tokens) with room for response
             Log.w(TAG, "Prompt too long (${prompt.length} chars), truncating")
-            // Keep first 4000 + last 4000 chars
-            return prompt.take(4000) + "\n...[contexto truncado]...\n" + prompt.takeLast(4000)
+            return prompt.take(8000) + "\n...[contexto truncado]...\n" + prompt.takeLast(8000)
         }
 
         return prompt
