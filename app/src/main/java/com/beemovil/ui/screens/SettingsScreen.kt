@@ -660,7 +660,7 @@ fun SettingsScreen(
                 Text("Text-to-Speech y Speech-to-Text avanzado", fontSize = 12.sp, color = BeeGray)
                 Spacer(modifier = Modifier.height(8.dp))
 
-                var dgKey by remember { mutableStateOf(prefs.getString("deepgram_api_key", "") ?: "") }
+                var dgKey by remember { mutableStateOf(securePrefs.getString("deepgram_api_key", "") ?: "") }
                 var showDgKey by remember { mutableStateOf(false) }
                 var dgVoice by remember { mutableStateOf(prefs.getString("deepgram_voice", "aura-asteria-en") ?: "aura-asteria-en") }
                 var useDgSTT by remember { mutableStateOf(prefs.getBoolean("use_deepgram_stt", true)) }
@@ -776,13 +776,15 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
                     onClick = {
+                        // API key goes to SecurePrefs (encrypted)
+                        securePrefs.edit().putString("deepgram_api_key", dgKey.trim()).apply()
+                        // Non-sensitive settings stay in regular prefs
                         prefs.edit()
-                            .putString("deepgram_api_key", dgKey.trim())
                             .putString("deepgram_voice", dgVoice)
                             .putBoolean("use_deepgram_stt", useDgSTT)
                             .putBoolean("use_deepgram_tts", useDgTTS)
                             .apply()
-                        Toast.makeText(context, "Deepgram guardado", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, if (dgKey.isNotBlank()) "Deepgram activado" else "Deepgram desactivado (voz nativa)", Toast.LENGTH_SHORT).show()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = BeeYellow, contentColor = BeeBlack),
                     modifier = Modifier.fillMaxWidth(),

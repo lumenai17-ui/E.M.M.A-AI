@@ -16,17 +16,7 @@
 > Task :app:processDebugResources UP-TO-DATE
 
 > Task :app:compileDebugKotlin
-w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/ChatViewModel.kt:408:27 Variable 'isError' initializer is redundant
-w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/ChatViewModel.kt:644:27 Variable 'isError' initializer is redundant
 w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/screens/SettingsScreen.kt:86:39 'ArrowBack: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.ArrowBack
-w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/screens/VoiceChatScreen.kt:70:16 Unnecessary safe call on a non-null receiver of type TextToSpeech
-w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/screens/VoiceChatScreen.kt:71:16 Unnecessary safe call on a non-null receiver of type TextToSpeech
-w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/screens/VoiceChatScreen.kt:201:32 Unnecessary safe call on a non-null receiver of type TextToSpeech
-w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/screens/VoiceChatScreen.kt:222:32 Unnecessary safe call on a non-null receiver of type TextToSpeech
-w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/screens/VoiceChatScreen.kt:236:12 Unnecessary safe call on a non-null receiver of type TextToSpeech
-w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/screens/VoiceChatScreen.kt:274:43 'ArrowBack: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.ArrowBack
-w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/screens/VoiceChatScreen.kt:444:40 Unnecessary safe call on a non-null receiver of type TextToSpeech
-w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/screens/VoiceChatScreen.kt:470:69 'VolumeUp: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.VolumeUp
 w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/voice/DeepgramVoiceManager.kt:120:9 Parameter 'onError' is never used
 [Incubating] Problems report is available at: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/build/reports/problems/problems-report.html
 

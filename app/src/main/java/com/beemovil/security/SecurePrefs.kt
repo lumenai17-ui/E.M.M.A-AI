@@ -32,7 +32,8 @@ object SecurePrefs {
         "github_token",
         "email_password",
         "email_address",
-        "telegram_owner_username"
+        "telegram_owner_username",
+        "deepgram_api_key"
     )
 
     @Volatile

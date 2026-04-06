@@ -3,6 +3,7 @@ package com.beemovil.voice
 import android.content.Context
 import android.speech.tts.TextToSpeech
 import android.util.Log
+import com.beemovil.security.SecurePrefs
 import com.beemovil.skills.VoiceInputManager
 import java.util.Locale
 
@@ -37,9 +38,8 @@ class DeepgramVoiceManager(private val context: Context) {
     private var nativeTTS: TextToSpeech? = null
     private var nativeTTSReady = false
 
-    // Config
-    val apiKey: String get() = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        .getString(KEY_DEEPGRAM, "") ?: ""
+    // Config — API key stored in SecurePrefs (encrypted)
+    val apiKey: String get() = SecurePrefs.get(context).getString(KEY_DEEPGRAM, "") ?: ""
     val hasApiKey: Boolean get() = apiKey.isNotBlank()
 
     val selectedVoice: String get() = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -170,8 +170,7 @@ class DeepgramVoiceManager(private val context: Context) {
     // ── Config ──────────────────────────
 
     fun setApiKey(key: String) {
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit().putString(KEY_DEEPGRAM, key).apply()
+        SecurePrefs.get(context).edit().putString(KEY_DEEPGRAM, key).apply()
     }
 
     fun setVoice(voiceId: String) {
