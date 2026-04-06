@@ -12,29 +12,38 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.beemovil.llm.ChatMessage
 import com.beemovil.llm.LlmFactory
-import com.beemovil.llm.OllamaCloudProvider
 import com.beemovil.ui.ChatViewModel
 import com.beemovil.ui.theme.*
+import com.beemovil.vision.*
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
 
@@ -60,20 +69,54 @@ fun LiveVisionScreen(
     var selectedModel by remember {
         mutableStateOf(prefs.getString("vision_model", "gemma4:31b-cloud") ?: "gemma4:31b-cloud")
     }
-    var intervalSeconds by remember { mutableStateOf(4) } // Capture interval
+    var intervalSeconds by remember { mutableStateOf(4) }
     var showSettings by remember { mutableStateOf(false) }
-    var customPrompt by remember { mutableStateOf("Describe lo que ves en esta imagen en español. Sé conciso.") }
+    var showModules by remember { mutableStateOf(false) }
+    var customPrompt by remember { mutableStateOf("Describe lo que ves en esta imagen en espanol. Se conciso.") }
 
-    // Camera setup
+    // Vision Pro state — 7 toggleable modules
+    var visionState by remember { mutableStateOf(VisionProState()) }
+
+    // Camera
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
-    var lastCaptureTime by remember { mutableStateOf(0L) }
+    var camera by remember { mutableStateOf<Camera?>(null) }
+    var zoomLevel by remember { mutableStateOf(1f) }
+
+    // GPS module
+    val gpsModule = remember { GpsModule(context) }
+    var gpsData by remember { mutableStateOf(GpsData()) }
+
+    // Dashcam logger
+    val dashcamLogger = remember { DashcamLogger(context) }
+
+    // Voice manager for narration
+    val dgVoice = viewModel.deepgramVoiceManager
 
     val permLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         hasCameraPermission = granted
-        if (!granted) Toast.makeText(context, "Permiso de cámara necesario", Toast.LENGTH_SHORT).show()
+        if (!granted) Toast.makeText(context, "Permiso de camara necesario", Toast.LENGTH_SHORT).show()
+    }
+
+    // GPS lifecycle
+    LaunchedEffect(visionState.gpsOverlay || visionState.dashcamMode) {
+        if (visionState.gpsOverlay || visionState.dashcamMode) {
+            gpsModule.onLocationUpdate = { data -> gpsData = data }
+            gpsModule.start()
+        } else {
+            gpsModule.stop()
+        }
+    }
+
+    // Dashcam lifecycle
+    LaunchedEffect(visionState.dashcamMode) {
+        if (visionState.dashcamMode && !dashcamLogger.isActive) {
+            dashcamLogger.startSession()
+        } else if (!visionState.dashcamMode && dashcamLogger.isActive) {
+            dashcamLogger.stopSession()
+        }
     }
 
     // Auto-capture loop
@@ -87,14 +130,12 @@ fun LiveVisionScreen(
             val capture = imageCapture ?: continue
             isProcessing = true
 
-            // Capture frame
             capture.takePicture(
                 cameraExecutor,
                 object : ImageCapture.OnImageCapturedCallback() {
                     override fun onCaptureSuccess(imageProxy: ImageProxy) {
                         try {
                             val bitmap = imageProxy.toBitmap()
-                            // Resize to 512px for speed
                             val scale = minOf(512f / bitmap.width, 512f / bitmap.height, 1f)
                             val resized = Bitmap.createScaledBitmap(
                                 bitmap,
@@ -106,7 +147,6 @@ fun LiveVisionScreen(
                             resized.compress(Bitmap.CompressFormat.JPEG, 70, baos)
                             val b64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
 
-                            // Send to vision model
                             Thread {
                                 try {
                                     val currentProviderType = viewModel.currentProvider.value
@@ -120,17 +160,52 @@ fun LiveVisionScreen(
                                         isProcessing = false
                                         return@Thread
                                     }
+
+                                    // Build prompt with GPS context if enabled
+                                    val fullPrompt = buildString {
+                                        if ((visionState.gpsOverlay || visionState.dashcamMode) && gpsData.latitude != 0.0) {
+                                            appendLine(gpsData.toPromptContext())
+                                        }
+                                        append(customPrompt)
+                                        if (visionState.dashcamMode) {
+                                            append(" Incluye observaciones de transito, senales y condiciones del camino.")
+                                        }
+                                    }
+
                                     val provider = LlmFactory.createProvider(
                                         providerType = currentProviderType,
                                         apiKey = apiKey,
                                         model = selectedModel
                                     )
                                     val msgs = listOf(
-                                        ChatMessage(role = "user", content = customPrompt, images = listOf(b64))
+                                        ChatMessage(role = "user", content = fullPrompt, images = listOf(b64))
                                     )
                                     val response = provider.complete(msgs, emptyList())
                                     liveResult = response.text ?: ""
                                     frameCount++
+
+                                    // Voice narration
+                                    if (visionState.voiceNarration && liveResult.isNotBlank()) {
+                                        dgVoice?.speak(text = liveResult)
+                                    }
+
+                                    // Dashcam logging
+                                    if (visionState.dashcamMode) {
+                                        dashcamLogger.logFrame(
+                                            frameNumber = frameCount,
+                                            gpsData = if (gpsData.latitude != 0.0) gpsData else null,
+                                            analysisResult = liveResult,
+                                            prompt = fullPrompt
+                                        )
+                                    }
+
+                                    // Background agent evaluation
+                                    if (visionState.backgroundAgent && visionState.backgroundAgentPrompt.isNotBlank()) {
+                                        evaluateBackgroundAgent(
+                                            context, viewModel, liveResult,
+                                            visionState.backgroundAgentPrompt
+                                        )
+                                    }
                                 } catch (e: Exception) {
                                     liveResult = "[ERR] ${e.message?.take(80)}"
                                 }
@@ -156,12 +231,13 @@ fun LiveVisionScreen(
     DisposableEffect(Unit) {
         onDispose {
             isLiveActive = false
+            gpsModule.stop()
+            if (dashcamLogger.isActive) dashcamLogger.stopSession()
             cameraExecutor.shutdown()
         }
     }
 
     if (!hasCameraPermission) {
-        // Permission request screen
         Column(
             modifier = Modifier.fillMaxSize().background(BeeBlack),
             verticalArrangement = Arrangement.Center,
@@ -169,21 +245,21 @@ fun LiveVisionScreen(
         ) {
             Icon(Icons.Filled.CameraAlt, "Camera", tint = BeeGray, modifier = Modifier.size(64.dp))
             Spacer(modifier = Modifier.height(16.dp))
-            Text("Permiso de cámara necesario", fontWeight = FontWeight.Bold,
+            Text("Permiso de camara necesario", fontWeight = FontWeight.Bold,
                 fontSize = 18.sp, color = BeeWhite)
             Spacer(modifier = Modifier.height(12.dp))
             Button(
                 onClick = { permLauncher.launch(Manifest.permission.CAMERA) },
                 colors = ButtonDefaults.buttonColors(containerColor = BeeYellow, contentColor = BeeBlack)
             ) {
-                Text("Permitir cámara", fontWeight = FontWeight.Bold)
+                Text("Permitir camara", fontWeight = FontWeight.Bold)
             }
         }
         return
     }
 
     Box(modifier = Modifier.fillMaxSize().background(BeeBlack)) {
-        // Camera preview (full screen)
+        // Camera preview (full screen) with tap-to-focus and pinch-to-zoom
         AndroidView(
             factory = { ctx ->
                 val previewView = PreviewView(ctx)
@@ -191,11 +267,9 @@ fun LiveVisionScreen(
 
                 cameraProviderFuture.addListener({
                     val cameraProvider = cameraProviderFuture.get()
-
                     val preview = Preview.Builder().build().also {
                         it.setSurfaceProvider(previewView.surfaceProvider)
                     }
-
                     val imgCapture = ImageCapture.Builder()
                         .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
                         .build()
@@ -203,23 +277,46 @@ fun LiveVisionScreen(
 
                     try {
                         cameraProvider.unbindAll()
-                        cameraProvider.bindToLifecycle(
+                        camera = cameraProvider.bindToLifecycle(
                             lifecycleOwner,
                             CameraSelector.DEFAULT_BACK_CAMERA,
                             preview,
                             imgCapture
                         )
-                    } catch (e: Exception) {
-                        // Camera error
-                    }
+                    } catch (_: Exception) {}
                 }, ContextCompat.getMainExecutor(ctx))
 
                 previewView
             },
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(visionState.tapToFocus) {
+                    if (visionState.tapToFocus) {
+                        detectTapGestures { offset ->
+                            val factory = camera?.cameraInfo?.let {
+                                SurfaceOrientedMeteringPointFactory(
+                                    size.width.toFloat(), size.height.toFloat()
+                                )
+                            }
+                            factory?.let {
+                                val point = it.createPoint(offset.x / size.width, offset.y / size.height)
+                                val action = FocusMeteringAction.Builder(point).build()
+                                camera?.cameraControl?.startFocusAndMetering(action)
+                            }
+                        }
+                    }
+                }
+                .pointerInput(Unit) {
+                    detectTransformGestures { _, _, zoom, _ ->
+                        zoomLevel = (zoomLevel * zoom).coerceIn(1f, 5f)
+                        camera?.cameraControl?.setZoomRatio(zoomLevel)
+                    }
+                }
         )
 
-        // Top bar overlay
+        // ═══════════════════════════════════════
+        // TOP BAR
+        // ═══════════════════════════════════════
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -231,50 +328,216 @@ fun LiveVisionScreen(
                 .padding(top = 8.dp)
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onBack) {
                     Icon(Icons.Filled.ArrowBack, "Back", tint = BeeWhite)
                 }
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Live Vision", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = BeeWhite)
+                    Text("Vision Pro", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = BeeWhite)
                     val modelName = LlmFactory.VISION_MODELS.find { it.id == selectedModel }?.name ?: selectedModel
                     Text("$modelName · ${intervalSeconds}s", fontSize = 11.sp, color = BeeGray)
                 }
-                // Frame counter
+
+                // Active module indicators
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    if (visionState.gpsOverlay) ModuleChip("GPS", Color(0xFF4CAF50))
+                    if (visionState.voiceNarration) ModuleChip("VOZ", Color(0xFF2196F3))
+                    if (visionState.dashcamMode) ModuleChip("REC", Color(0xFFF44336))
+                    if (visionState.backgroundAgent) ModuleChip("AGT", Color(0xFFFF9800))
+                }
+
                 if (isLiveActive) {
-                    Surface(
-                        color = Color(0xFFF44336).copy(alpha = 0.8f),
-                        shape = CircleShape
-                    ) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Surface(color = Color(0xFFF44336).copy(alpha = 0.8f), shape = CircleShape) {
                         Text("$frameCount", fontSize = 11.sp, color = BeeWhite,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
                     }
-                    Spacer(modifier = Modifier.width(6.dp))
                 }
-                IconButton(onClick = { showSettings = !showSettings }) {
-                    Icon(Icons.Filled.Settings, "Settings", tint = BeeYellow)
+                IconButton(onClick = { showSettings = !showSettings; showModules = false }) {
+                    Icon(Icons.Filled.Tune, "Settings", tint = BeeYellow)
+                }
+                IconButton(onClick = { showModules = !showModules; showSettings = false }) {
+                    Icon(Icons.Filled.Extension, "Modules", tint = BeeYellow)
                 }
             }
         }
 
-        // Settings panel (collapsible)
-        if (showSettings) {
+        // ═══════════════════════════════════════
+        // GPS OVERLAY (top-right)
+        // ═══════════════════════════════════════
+        if (visionState.gpsOverlay && gpsData.latitude != 0.0) {
             Card(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 70.dp, start = 12.dp, end = 12.dp),
-                colors = CardDefaults.cardColors(containerColor = BeeBlack.copy(alpha = 0.9f)),
-                shape = RoundedCornerShape(14.dp)
+                    .align(Alignment.TopEnd)
+                    .padding(top = 72.dp, end = 8.dp),
+                colors = CardDefaults.cardColors(containerColor = BeeBlack.copy(alpha = 0.7f)),
+                shape = RoundedCornerShape(8.dp)
             ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Text("CONFIGURACIÓN LIVE", fontSize = 11.sp, color = BeeYellow,
+                Column(modifier = Modifier.padding(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.LocationOn, "GPS", tint = Color(0xFF4CAF50), modifier = Modifier.size(12.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(gpsData.coordsShort, fontSize = 9.sp, color = Color(0xFF4CAF50))
+                    }
+                    if (gpsData.speed > 0.5f) {
+                        Text("${"%.0f".format(gpsData.speedKmh)} km/h ${gpsData.bearingCardinal}",
+                            fontSize = 10.sp, color = BeeWhite, fontWeight = FontWeight.Bold)
+                    }
+                    if (gpsData.address.isNotBlank()) {
+                        Text(gpsData.address, fontSize = 8.sp, color = BeeGray,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.widthIn(max = 120.dp))
+                    }
+                }
+            }
+        }
+
+        // ═══════════════════════════════════════
+        // DASHCAM HUD (top-left under header)
+        // ═══════════════════════════════════════
+        if (visionState.dashcamMode) {
+            Card(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(top = 72.dp, start = 8.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFF44336).copy(alpha = 0.7f)),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Pulsing red dot
+                    Surface(
+                        color = Color.White,
+                        shape = CircleShape,
+                        modifier = Modifier.size(8.dp)
+                    ) {}
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("DASHCAM", fontSize = 10.sp, color = BeeWhite, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("${dashcamLogger.entryCount} frames", fontSize = 9.sp, color = BeeWhite.copy(alpha = 0.8f))
+                }
+            }
+        }
+
+        // ═══════════════════════════════════════
+        // MODULES PANEL (slide-in right)
+        // ═══════════════════════════════════════
+        AnimatedVisibility(
+            visible = showModules,
+            enter = slideInHorizontally(initialOffsetX = { it }),
+            exit = slideOutHorizontally(targetOffsetX = { it }),
+            modifier = Modifier.align(Alignment.CenterEnd)
+        ) {
+            Card(
+                modifier = Modifier
+                    .width(220.dp)
+                    .fillMaxHeight()
+                    .padding(vertical = 60.dp),
+                colors = CardDefaults.cardColors(containerColor = BeeBlack.copy(alpha = 0.92f)),
+                shape = RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .padding(12.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Text("MODULOS", fontSize = 12.sp, color = BeeYellow,
                         fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Activa/desactiva cada modulo", fontSize = 10.sp, color = BeeGray)
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Toggle rows
+                    ModuleToggle("GPS Overlay", Icons.Filled.LocationOn,
+                        visionState.gpsOverlay, Color(0xFF4CAF50)) {
+                        visionState = visionState.copy(gpsOverlay = it)
+                    }
+                    ModuleToggle("Voz Narracion", Icons.Filled.RecordVoiceOver,
+                        visionState.voiceNarration, Color(0xFF2196F3)) {
+                        visionState = visionState.copy(voiceNarration = it)
+                    }
+                    ModuleToggle("Tap-to-Focus", Icons.Filled.CenterFocusStrong,
+                        visionState.tapToFocus, Color(0xFF9C27B0)) {
+                        visionState = visionState.copy(tapToFocus = it)
+                    }
+                    ModuleToggle("AR Overlay", Icons.Filled.Visibility,
+                        visionState.arTextOverlay, Color(0xFF00BCD4)) {
+                        visionState = visionState.copy(arTextOverlay = it)
+                    }
+                    ModuleToggle("Grabar Video", Icons.Filled.Videocam,
+                        visionState.videoRecording, Color(0xFFE91E63)) {
+                        visionState = visionState.copy(videoRecording = it)
+                        if (it) Toast.makeText(context, "Video: proximamente", Toast.LENGTH_SHORT).show()
+                    }
+                    ModuleToggle("Dashcam", Icons.Filled.DirectionsCar,
+                        visionState.dashcamMode, Color(0xFFF44336)) {
+                        visionState = visionState.copy(dashcamMode = it)
+                        // Also enable GPS if dashcam
+                        if (it) visionState = visionState.copy(gpsOverlay = true)
+                    }
+                    ModuleToggle("Agente Fondo", Icons.Filled.SmartToy,
+                        visionState.backgroundAgent, Color(0xFFFF9800)) {
+                        visionState = visionState.copy(backgroundAgent = it)
+                    }
+
+                    // Background agent prompt
+                    if (visionState.backgroundAgent) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        HorizontalDivider(color = BeeGray.copy(alpha = 0.3f))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("INSTRUCCION AGENTE", fontSize = 10.sp, color = BeeYellow,
+                            fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = visionState.backgroundAgentPrompt,
+                            onValueChange = { visionState = visionState.copy(backgroundAgentPrompt = it) },
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 3,
+                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = BeeWhite),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = BeeYellow,
+                                unfocusedBorderColor = BeeGray.copy(alpha = 0.3f),
+                                cursorColor = BeeYellow
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        // ═══════════════════════════════════════
+        // SETTINGS PANEL (slide-in left)
+        // ═══════════════════════════════════════
+        AnimatedVisibility(
+            visible = showSettings,
+            enter = slideInHorizontally(initialOffsetX = { -it }),
+            exit = slideOutHorizontally(targetOffsetX = { -it }),
+            modifier = Modifier.align(Alignment.CenterStart)
+        ) {
+            Card(
+                modifier = Modifier
+                    .width(240.dp)
+                    .fillMaxHeight()
+                    .padding(vertical = 60.dp),
+                colors = CardDefaults.cardColors(containerColor = BeeBlack.copy(alpha = 0.92f)),
+                shape = RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .padding(12.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Text("CONFIGURACION", fontSize = 12.sp, color = BeeYellow,
+                        fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     // Model selector
                     Text("Modelo", fontSize = 11.sp, color = BeeGray)
+                    Spacer(modifier = Modifier.height(4.dp))
                     LlmFactory.VISION_MODELS.forEach { model ->
                         val isSelected = selectedModel == model.id
                         Surface(
@@ -290,12 +553,12 @@ fun LiveVisionScreen(
                                 Text(model.name, fontSize = 12.sp,
                                     color = if (isSelected) BeeYellow else Color(0xFFE0E0E0))
                                 Spacer(modifier = Modifier.weight(1f))
-                                if (isSelected) Icon(Icons.Filled.CheckCircle, "Selected", tint = BeeYellow, modifier = Modifier.size(14.dp))
+                                if (isSelected) Icon(Icons.Filled.CheckCircle, "Sel", tint = BeeYellow, modifier = Modifier.size(14.dp))
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     // Interval
                     Text("Intervalo: ${intervalSeconds}s", fontSize = 11.sp, color = BeeGray)
@@ -304,47 +567,88 @@ fun LiveVisionScreen(
                         onValueChange = { intervalSeconds = it.toInt() },
                         valueRange = 2f..10f,
                         steps = 7,
-                        colors = SliderDefaults.colors(
-                            thumbColor = BeeYellow,
-                            activeTrackColor = BeeYellow
-                        )
+                        colors = SliderDefaults.colors(thumbColor = BeeYellow, activeTrackColor = BeeYellow)
                     )
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Rápido (2s)", fontSize = 9.sp, color = BeeGray)
-                        Text("Lento (10s)", fontSize = 9.sp, color = BeeGray)
-                    }
 
                     Spacer(modifier = Modifier.height(8.dp))
 
                     // Custom prompt
+                    Text("Instruccion al modelo", fontSize = 11.sp, color = BeeGray)
+                    Spacer(modifier = Modifier.height(4.dp))
                     OutlinedTextField(
                         value = customPrompt,
                         onValueChange = { customPrompt = it },
-                        label = { Text("Instrucción al modelo") },
                         modifier = Modifier.fillMaxWidth(),
-                        maxLines = 2,
+                        maxLines = 3,
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = BeeWhite),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = BeeYellow,
-                            unfocusedBorderColor = Color(0xFF333355),
-                            focusedTextColor = BeeWhite,
-                            unfocusedTextColor = BeeWhite,
-                            cursorColor = BeeYellow,
-                            focusedLabelColor = BeeYellow,
-                            unfocusedLabelColor = BeeGrayLight
+                            unfocusedBorderColor = BeeGray.copy(alpha = 0.3f),
+                            cursorColor = BeeYellow
                         )
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Zoom indicator
+                    Text("Zoom: ${"%.1f".format(zoomLevel)}x", fontSize = 11.sp, color = BeeGray)
+                    Slider(
+                        value = zoomLevel,
+                        onValueChange = {
+                            zoomLevel = it
+                            camera?.cameraControl?.setZoomRatio(it)
+                        },
+                        valueRange = 1f..5f,
+                        colors = SliderDefaults.colors(thumbColor = BeeYellow, activeTrackColor = BeeYellow)
                     )
                 }
             }
         }
 
-        // Result overlay (bottom)
+        // ═══════════════════════════════════════
+        // RESULT OVERLAY (bottom)
+        // ═══════════════════════════════════════
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
         ) {
-            // Live result text
-            if (liveResult.isNotBlank()) {
+            // AR overlay mode: text on camera
+            if (visionState.arTextOverlay && liveResult.isNotBlank()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                        .background(BeeBlack.copy(alpha = 0.55f), RoundedCornerShape(12.dp))
+                        .padding(12.dp)
+                ) {
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.Visibility, "AR", tint = Color(0xFF00BCD4), modifier = Modifier.size(12.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("VISION AI", fontSize = 9.sp, color = Color(0xFF00BCD4),
+                                fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                            Spacer(modifier = Modifier.weight(1f))
+                            if (isProcessing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(12.dp),
+                                    color = BeeYellow, strokeWidth = 2.dp
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            liveResult,
+                            fontSize = 13.sp,
+                            color = Color.White.copy(alpha = 0.95f),
+                            lineHeight = 18.sp,
+                            maxLines = 5,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            } else if (!visionState.arTextOverlay && liveResult.isNotBlank()) {
+                // Classic card mode
                 Card(
                     colors = CardDefaults.cardColors(containerColor = BeeBlack.copy(alpha = 0.85f)),
                     shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
@@ -365,13 +669,8 @@ fun LiveVisionScreen(
                             }
                         }
                         Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            liveResult,
-                            fontSize = 14.sp,
-                            color = Color(0xFFE0E0E0),
-                            lineHeight = 20.sp,
-                            maxLines = 6
-                        )
+                        Text(liveResult, fontSize = 14.sp, color = Color(0xFFE0E0E0),
+                            lineHeight = 20.sp, maxLines = 6)
                     }
                 }
             }
@@ -381,66 +680,16 @@ fun LiveVisionScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(BeeBlack.copy(alpha = 0.9f))
-                    .padding(16.dp),
+                    .padding(12.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Single capture
                 OutlinedButton(
-                    onClick = {
-                        val capture = imageCapture ?: return@OutlinedButton
-                        isProcessing = true
-                        liveResult = "[SNAP] Capturando..."
-
-                        capture.takePicture(
-                            cameraExecutor,
-                            object : ImageCapture.OnImageCapturedCallback() {
-                                override fun onCaptureSuccess(imageProxy: ImageProxy) {
-                                    try {
-                                        val bitmap = imageProxy.toBitmap()
-                                        val scale = minOf(800f / bitmap.width, 800f / bitmap.height, 1f)
-                                        val resized = Bitmap.createScaledBitmap(bitmap,
-                                            (bitmap.width * scale).toInt(), (bitmap.height * scale).toInt(), true)
-                                        val baos = ByteArrayOutputStream()
-                                        resized.compress(Bitmap.CompressFormat.JPEG, 85, baos)
-                                        val b64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
-
-                                        Thread {
-                                            try {
-                                                val currentProviderType = viewModel.currentProvider.value
-                                                val apiKey = when (currentProviderType) {
-                                                    "openrouter" -> com.beemovil.security.SecurePrefs.get(context).getString("openrouter_api_key", "") ?: ""
-                                                    "ollama" -> com.beemovil.security.SecurePrefs.get(context).getString("ollama_api_key", "") ?: ""
-                                                    else -> ""
-                                                }
-                                                val provider = LlmFactory.createProvider(
-                                                    providerType = currentProviderType,
-                                                    apiKey = apiKey,
-                                                    model = selectedModel
-                                                )
-                                                val msgs = listOf(ChatMessage(role = "user", content = customPrompt, images = listOf(b64)))
-                                                val response = provider.complete(msgs, emptyList())
-                                                liveResult = response.text ?: ""
-                                                frameCount++
-                                            } catch (e: Exception) {
-                                                liveResult = "[ERR] ${e.message?.take(80)}"
-                                            }
-                                            isProcessing = false
-                                        }.start()
-                                    } catch (e: Exception) {
-                                        liveResult = "[ERR] ${e.message}"
-                                        isProcessing = false
-                                    }
-                                    imageProxy.close()
-                                }
-
-                                override fun onError(exception: ImageCaptureException) {
-                                    liveResult = "[ERR] ${exception.message}"
-                                    isProcessing = false
-                                }
-                            }
-                        )
-                    },
+                    onClick = { triggerSingleCapture(imageCapture, cameraExecutor, viewModel, context,
+                        selectedModel, customPrompt, visionState, gpsData, dgVoice, dashcamLogger,
+                        onResult = { liveResult = it; frameCount++ },
+                        onProcessing = { isProcessing = it }) },
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = BeeWhite),
                     shape = RoundedCornerShape(12.dp)
                 ) {
@@ -485,4 +734,168 @@ fun LiveVisionScreen(
             }
         }
     }
+}
+
+// ═══════════════════════════════════════
+// COMPOSABLES
+// ═══════════════════════════════════════
+
+@Composable
+private fun ModuleChip(label: String, color: Color) {
+    Surface(
+        color = color.copy(alpha = 0.3f),
+        shape = RoundedCornerShape(4.dp)
+    ) {
+        Text(label, fontSize = 8.sp, color = color, fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+    }
+}
+
+@Composable
+private fun ModuleToggle(
+    label: String,
+    icon: ImageVector,
+    checked: Boolean,
+    color: Color,
+    onToggle: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, label, tint = if (checked) color else BeeGray, modifier = Modifier.size(18.dp))
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(label, fontSize = 12.sp, color = if (checked) BeeWhite else BeeGray,
+            modifier = Modifier.weight(1f))
+        Switch(
+            checked = checked,
+            onCheckedChange = onToggle,
+            modifier = Modifier.height(24.dp),
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = BeeBlack,
+                checkedTrackColor = color,
+                uncheckedTrackColor = BeeGray.copy(alpha = 0.3f)
+            )
+        )
+    }
+}
+
+// ═══════════════════════════════════════
+// HELPER FUNCTIONS
+// ═══════════════════════════════════════
+
+private fun triggerSingleCapture(
+    imageCapture: ImageCapture?,
+    executor: java.util.concurrent.ExecutorService,
+    viewModel: ChatViewModel,
+    context: android.content.Context,
+    model: String,
+    prompt: String,
+    state: VisionProState,
+    gpsData: GpsData,
+    dgVoice: com.beemovil.voice.DeepgramVoiceManager?,
+    logger: DashcamLogger,
+    onResult: (String) -> Unit,
+    onProcessing: (Boolean) -> Unit
+) {
+    val capture = imageCapture ?: return
+    onProcessing(true)
+
+    capture.takePicture(
+        executor,
+        object : ImageCapture.OnImageCapturedCallback() {
+            override fun onCaptureSuccess(imageProxy: ImageProxy) {
+                try {
+                    val bitmap = imageProxy.toBitmap()
+                    val scale = minOf(800f / bitmap.width, 800f / bitmap.height, 1f)
+                    val resized = Bitmap.createScaledBitmap(bitmap,
+                        (bitmap.width * scale).toInt(), (bitmap.height * scale).toInt(), true)
+                    val baos = ByteArrayOutputStream()
+                    resized.compress(Bitmap.CompressFormat.JPEG, 85, baos)
+                    val b64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
+
+                    Thread {
+                        try {
+                            val currentProviderType = viewModel.currentProvider.value
+                            val apiKey = when (currentProviderType) {
+                                "openrouter" -> com.beemovil.security.SecurePrefs.get(context).getString("openrouter_api_key", "") ?: ""
+                                "ollama" -> com.beemovil.security.SecurePrefs.get(context).getString("ollama_api_key", "") ?: ""
+                                else -> ""
+                            }
+                            val fullPrompt = buildString {
+                                if ((state.gpsOverlay || state.dashcamMode) && gpsData.latitude != 0.0) {
+                                    appendLine(gpsData.toPromptContext())
+                                }
+                                append(prompt)
+                            }
+                            val provider = LlmFactory.createProvider(currentProviderType, apiKey, model)
+                            val msgs = listOf(ChatMessage(role = "user", content = fullPrompt, images = listOf(b64)))
+                            val response = provider.complete(msgs, emptyList())
+                            val result = response.text ?: ""
+                            onResult(result)
+
+                            if (state.voiceNarration && result.isNotBlank()) {
+                                dgVoice?.speak(text = result)
+                            }
+                        } catch (e: Exception) {
+                            onResult("[ERR] ${e.message?.take(80)}")
+                        }
+                        onProcessing(false)
+                    }.start()
+                } catch (e: Exception) {
+                    onResult("[ERR] ${e.message}")
+                    onProcessing(false)
+                }
+                imageProxy.close()
+            }
+
+            override fun onError(exception: ImageCaptureException) {
+                onResult("[ERR] ${exception.message}")
+                onProcessing(false)
+            }
+        }
+    )
+}
+
+private fun evaluateBackgroundAgent(
+    context: android.content.Context,
+    viewModel: ChatViewModel,
+    analysisResult: String,
+    agentPrompt: String
+) {
+    if (analysisResult.isBlank() || analysisResult.startsWith("[")) return
+
+    Thread {
+        try {
+            val currentProviderType = viewModel.currentProvider.value
+            val apiKey = when (currentProviderType) {
+                "openrouter" -> com.beemovil.security.SecurePrefs.get(context).getString("openrouter_api_key", "") ?: ""
+                "ollama" -> com.beemovil.security.SecurePrefs.get(context).getString("ollama_api_key", "") ?: ""
+                else -> ""
+            }
+            if (apiKey.isBlank() && currentProviderType != "local") return@Thread
+
+            val evalPrompt = """Basado en esta observacion de camara: "$analysisResult"
+                |
+                |Instruccion del usuario: "$agentPrompt"
+                |
+                |Si la observacion cumple la condicion, responde con ALERTA: [descripcion breve].
+                |Si no cumple, responde solo: OK""".trimMargin()
+
+            val provider = LlmFactory.createProvider(currentProviderType, apiKey, viewModel.currentModel.value)
+            val msgs = listOf(com.beemovil.llm.ChatMessage(role = "user", content = evalPrompt))
+            val response = provider.complete(msgs, emptyList())
+            val text = response.text ?: ""
+
+            if (text.contains("ALERTA", ignoreCase = true)) {
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    Toast.makeText(context, text.take(100), Toast.LENGTH_LONG).show()
+                }
+                // Also speak alert if voice is available
+                viewModel.deepgramVoiceManager?.speak(text = text.take(200))
+            }
+        } catch (_: Exception) {}
+    }.start()
 }
