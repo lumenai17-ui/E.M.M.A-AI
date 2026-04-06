@@ -225,6 +225,19 @@ fun DashboardScreen(
                         Modifier.weight(1f)
                     ) { viewModel.currentScreen.value = "file_explorer" }
                 }
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    HeroCard(
+                        Icons.Filled.AccountTree, "Workflows", "Flujos multi-agente",
+                        AccentTeal, listOf(Color(0xFF0A1A20), Color(0xFF1C1C2E)),
+                        Modifier.weight(1f)
+                    ) { viewModel.currentScreen.value = "workflows" }
+                    HeroCard(
+                        Icons.Filled.Storage, "Git", "Repos y código",
+                        Color(0xFFFF7043), listOf(Color(0xFF241410), Color(0xFF1C1C2E)),
+                        Modifier.weight(1f)
+                    ) { viewModel.currentScreen.value = "git_repos" }
+                }
             }
             Spacer(modifier = Modifier.height(28.dp))
         }

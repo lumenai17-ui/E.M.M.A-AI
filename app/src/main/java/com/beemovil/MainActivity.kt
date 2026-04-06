@@ -340,6 +340,12 @@ class MainActivity : ComponentActivity() {
                                     onBack = { viewModel.currentScreen.value = "dashboard" }
                                 )
                             }
+                            "workflows" -> {
+                                WorkflowScreen(
+                                    viewModel = viewModel,
+                                    onBack = { viewModel.currentScreen.value = "dashboard" }
+                                )
+                            }
                             "settings" -> {
                                 SettingsScreen(
                                     viewModel = viewModel,

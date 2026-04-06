@@ -58,6 +58,7 @@ class ChatViewModel : ViewModel() {
 
     private var agents = mutableMapOf<String, BeeAgent>()
     private var skills = mapOf<String, BeeSkill>()
+    fun getSkills(): Map<String, BeeSkill> = skills
     private var apiKeys = mutableMapOf<String, String>()
     private val mainHandler = Handler(Looper.getMainLooper())
 
