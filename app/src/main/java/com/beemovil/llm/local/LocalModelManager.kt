@@ -34,19 +34,19 @@ object LocalModelManager {
         LocalModel(
             id = "gemma4-e2b",
             name = "Gemma 4 E2B (Rápido)",
-            fileName = "gemma4-e2b-q4.bin",
-            downloadUrl = "https://huggingface.co/litert-community/gemma4-e2b/resolve/main/gemma4-e2b-q4.bin",
-            sizeBytes = 1_400_000_000L,
-            sizeDisplay = "~1.4 GB",
+            fileName = "gemma-4-E2B-it.litertlm",
+            downloadUrl = "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm",
+            sizeBytes = 2_580_000_000L,
+            sizeDisplay = "~2.6 GB",
             description = "Optimizado para velocidad. Ideal para chat general."
         ),
         LocalModel(
             id = "gemma4-e4b",
             name = "Gemma 4 E4B (Inteligente)",
-            fileName = "gemma4-e4b-q4.bin",
-            downloadUrl = "https://huggingface.co/litert-community/gemma4-e4b/resolve/main/gemma4-e4b-q4.bin",
-            sizeBytes = 2_600_000_000L,
-            sizeDisplay = "~2.6 GB",
+            fileName = "gemma-4-E4B-it.litertlm",
+            downloadUrl = "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm",
+            sizeBytes = 3_650_000_000L,
+            sizeDisplay = "~3.7 GB",
             description = "Mayor capacidad de razonamiento. Requiere más RAM."
         )
     )

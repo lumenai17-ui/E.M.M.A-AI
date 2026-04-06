@@ -101,9 +101,18 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ProviderChip("OpenRouter", "openrouter", selectedProvider) { selectedProvider = it }
-                    ProviderChip("Ollama Cloud", "ollama", selectedProvider) { selectedProvider = it }
-                    ProviderChip("📱 Local", "local", selectedProvider) { selectedProvider = it }
+                    ProviderChip("OpenRouter", "openrouter", selectedProvider) {
+                        selectedProvider = it
+                        selectedModel = LlmFactory.OPENROUTER.models.first().id
+                    }
+                    ProviderChip("Ollama Cloud", "ollama", selectedProvider) {
+                        selectedProvider = it
+                        selectedModel = LlmFactory.OLLAMA_CLOUD.models.first().id
+                    }
+                    ProviderChip("📱 Local", "local", selectedProvider) {
+                        selectedProvider = it
+                        selectedModel = LlmFactory.LOCAL.models.first().id
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -205,9 +214,7 @@ fun SettingsScreen(
 
                     Surface(
                         onClick = {
-                            if (selectedProvider != "local" || isDownloaded) {
-                                selectedModel = model.id
-                            }
+                            selectedModel = model.id
                         },
                         color = if (isSelected) BeeYellow.copy(alpha = 0.15f) else Color.Transparent,
                         shape = RoundedCornerShape(8.dp),

@@ -170,8 +170,8 @@ object LlmFactory {
         apiKey = "",
         supportsTools = true,
         models = listOf(
-            ModelOption("gemma4-e2b", "⚡ Gemma 4 E2B (Rápido, ~1.4GB)"),
-            ModelOption("gemma4-e4b", "🧠 Gemma 4 E4B (Inteligente, ~2.6GB)")
+            ModelOption("gemma4-e2b", "⚡ Gemma 4 E2B (Rápido, ~2.6GB)"),
+            ModelOption("gemma4-e4b", "🧠 Gemma 4 E4B (Inteligente, ~3.7GB)")
         )
     )
 
