@@ -93,6 +93,14 @@ class MainActivity : ComponentActivity() {
         try { skills["git"] = GitSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "GitSkill: ${e.message}") }
         try { skills["browser_agent"] = BrowserSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "BrowserSkill: ${e.message}") }
 
+        // Phase 18B-2: Multi-Agent Delegation
+        try {
+            skills["delegate_to_agent"] = DelegateSkill(
+                agentResolver = { agentId -> viewModel.resolveAgent(agentId) },
+                getAvailableAgents = { viewModel.getAvailableAgentConfigs() }
+            )
+        } catch (e: Throwable) { Log.e("BeeMovil", "DelegateSkill: ${e.message}") }
+
         // Load saved preferences
         val prefs = getSharedPreferences("beemovil", Context.MODE_PRIVATE)
         val orKey = prefs.getString("openrouter_api_key", "") ?: ""

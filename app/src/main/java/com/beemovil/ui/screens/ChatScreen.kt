@@ -411,22 +411,60 @@ fun MessageBubble(message: ChatUiMessage) {
             ) {
                 Column {
                     // Tool badges
+                    // Tool badges + delegation cards
                     if (message.toolsUsed.isNotEmpty()) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            modifier = Modifier.padding(bottom = 6.dp)
-                        ) {
-                            message.toolsUsed.forEach { tool ->
-                                Surface(
-                                    color = BeeYellow.copy(alpha = 0.2f),
-                                    shape = RoundedCornerShape(8.dp)
+                        val hasDelegation = message.toolsUsed.contains("delegate_to_agent")
+                        val regularTools = message.toolsUsed.filter { it != "delegate_to_agent" }
+
+                        // Delegation card (special visual)
+                        if (hasDelegation) {
+                            Surface(
+                                color = Color(0xFF1A1A3E),
+                                shape = RoundedCornerShape(10.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, BeeYellow.copy(alpha = 0.4f)),
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(
-                                        "🔧 $tool",
-                                        fontSize = 10.sp,
-                                        color = BeeYellow,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
+                                    Text("🔄", fontSize = 16.sp)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Column {
+                                        Text(
+                                            "Tarea delegada a agente especializado",
+                                            fontSize = 10.sp, color = BeeYellow,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        if (regularTools.isNotEmpty()) {
+                                            Text(
+                                                "Tools: ${regularTools.joinToString(", ")}",
+                                                fontSize = 9.sp, color = BeeGray
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Regular tool badges (excluding delegate)
+                        if (regularTools.isNotEmpty() && !hasDelegation) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.padding(bottom = 6.dp)
+                            ) {
+                                regularTools.forEach { tool ->
+                                    Surface(
+                                        color = BeeYellow.copy(alpha = 0.2f),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text(
+                                            "🔧 $tool",
+                                            fontSize = 10.sp,
+                                            color = BeeYellow,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
                                 }
                             }
                         }

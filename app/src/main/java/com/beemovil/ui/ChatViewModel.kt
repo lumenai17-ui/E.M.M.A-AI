@@ -137,6 +137,29 @@ class ChatViewModel : ViewModel() {
     }
 
     /**
+     * Resolve an agent by ID for delegation.
+     * Creates a FRESH agent instance (not cached) so delegated agents
+     * have clean conversation history.
+     */
+    fun resolveAgent(agentId: String): com.beemovil.agent.BeeAgent? {
+        val config = availableAgents.find { it.id == agentId } ?: return null
+        val apiKey = apiKeys[currentProvider.value] ?: ""
+        // Agent uses its own model if configured, else inherits global
+        val model = config.model.ifBlank { currentModel.value }
+        val provider = LlmFactory.createProvider(
+            providerType = currentProvider.value,
+            apiKey = apiKey,
+            model = model
+        )
+        return com.beemovil.agent.BeeAgent(config, provider, skills, memoryDB)
+    }
+
+    /** Get all agent configs (for DelegateSkill to list available agents) */
+    fun getAvailableAgentConfigs(): List<com.beemovil.agent.AgentConfig> {
+        return availableAgents.toList()
+    }
+
+    /**
      * Open a chat with a specific agent. Loads history from DB.
      */
     fun openAgentChat(agentId: String) {
