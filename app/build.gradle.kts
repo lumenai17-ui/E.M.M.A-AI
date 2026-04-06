@@ -80,6 +80,9 @@ dependencies {
     // HTTP (for OpenRouter API calls)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
+    // On-device LLM inference (Gemma 4 via MediaPipe GenAI)
+    implementation("com.google.mediapipe:tasks-genai:0.10.33")
+
     // JSON parsing — Android includes org.json natively, no extra dependency needed
 
     // Coroutines

@@ -163,6 +163,18 @@ object LlmFactory {
         )
     )
 
+    val LOCAL = ProviderConfig(
+        id = "local",
+        name = "📱 Local (Sin Internet)",
+        baseUrl = "",
+        apiKey = "",
+        supportsTools = true,
+        models = listOf(
+            ModelOption("gemma4-e2b", "⚡ Gemma 4 E2B (Rápido, ~1.4GB)"),
+            ModelOption("gemma4-e4b", "🧠 Gemma 4 E4B (Inteligente, ~2.6GB)")
+        )
+    )
+
     // Vision models list for CameraScreen
     val VISION_MODELS = listOf(
         ModelOption("gemma4:31b-cloud", "Gemma 4 31B (Recomendado)"),
@@ -193,6 +205,14 @@ object LlmFactory {
                 apiKey = apiKey,
                 model = model
             )
+            "local" -> {
+                val modelPath = com.beemovil.llm.local.LocalModelManager.getModelPath(model)
+                    ?: throw IllegalStateException("Modelo local '$model' no descargado. Ve a Settings → Modelo Local para descargarlo.")
+                com.beemovil.llm.local.LocalGemmaProvider(
+                    modelPath = modelPath,
+                    modelName = LOCAL.models.find { it.id == model }?.name ?: model
+                )
+            }
             else -> OpenAiCompatibleProvider(
                 apiKey = apiKey,
                 model = model,
@@ -202,3 +222,4 @@ object LlmFactory {
         }
     }
 }
+

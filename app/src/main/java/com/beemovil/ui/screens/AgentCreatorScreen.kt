@@ -163,10 +163,12 @@ fun AgentCreatorScreen(
                 Text("Modelos disponibles:", fontSize = 11.sp, color = BeeGray)
                 Spacer(modifier = Modifier.height(4.dp))
 
-                val models = if (viewModel.currentProvider.value == "openrouter")
-                    com.beemovil.llm.LlmFactory.OPENROUTER.models
-                else
-                    com.beemovil.llm.LlmFactory.OLLAMA_CLOUD.models
+                val models = when (viewModel.currentProvider.value) {
+                    "openrouter" -> com.beemovil.llm.LlmFactory.OPENROUTER.models
+                    "ollama" -> com.beemovil.llm.LlmFactory.OLLAMA_CLOUD.models
+                    "local" -> com.beemovil.llm.LlmFactory.LOCAL.models
+                    else -> com.beemovil.llm.LlmFactory.OPENROUTER.models
+                }
 
                 models.forEach { model ->
                     val isSelected = customModel == model.id

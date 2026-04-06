@@ -7,6 +7,9 @@ class BeeMovilApp : Application() {
     override fun onCreate() {
         super.onCreate()
 
+        // Set context for on-device LLM (MediaPipe needs it)
+        com.beemovil.llm.local.LocalGemmaProvider.appContext = applicationContext
+
         // Global crash handler — catch ANY unhandled exception
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->

@@ -103,6 +103,7 @@ fun SettingsScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ProviderChip("OpenRouter", "openrouter", selectedProvider) { selectedProvider = it }
                     ProviderChip("Ollama Cloud", "ollama", selectedProvider) { selectedProvider = it }
+                    ProviderChip("📱 Local", "local", selectedProvider) { selectedProvider = it }
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -172,13 +173,42 @@ fun SettingsScreen(
                 SectionTitle("MODELO LLM")
                 Spacer(modifier = Modifier.height(8.dp))
 
-                val models = if (selectedProvider == "openrouter") LlmFactory.OPENROUTER.models
-                    else LlmFactory.OLLAMA_CLOUD.models
+                val models = when (selectedProvider) {
+                    "openrouter" -> LlmFactory.OPENROUTER.models
+                    "ollama" -> LlmFactory.OLLAMA_CLOUD.models
+                    "local" -> LlmFactory.LOCAL.models
+                    else -> LlmFactory.OPENROUTER.models
+                }
+
+                if (selectedProvider == "local") {
+                    // Local model info
+                    Text(
+                        "📱 Modelos que corren EN TU TELÉFONO sin internet.",
+                        fontSize = 12.sp, color = BeeGray
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    val availableGB = remember {
+                        try { com.beemovil.llm.local.LocalModelManager.getAvailableStorageGB() } catch (_: Exception) { 0.0 }
+                    }
+                    Text(
+                        "💾 Espacio disponible: ${String.format("%.1f", availableGB)} GB",
+                        fontSize = 11.sp, color = if (availableGB > 2.0) Color(0xFF4CAF50) else Color(0xFFF44336)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
 
                 models.forEach { model ->
                     val isSelected = selectedModel == model.id
+                    val isDownloaded = if (selectedProvider == "local")
+                        com.beemovil.llm.local.LocalModelManager.isModelDownloaded(model.id) else true
+
                     Surface(
-                        onClick = { selectedModel = model.id },
+                        onClick = {
+                            if (selectedProvider != "local" || isDownloaded) {
+                                selectedModel = model.id
+                            }
+                        },
                         color = if (isSelected) BeeYellow.copy(alpha = 0.15f) else Color.Transparent,
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
@@ -187,14 +217,88 @@ fun SettingsScreen(
                             modifier = Modifier.padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(if (model.free) "🆓" else "💎", fontSize = 16.sp)
+                            Text(
+                                when {
+                                    selectedProvider == "local" && isDownloaded -> "✅"
+                                    selectedProvider == "local" -> "⬇️"
+                                    model.free -> "🆓"
+                                    else -> "💎"
+                                },
+                                fontSize = 16.sp
+                            )
                             Spacer(modifier = Modifier.width(8.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(model.name, color = if (isSelected) BeeYellow else Color(0xFFE0E0E0), fontSize = 14.sp)
-                                Text(model.id, color = BeeGray, fontSize = 10.sp)
+                                if (selectedProvider == "local") {
+                                    Text(
+                                        if (isDownloaded) "Listo para usar" else "Toca Descargar para usar",
+                                        color = if (isDownloaded) Color(0xFF4CAF50) else BeeGray,
+                                        fontSize = 10.sp
+                                    )
+                                } else {
+                                    Text(model.id, color = BeeGray, fontSize = 10.sp)
+                                }
                             }
-                            if (isSelected) Text("✓", color = BeeYellow, fontWeight = FontWeight.Bold)
+                            if (isSelected && (selectedProvider != "local" || isDownloaded)) {
+                                Text("✓", color = BeeYellow, fontWeight = FontWeight.Bold)
+                            }
                         }
+                    }
+                }
+
+                // Download button for local models
+                if (selectedProvider == "local") {
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    var downloadProgress by remember { mutableStateOf(-1f) }
+                    var downloadStatus by remember { mutableStateOf("") }
+
+                    val modelToDownload = LlmFactory.LOCAL.models.find { it.id == selectedModel }
+                    val isAlreadyDownloaded = modelToDownload?.let {
+                        com.beemovil.llm.local.LocalModelManager.isModelDownloaded(it.id)
+                    } ?: false
+
+                    if (!isAlreadyDownloaded && modelToDownload != null) {
+                        Button(
+                            onClick = {
+                                downloadProgress = 0f
+                                downloadStatus = "Iniciando descarga..."
+                                com.beemovil.llm.local.LocalModelManager.downloadModel(
+                                    modelId = modelToDownload.id,
+                                    onProgress = { downloaded, total ->
+                                        downloadProgress = if (total > 0) downloaded.toFloat() / total else 0f
+                                        downloadStatus = "${downloaded / 1_048_576} / ${total / 1_048_576} MB"
+                                    },
+                                    onComplete = { success, message ->
+                                        downloadProgress = if (success) 1f else -1f
+                                        downloadStatus = message
+                                    }
+                                )
+                            },
+                            enabled = downloadProgress < 0f || downloadProgress >= 1f,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF4CAF50)
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("⬇️ Descargar ${modelToDownload.name}", color = BeeWhite, fontSize = 13.sp)
+                        }
+
+                        if (downloadProgress in 0f..0.99f) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            LinearProgressIndicator(
+                                progress = { downloadProgress },
+                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)),
+                                color = BeeYellow,
+                                trackColor = BeeGray.copy(alpha = 0.3f)
+                            )
+                        }
+                    }
+
+                    if (downloadStatus.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(downloadStatus, fontSize = 11.sp, color = BeeGray)
                     }
                 }
             }
