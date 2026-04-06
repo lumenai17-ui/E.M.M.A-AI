@@ -5,12 +5,8 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
+import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,11 +18,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -45,22 +40,21 @@ import com.beemovil.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.*
 
-// iOS-inspired palette with high contrast
-private val Honey = Color(0xFFFFB300)
-private val HoneyLight = Color(0xFFFFD54F)
-private val HoneyGlow = Color(0xFFFFF8E1)
-private val CardBg = Color(0xFF1C1C2E)
-private val ScreenBg = Color(0xFF0E0E16)
-private val Border = Color(0xFF2E2E42)
-private val TextPrimary = Color(0xFFFFFFFF)       // Pure white — max readable
-private val TextSecondary = Color(0xFFAAAAAA)      // Visible gray
-private val TextTertiary = Color(0xFF777790)
-private val AccentGreen = Color(0xFF34C759)        // iOS green
-private val AccentBlue = Color(0xFF0A84FF)         // iOS blue
-private val AccentPink = Color(0xFFFF2D55)         // iOS pink
-private val AccentOrange = Color(0xFFFF9500)        // iOS orange
-private val AccentPurple = Color(0xFFBF5AF2)       // iOS purple
-private val AccentTeal = Color(0xFF5AC8FA)
+// ── Palette ─────────────────────────────────────
+private val Bg = Color(0xFF0A0A0C)
+private val CardBg = Color(0xFF161622)
+private val CardBorder = Color(0xFF222234)
+private val Gold = Color(0xFFF5A623)
+private val GoldDim = Color(0xFFD4850A)
+private val Green = Color(0xFF34C759)
+private val Blue = Color(0xFF0A84FF)
+private val Purple = Color(0xFFBF5AF2)
+private val Pink = Color(0xFFFF2D55)
+private val Orange = Color(0xFFFF9500)
+private val Teal = Color(0xFF5AC8FA)
+private val Txt = Color(0xFFFFFFFF)
+private val TxtSub = Color(0xFF9999AA)
+private val TxtMuted = Color(0xFF666680)
 
 @Composable
 fun DashboardScreen(
@@ -73,409 +67,394 @@ fun DashboardScreen(
 ) {
     val context = LocalContext.current
     val totalMessages = remember { mutableStateOf(0) }
-    val memoryCount = remember { mutableStateOf(0) }
     val recentChats = remember { mutableStateListOf<ChatHistoryDB.ConversationPreview>() }
     val batteryLevel = remember { mutableStateOf(getBatteryLevel(context)) }
 
+    // Read user name from prefs
+    val prefs = context.getSharedPreferences("beemovil", Context.MODE_PRIVATE)
+    val userName = remember { prefs.getString("user_display_name", null) }
+
     LaunchedEffect(Unit) {
         totalMessages.value = chatHistoryDB?.getTotalMessageCount() ?: 0
-        memoryCount.value = memoryDB?.getMemoryCount() ?: 0
         batteryLevel.value = getBatteryLevel(context)
         chatHistoryDB?.let { db ->
             recentChats.clear()
-            recentChats.addAll(db.getConversationPreviews().take(3))
+            recentChats.addAll(db.getConversationPreviews().take(5))
         }
     }
 
     val telegramStatus = viewModel.telegramBotStatus.value
-    val telegramName = viewModel.telegramBotName.value
-    val now = remember { SimpleDateFormat("EEEE, d 'de' MMMM", Locale("es")).format(Date()).replaceFirstChar { it.uppercase() } }
     val greeting = remember {
         val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
         when {
-            hour < 12 -> "Buenos días"
+            hour < 12 -> "Buenos dias"
             hour < 18 -> "Buenas tardes"
             else -> "Buenas noches"
         }
     }
 
-    // Animated pulse for status dot
-    val pulseAnim = rememberInfiniteTransition(label = "pulse")
-    val pulseScale by pulseAnim.animateFloat(
-        initialValue = 0.8f, targetValue = 1.3f,
+    // Heartbeat animation
+    val infiniteTransition = rememberInfiniteTransition(label = "heartbeat")
+    val heartbeatPhase by infiniteTransition.animateFloat(
+        initialValue = 0f, targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ), label = "pulseScale"
-    )
-    val pulseAlpha by pulseAnim.animateFloat(
-        initialValue = 0.6f, targetValue = 0.15f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ), label = "pulseAlpha"
+            animation = tween(2000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ), label = "phase"
     )
 
-    LazyColumn(
+    Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(ScreenBg),
-        contentPadding = PaddingValues(bottom = 48.dp)
+            .background(Bg)
+            .verticalScroll(rememberScrollState())
+            .statusBarsPadding()
     ) {
-        // ─── HEADER with Honeycomb Background ─────────
-        item {
-            Box(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                // Honeycomb background image
-                Image(
-                    painter = painterResource(id = R.drawable.bg_home_honeycomb),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxWidth().height(280.dp),
-                    contentScale = ContentScale.Crop,
-                    alpha = 0.3f
-                )
-                // Gradient overlay for readability
+        // ━━━━ TOP BAR (IG-style) ━━━━━━━━━━━━━━━━━━━━
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // App logo + name (left)
+            Image(
+                painter = painterResource(id = R.drawable.bee_agent_avatar),
+                contentDescription = "Bee-Movil",
+                modifier = Modifier.size(32.dp).clip(CircleShape),
+                contentScale = ContentScale.Crop
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(
+                "Bee-Movil",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                color = Txt
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            // Action icons (right) - IG style
+            IconButton(onClick = { viewModel.currentScreen.value = "conversations" }, modifier = Modifier.size(40.dp)) {
+                Icon(Icons.Outlined.Forum, "Chats", tint = Txt, modifier = Modifier.size(24.dp))
+            }
+            IconButton(onClick = onSettingsClick, modifier = Modifier.size(40.dp)) {
+                Icon(Icons.Outlined.Settings, "Settings", tint = Txt, modifier = Modifier.size(24.dp))
+            }
+        }
+
+        // ━━━━ GREETING + USER NAME ━━━━━━━━━━━━━━━━━━
+        Column(
+            modifier = Modifier.padding(horizontal = 24.dp).padding(bottom = 20.dp)
+        ) {
+            Text(
+                greeting + if (!userName.isNullOrBlank()) ", $userName" else "",
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = Txt,
+                lineHeight = 34.sp
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            val now = remember { SimpleDateFormat("EEEE d 'de' MMMM", Locale("es")).format(Date()).replaceFirstChar { it.uppercase() } }
+            Text(now, fontSize = 15.sp, color = TxtSub)
+
+            // AI-generated contextual insight
+            LaunchedEffect(Unit) {
+                if (viewModel.dashboardInsight.value.isBlank()) {
+                    viewModel.generateDashboardInsight()
+                }
+            }
+            val insight = viewModel.dashboardInsight.value
+            if (insight.isNotBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.AutoAwesome, "AI", tint = Gold, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        insight,
+                        fontSize = 14.sp,
+                        color = Gold.copy(alpha = 0.85f),
+                        fontWeight = FontWeight.Normal,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            } else if (viewModel.dashboardInsightLoading.value) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.AutoAwesome, "AI", tint = TxtMuted, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("...", fontSize = 14.sp, color = TxtMuted)
+                }
+            }
+        }
+
+        // ━━━━ AI STATUS CARD — Heartbeat Monitor ━━━━
+        Card(
+            colors = CardDefaults.cardColors(containerColor = CardBg),
+            shape = RoundedCornerShape(20.dp),
+            border = BorderStroke(1.dp, CardBorder),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                // Provider + Model row
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Status LED
+                    val isOnline = viewModel.hasApiKey()
+                    val statusColor = if (isOnline) Green else Pink
+                    Canvas(modifier = Modifier.size(10.dp)) {
+                        drawCircle(statusColor, radius = 5f)
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            viewModel.getProviderDisplayName(),
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Txt
+                        )
+                        Text(
+                            viewModel.currentModel.value.substringAfterLast("/").take(25),
+                            fontSize = 13.sp,
+                            color = TxtSub
+                        )
+                    }
+                    // Switch button
+                    Surface(
+                        onClick = onSettingsClick,
+                        color = Gold.copy(alpha = 0.12f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Outlined.SwapHoriz, "Switch", tint = Gold, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Cambiar", fontSize = 13.sp, color = Gold, fontWeight = FontWeight.Medium)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // ── Heartbeat Graph ──
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(280.dp)
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(
-                                    Color.Transparent,
-                                    ScreenBg.copy(alpha = 0.6f),
-                                    ScreenBg
-                                )
-                            )
-                        )
-                )
-                // Header content
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .statusBarsPadding()
-                        .padding(horizontal = 24.dp)
-                        .padding(top = 16.dp, bottom = 24.dp)
+                        .height(50.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF0D0D14))
                 ) {
-                    // Top bar
+                    val isActive = viewModel.hasApiKey()
+                    Canvas(modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 8.dp)) {
+                        val w = size.width
+                        val h = size.height
+                        val mid = h / 2
+                        val path = Path()
+
+                        // Draw heartbeat line
+                        val lineColor = if (isActive) Green else Pink.copy(alpha = 0.5f)
+                        val offset = heartbeatPhase * w * 0.3f
+
+                        path.moveTo(-offset, mid)
+                        var x = -offset
+                        while (x < w + 20f) {
+                            val segmentWidth = w * 0.15f
+                            // Flat line
+                            path.lineTo(x + segmentWidth * 0.4f, mid)
+                            // Small bump
+                            path.lineTo(x + segmentWidth * 0.45f, mid - h * 0.1f)
+                            path.lineTo(x + segmentWidth * 0.5f, mid)
+                            // Big spike up
+                            path.lineTo(x + segmentWidth * 0.55f, mid - h * 0.6f)
+                            // Big spike down
+                            path.lineTo(x + segmentWidth * 0.6f, mid + h * 0.3f)
+                            // Return
+                            path.lineTo(x + segmentWidth * 0.65f, mid)
+                            // Small bump
+                            path.lineTo(x + segmentWidth * 0.75f, mid - h * 0.15f)
+                            path.lineTo(x + segmentWidth * 0.8f, mid)
+                            // Flat
+                            path.lineTo(x + segmentWidth, mid)
+                            x += segmentWidth
+                        }
+                        drawPath(path, lineColor, style = Stroke(2.5f, cap = StrokeCap.Round))
+                    }
+
+                    // Health label
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Premium bee avatar with glow
-                        Box(contentAlignment = Alignment.Center) {
-                            // Glow ring
-                            val isActive = viewModel.hasApiKey()
-                            val glowColor = if (isActive) HoneyGold else AccentPink
-                            Canvas(modifier = Modifier.size(44.dp)) {
-                                drawCircle(
-                                    color = glowColor.copy(alpha = pulseAlpha),
-                                    radius = size.minDimension / 2 * pulseScale
-                                )
-                            }
-                            Image(
-                                painter = painterResource(id = R.drawable.bee_agent_avatar),
-                                contentDescription = "Bee-Movil",
-                                modifier = Modifier.size(38.dp).clip(CircleShape),
-                                contentScale = ContentScale.Crop
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Bee-Movil", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = TextPrimary)
-                            Text("$skillCount skills activos", fontSize = 11.sp, color = TextTertiary)
-                        }
-                        // Status indicator with animated pulse dot
-                        Surface(
-                            color = if (viewModel.hasApiKey()) AccentGreen.copy(alpha = 0.15f) else AccentPink.copy(alpha = 0.15f),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                // Animated pulse dot
-                                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(10.dp)) {
-                                    val dotColor = if (viewModel.hasApiKey()) AccentGreen else AccentPink
-                                    Canvas(modifier = Modifier.size(10.dp)) {
-                                        drawCircle(dotColor.copy(alpha = pulseAlpha), radius = 5f * pulseScale)
-                                        drawCircle(dotColor, radius = 3f)
-                                    }
-                                }
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    if (viewModel.hasApiKey()) "AI activa" else "Sin API",
-                                    fontSize = 10.sp, color = if (viewModel.hasApiKey()) AccentGreen else AccentPink,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(6.dp))
-                        IconButton(onClick = onSettingsClick, modifier = Modifier.size(36.dp)) {
-                            Icon(Icons.Outlined.Settings, "Settings", tint = TextTertiary, modifier = Modifier.size(20.dp))
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(28.dp))
-
-                    Text(greeting, fontSize = 15.sp, color = TextSecondary)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(now, fontWeight = FontWeight.Bold, fontSize = 30.sp, color = TextPrimary, lineHeight = 34.sp)
-                }
-            }
-        }
-
-        // ─── STATS ──────────────────────────────
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                StatCard("$skillCount", "Skills", Icons.Outlined.Build, Honey,
-                    minOf(skillCount / 40f, 1f), Modifier.weight(1f))
-                StatCard("${totalMessages.value}", "Mensajes", Icons.Outlined.ChatBubbleOutline, AccentGreen,
-                    minOf(totalMessages.value / 100f, 1f), Modifier.weight(1f))
-                StatCard("${memoryCount.value}", "Memorias", Icons.Outlined.Psychology, AccentPurple,
-                    minOf(memoryCount.value / 20f, 1f), Modifier.weight(1f))
-            }
-            Spacer(modifier = Modifier.height(28.dp))
-        }
-
-        // ─── HERO FEATURES ──────────────────────
-        item {
-            Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    HeroCard(
-                        Icons.Filled.SmartToy, "Chat AI", "Tu asistente inteligente",
-                        Honey, listOf(Color(0xFF242010), Color(0xFF1C1C2E)),
-                        Modifier.weight(1.3f)
-                    ) { onAgentClick("main") }
-                    HeroCard(
-                        Icons.Filled.Mic, "Voz", "Hands-free",
-                        AccentGreen, listOf(Color(0xFF102418), Color(0xFF1C1C2E)),
-                        Modifier.weight(0.7f)
-                    ) { viewModel.currentScreen.value = "voice_chat" }
-                }
-                Spacer(modifier = Modifier.height(12.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    HeroCard(
-                        Icons.Filled.CameraAlt, "Visión AI", "Gemma 4 · Analiza fotos",
-                        AccentPink, listOf(Color(0xFF241014), Color(0xFF1C1C2E)),
-                        Modifier.weight(1f)
-                    ) { viewModel.currentScreen.value = "camera" }
-                    HeroCard(
-                        Icons.Filled.Videocam, "Live", "Visión en vivo",
-                        AccentOrange, listOf(Color(0xFF241C10), Color(0xFF1C1C2E)),
-                        Modifier.weight(1f)
-                    ) { viewModel.currentScreen.value = "live_vision" }
-                }
-                Spacer(modifier = Modifier.height(12.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    HeroCard(
-                        Icons.Filled.Language, "Browser", "Navegador + Agente",
-                        Color(0xFF64B5F6), listOf(Color(0xFF101C24), Color(0xFF1C1C2E)),
-                        Modifier.weight(1f)
-                    ) { viewModel.currentScreen.value = "browser" }
-                    HeroCard(
-                        Icons.Filled.Folder, "Archivos", "Explorador de archivos",
-                        Color(0xFFCE93D8), listOf(Color(0xFF1C1024), Color(0xFF1C1C2E)),
-                        Modifier.weight(1f)
-                    ) { viewModel.currentScreen.value = "file_explorer" }
-                }
-                Spacer(modifier = Modifier.height(12.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    HeroCard(
-                        Icons.Filled.AccountTree, "Workflows", "Flujos multi-agente",
-                        AccentTeal, listOf(Color(0xFF0A1A20), Color(0xFF1C1C2E)),
-                        Modifier.weight(1f)
-                    ) { viewModel.currentScreen.value = "workflows" }
-                    HeroCard(
-                        Icons.Filled.Storage, "Git", "Repos y código",
-                        Color(0xFFFF7043), listOf(Color(0xFF241410), Color(0xFF1C1C2E)),
-                        Modifier.weight(1f)
-                    ) { viewModel.currentScreen.value = "git_repos" }
-                }
-            }
-            Spacer(modifier = Modifier.height(28.dp))
-        }
-
-        // ─── TOOLS ──────────────────────────────
-        item {
-            Section("Herramientas")
-            Spacer(modifier = Modifier.height(12.dp))
-        }
-
-        item {
-            Column(modifier = Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    ToolCard(Icons.Outlined.Email, "Correo", AccentBlue, Modifier.weight(1f)) { viewModel.currentScreen.value = "email_inbox" }
-                    ToolCard(Icons.Outlined.Search, "Investigar", AccentOrange, Modifier.weight(1f)) { viewModel.prefillAgentChat("main", "Investiga sobre: ") }
-                    ToolCard(Icons.Outlined.PictureAsPdf, "PDF", AccentPink, Modifier.weight(1f)) { viewModel.prefillAgentChat("main", "Hazme un PDF sobre: ") }
-                }
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    ToolCard(Icons.Outlined.CalendarMonth, "Agenda", AccentPurple, Modifier.weight(1f)) { viewModel.prefillAgentChat("main", "¿Qué tengo programado hoy?") }
-                    ToolCard(Icons.Outlined.Language, "Landing", AccentTeal, Modifier.weight(1f)) { viewModel.prefillAgentChat("main", "Crea una landing page para: ") }
-                    ToolCard(Icons.Outlined.TableChart, "Excel", AccentGreen, Modifier.weight(1f)) { viewModel.prefillAgentChat("main", "Hazme un spreadsheet de: ") }
-                }
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    ToolCard(Icons.Outlined.Storage, "Git", Color(0xFFFF7043), Modifier.weight(1f)) { viewModel.currentScreen.value = "git_repos" }
-                    ToolCard(Icons.Outlined.Code, "Code", Color(0xFFCE93D8), Modifier.weight(1f)) { viewModel.prefillAgentChat("main", "Ayúdame a escribir código en: ") }
-                    ToolCard(Icons.Outlined.Architecture, "Deploy", Color(0xFF4DD0E1), Modifier.weight(1f)) { viewModel.prefillAgentChat("main", "Quiero publicar: ") }
-                }
-            }
-            Spacer(modifier = Modifier.height(28.dp))
-        }
-
-        // ─── SISTEMA + PROVIDER SELECTOR ─────────
-        item {
-            Section("Sistema")
-            Spacer(modifier = Modifier.height(12.dp))
-        }
-
-        item {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = CardBg),
-                shape = RoundedCornerShape(20.dp),
-                border = BorderStroke(1.dp, Border),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         val bat = batteryLevel.value
-                        val batColor = when { bat > 60 -> AccentGreen; bat > 20 -> Honey; else -> AccentPink }
-                        Chip(Icons.Outlined.BatteryChargingFull, "${bat}%", batColor, Modifier.weight(1f))
-                        Chip(Icons.Outlined.Wifi, "Online", AccentGreen, Modifier.weight(1f))
-                        Chip(
-                            Icons.Outlined.Send,
-                            if (telegramStatus == "online") "TG" else "TG",
-                            if (telegramStatus == "online") AccentGreen else TextTertiary,
-                            Modifier.weight(1f)
-                        )
+                        val health = when {
+                            !viewModel.hasApiKey() -> "Offline"
+                            bat > 60 -> "Excelente"
+                            bat > 30 -> "Buena"
+                            else -> "Baja"
+                        }
+                        val healthColor = when {
+                            !viewModel.hasApiKey() -> Pink
+                            bat > 60 -> Green
+                            bat > 30 -> Orange
+                            else -> Pink
+                        }
+                        Icon(Icons.Filled.FavoriteBorder, "Health", tint = healthColor, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(health, fontSize = 11.sp, color = healthColor, fontWeight = FontWeight.SemiBold)
                     }
+                }
 
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(
-                        Brush.horizontalGradient(listOf(Color.Transparent, Border, Color.Transparent))
-                    ))
-                    Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
-                    // Provider quick selector
-                    Text("PROVEEDOR AI", fontSize = 10.sp, color = TextTertiary,
-                        fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    val currentProv = viewModel.currentProvider.value
-                    val providers = listOf(
-                        Triple("openrouter", "OpenRouter", AccentBlue),
-                        Triple("ollama", "Ollama", AccentPurple),
-                        Triple("local", "Local", AccentGreen)
+                // Quick stats row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    QuickStat(Icons.Outlined.Bolt, "$skillCount", "Skills", Gold)
+                    QuickStat(Icons.Outlined.ChatBubble, "${totalMessages.value}", "Chats", Blue)
+                    QuickStat(Icons.Outlined.Battery5Bar, "${batteryLevel.value}%", "Bateria", 
+                        if (batteryLevel.value > 60) Green else if (batteryLevel.value > 30) Orange else Pink)
+                    QuickStat(
+                        Icons.Outlined.Send, 
+                        if (telegramStatus == "online") "On" else "Off", 
+                        "Telegram",
+                        if (telegramStatus == "online") Green else TxtMuted
                     )
+                }
+            }
+        }
 
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        providers.forEach { (provId, provName, color) ->
-                            val isSelected = currentProv == provId
-                            Surface(
-                                onClick = {
-                                    val models = when (provId) {
-                                        "openrouter" -> com.beemovil.llm.LlmFactory.OPENROUTER.models
-                                        "ollama" -> com.beemovil.llm.LlmFactory.OLLAMA_CLOUD.models
-                                        "local" -> com.beemovil.llm.LlmFactory.LOCAL.models
-                                        else -> emptyList()
-                                    }
-                                    val firstModel = models.firstOrNull()?.id ?: ""
-                                    viewModel.switchProvider(provId, firstModel)
-                                },
-                                color = if (isSelected) color.copy(alpha = 0.2f) else Color.Transparent,
-                                shape = RoundedCornerShape(10.dp),
-                                border = if (isSelected) BorderStroke(1.dp, color) else BorderStroke(1.dp, Border),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(vertical = 10.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    Text(provName, fontSize = 11.sp,
-                                        color = if (isSelected) color else TextSecondary,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
-                                    if (isSelected) {
-                                        Text(
-                                            viewModel.currentModel.value.substringAfterLast("/").take(16),
-                                            fontSize = 9.sp, color = TextTertiary, maxLines = 1
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
+        Spacer(modifier = Modifier.height(28.dp))
 
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.Memory, "AI", tint = Honey, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(viewModel.getProviderDisplayName(), fontSize = 14.sp, color = TextPrimary, fontWeight = FontWeight.Medium)
-                        Spacer(modifier = Modifier.weight(1f))
-                        Surface(color = Honey.copy(alpha = 0.12f), shape = RoundedCornerShape(8.dp)) {
-                            Text("$skillCount activos", fontSize = 11.sp, color = Honey,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
-                        }
+        // ━━━━ AGENTS (IG Stories-style) ━━━━━━━━━━━━
+        Text(
+            "Agentes",
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+            color = Txt,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 0.dp)
+        )
+        Spacer(modifier = Modifier.height(14.dp))
+
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            viewModel.availableAgents.forEach { agent ->
+                item {
+                    AgentStory(
+                        icon = agentIconToMaterial(agent.icon),
+                        color = agentIconToColor(agent.icon),
+                        name = agent.name,
+                        onClick = { onAgentClick(agent.id) }
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(28.dp))
+
+        // ━━━━ QUICK ACTIONS (2x4 grid) ━━━━━━━━━━━━
+        Text(
+            "Acciones",
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+            color = Txt,
+            modifier = Modifier.padding(horizontal = 24.dp)
+        )
+        Spacer(modifier = Modifier.height(14.dp))
+
+        Column(modifier = Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ActionCard(Icons.Filled.SmartToy, "Chat AI", Gold, Modifier.weight(1f)) { onAgentClick("main") }
+                ActionCard(Icons.Filled.Mic, "Voz", Green, Modifier.weight(1f)) { viewModel.currentScreen.value = "voice_chat" }
+                ActionCard(Icons.Filled.CameraAlt, "Camara", Pink, Modifier.weight(1f)) { viewModel.currentScreen.value = "camera" }
+                ActionCard(Icons.Filled.Videocam, "Live", Orange, Modifier.weight(1f)) { viewModel.currentScreen.value = "live_vision" }
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ActionCard(Icons.Filled.Language, "Web", Blue, Modifier.weight(1f)) { viewModel.currentScreen.value = "browser" }
+                ActionCard(Icons.Filled.Email, "Correo", Teal, Modifier.weight(1f)) { viewModel.currentScreen.value = "email_inbox" }
+                ActionCard(Icons.Filled.Folder, "Archivos", Purple, Modifier.weight(1f)) { viewModel.currentScreen.value = "file_explorer" }
+                ActionCard(Icons.Filled.AccountTree, "Workflows", Color(0xFF4DD0E1), Modifier.weight(1f)) { viewModel.currentScreen.value = "workflows" }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(28.dp))
+
+        // ━━━━ TOOLS (quick prompts) ━━━━━━━━━━━━━━━
+        Text(
+            "Herramientas",
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+            color = Txt,
+            modifier = Modifier.padding(horizontal = 24.dp)
+        )
+        Spacer(modifier = Modifier.height(14.dp))
+
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            val tools = listOf(
+                Triple(Icons.Outlined.PictureAsPdf, "Crear PDF", "Hazme un PDF sobre: "),
+                Triple(Icons.Outlined.Search, "Investigar", "Investiga sobre: "),
+                Triple(Icons.Outlined.Web, "Landing Page", "Crea una landing page para: "),
+                Triple(Icons.Outlined.TableChart, "Excel", "Hazme un spreadsheet de: "),
+                Triple(Icons.Outlined.Code, "Codigo", "Ayudame a escribir codigo en: "),
+                Triple(Icons.Outlined.CalendarMonth, "Agenda", "Que tengo programado hoy?"),
+                Triple(Icons.Outlined.Architecture, "Deploy", "Quiero publicar: ")
+            )
+            tools.forEach { (icon, label, prompt) ->
+                item {
+                    ToolChip(icon, label) {
+                        viewModel.prefillAgentChat("main", prompt)
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(28.dp))
         }
 
-        // ─── RECENTS ────────────────────────────
+        Spacer(modifier = Modifier.height(28.dp))
+
+        // ━━━━ RECENT CONVERSATIONS ━━━━━━━━━━━━━━━
         if (recentChats.isNotEmpty()) {
-            item {
-                Section("Recientes")
-                Spacer(modifier = Modifier.height(12.dp))
-            }
+            Text(
+                "Recientes",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = Txt,
+                modifier = Modifier.padding(horizontal = 24.dp)
+            )
+            Spacer(modifier = Modifier.height(14.dp))
 
             recentChats.forEach { preview ->
-                item {
-                    RecentChat(preview.agentIcon, preview.agentName, preview.lastMessage,
-                        preview.lastTimestamp, preview.messageCount) { onAgentClick(preview.agentId) }
-                }
-            }
-
-            item { Spacer(modifier = Modifier.height(28.dp)) }
-        }
-
-        // ─── AGENTS ─────────────────────────────
-        item {
-            Section("Agentes")
-            Spacer(modifier = Modifier.height(12.dp))
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                viewModel.availableAgents.forEach { agent ->
-                    item {
-                        AgentPill(agent.icon, agent.name) { onAgentClick(agent.id) }
-                    }
-                }
+                RecentChatRow(
+                    icon = agentIconToMaterial(preview.agentIcon),
+                    iconColor = agentIconToColor(preview.agentIcon),
+                    agentName = preview.agentName,
+                    lastMessage = preview.lastMessage,
+                    timestamp = preview.lastTimestamp,
+                    messageCount = preview.messageCount,
+                    onClick = { onAgentClick(preview.agentId) }
+                )
             }
         }
 
         // Footer
-        item {
-            Spacer(modifier = Modifier.height(24.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically) {
-                Image(
-                    painter = painterResource(id = R.drawable.bee_logo), contentDescription = null,
-                    modifier = Modifier.size(12.dp).clip(CircleShape), contentScale = ContentScale.Crop
-                )
-                Spacer(modifier = Modifier.width(5.dp))
-                Text("Bee-Movil v4.3.0", fontSize = 10.sp, color = TextTertiary.copy(alpha = 0.5f))
-            }
-        }
+        Spacer(modifier = Modifier.height(32.dp))
+        Text(
+            "Bee-Movil v4.3.0",
+            fontSize = 12.sp,
+            color = TxtMuted.copy(alpha = 0.4f),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 80.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
     }
 }
 
-// ── Components ──────────────────────────────────
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// COMPONENTS
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 private fun getBatteryLevel(context: Context): Int {
     return try {
@@ -488,203 +467,150 @@ private fun getBatteryLevel(context: Context): Int {
 }
 
 @Composable
-private fun Section(title: String) {
-    Text(
-        title,
-        fontSize = 20.sp,
-        fontWeight = FontWeight.Bold,
-        color = TextPrimary,
-        modifier = Modifier.padding(horizontal = 24.dp)
-    )
-}
-
-@Composable
-private fun StatCard(value: String, label: String, icon: ImageVector, accent: Color, progress: Float, modifier: Modifier) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = CardBg),
-        shape = RoundedCornerShape(18.dp),
-        border = BorderStroke(0.5.dp, Border.copy(alpha = 0.6f)),
-        modifier = modifier
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp).fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                Canvas(modifier = Modifier.size(48.dp)) {
-                    drawArc(accent.copy(alpha = 0.12f), 135f, 270f, false,
-                        style = Stroke(4f, cap = StrokeCap.Round), size = Size(size.width, size.height))
-                    drawArc(accent, 135f, 270f * progress, false,
-                        style = Stroke(4f, cap = StrokeCap.Round), size = Size(size.width, size.height))
-                }
-                Text(value, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = TextPrimary)
-            }
-            Spacer(modifier = Modifier.height(6.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(icon, label, tint = accent.copy(alpha = 0.6f), modifier = Modifier.size(12.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(label, fontSize = 11.sp, color = TextSecondary)
-            }
-        }
+private fun QuickStat(icon: ImageVector, value: String, label: String, color: Color) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(icon, label, tint = color, modifier = Modifier.size(18.dp))
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(value, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Txt)
+        Text(label, fontSize = 11.sp, color = TxtMuted)
     }
 }
 
+/** IG Stories-style agent circle */
 @Composable
-private fun HeroCard(icon: ImageVector, title: String, subtitle: String, accent: Color,
-                     gradientColors: List<Color>, modifier: Modifier, onClick: () -> Unit) {
-    Card(
-        onClick = onClick,
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, accent.copy(alpha = 0.15f)),
-        modifier = modifier.height(100.dp)
+private fun AgentStory(icon: ImageVector, color: Color, name: String, onClick: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable(onClick = onClick).width(72.dp)
     ) {
+        // Ring + Icon
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Brush.linearGradient(gradientColors))
-                .padding(18.dp)
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.size(64.dp)
         ) {
-            Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        color = accent.copy(alpha = 0.18f),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(icon, title, tint = accent, modifier = Modifier.size(20.dp))
-                        }
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(title, fontWeight = FontWeight.Bold, fontSize = 17.sp, color = TextPrimary)
+            // Gradient ring (like IG stories)
+            Canvas(modifier = Modifier.size(64.dp)) {
+                drawCircle(
+                    brush = Brush.sweepGradient(listOf(Gold, color, Gold)),
+                    radius = size.minDimension / 2,
+                    style = Stroke(3f)
+                )
+            }
+            // Inner circle with icon
+            Surface(
+                color = color.copy(alpha = 0.12f),
+                shape = CircleShape,
+                modifier = Modifier.size(54.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(icon, name, tint = color, modifier = Modifier.size(26.dp))
                 }
-                Text(subtitle, fontSize = 12.sp, color = accent.copy(alpha = 0.7f))
             }
         }
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            name,
+            fontSize = 12.sp,
+            color = TxtSub,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            fontWeight = FontWeight.Medium
+        )
     }
 }
 
+/** Compact action card */
 @Composable
-private fun ToolCard(icon: ImageVector, label: String, accent: Color, modifier: Modifier, onClick: () -> Unit) {
+private fun ActionCard(icon: ImageVector, label: String, color: Color, modifier: Modifier, onClick: () -> Unit) {
     Card(
         onClick = onClick,
         colors = CardDefaults.cardColors(containerColor = CardBg),
-        shape = RoundedCornerShape(18.dp),
-        border = BorderStroke(0.5.dp, Border.copy(alpha = 0.5f)),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(0.5.dp, CardBorder),
         modifier = modifier
     ) {
         Column(
-            modifier = Modifier.padding(vertical = 16.dp).fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Surface(
-                color = accent.copy(alpha = 0.12f),
+                color = color.copy(alpha = 0.12f),
                 shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.size(44.dp)
+                modifier = Modifier.size(40.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(icon, label, tint = accent, modifier = Modifier.size(22.dp))
-                }
-            }
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(label, fontSize = 12.sp, color = TextSecondary, fontWeight = FontWeight.Medium)
-        }
-    }
-}
-
-@Composable
-private fun Chip(icon: ImageVector, label: String, color: Color, modifier: Modifier) {
-    Surface(
-        color = color.copy(alpha = 0.08f),
-        shape = RoundedCornerShape(12.dp),
-        modifier = modifier
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Icon(icon, label, tint = color, modifier = Modifier.size(15.dp))
-            Spacer(modifier = Modifier.width(5.dp))
-            Text(label, fontSize = 13.sp, color = color, fontWeight = FontWeight.SemiBold)
-        }
-    }
-}
-
-@Composable
-private fun RecentChat(agentIcon: String, agentName: String, lastMessage: String,
-                       timestamp: Long, messageCount: Int, onClick: () -> Unit) {
-    // Map emoji icons to Material Icons
-    val icon = agentIconToMaterial(agentIcon)
-    val iconColor = agentIconToColor(agentIcon)
-
-    Card(
-        onClick = onClick,
-        colors = CardDefaults.cardColors(containerColor = CardBg),
-        shape = RoundedCornerShape(18.dp),
-        border = BorderStroke(0.5.dp, Border.copy(alpha = 0.4f)),
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Surface(color = iconColor.copy(alpha = 0.12f), shape = CircleShape, modifier = Modifier.size(44.dp)) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(icon, agentName, tint = iconColor, modifier = Modifier.size(22.dp))
-                }
-            }
-            Spacer(modifier = Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(agentName, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = TextPrimary)
-                Spacer(modifier = Modifier.height(3.dp))
-                Text(lastMessage, fontSize = 13.sp, color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            Column(horizontalAlignment = Alignment.End) {
-                val diff = System.currentTimeMillis() - timestamp
-                val timeText = when {
-                    diff < 60_000 -> "ahora"; diff < 3600_000 -> "${diff / 60_000}m"
-                    diff < 86400_000 -> "${diff / 3600_000}h"; else -> "${diff / 86400_000}d"
-                }
-                Text(timeText, fontSize = 11.sp, color = TextTertiary)
-                if (messageCount > 0) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Surface(color = Honey.copy(alpha = 0.15f), shape = CircleShape) {
-                        Text("$messageCount", fontSize = 10.sp, color = Honey, fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp))
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun AgentPill(icon: String, name: String, onClick: () -> Unit) {
-    val matIcon = agentIconToMaterial(icon)
-    val matColor = agentIconToColor(icon)
-
-    Card(
-        onClick = onClick,
-        colors = CardDefaults.cardColors(containerColor = CardBg),
-        shape = RoundedCornerShape(18.dp),
-        border = BorderStroke(0.5.dp, Border.copy(alpha = 0.4f)),
-        modifier = Modifier.width(100.dp)
-    ) {
-        Column(modifier = Modifier.padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Surface(
-                color = matColor.copy(alpha = 0.12f),
-                shape = CircleShape,
-                modifier = Modifier.size(44.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(matIcon, name, tint = matColor, modifier = Modifier.size(22.dp))
+                    Icon(icon, label, tint = color, modifier = Modifier.size(22.dp))
                 }
             }
             Spacer(modifier = Modifier.height(8.dp))
-            Text(name, fontSize = 12.sp, color = TextSecondary, fontWeight = FontWeight.Medium,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(label, fontSize = 12.sp, color = TxtSub, fontWeight = FontWeight.Medium)
+        }
+    }
+}
+
+/** Scrollable tool chip */
+@Composable
+private fun ToolChip(icon: ImageVector, label: String, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        color = CardBg,
+        shape = RoundedCornerShape(24.dp),
+        border = BorderStroke(0.5.dp, CardBorder)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(icon, label, tint = Gold, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(label, fontSize = 14.sp, color = Txt, fontWeight = FontWeight.Medium)
+        }
+    }
+}
+
+/** Recent conversation row */
+@Composable
+private fun RecentChatRow(
+    icon: ImageVector, iconColor: Color, agentName: String,
+    lastMessage: String, timestamp: Long, messageCount: Int, onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 24.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Surface(color = iconColor.copy(alpha = 0.12f), shape = CircleShape, modifier = Modifier.size(48.dp)) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(icon, agentName, tint = iconColor, modifier = Modifier.size(24.dp))
+            }
+        }
+        Spacer(modifier = Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(agentName, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = Txt)
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(lastMessage, fontSize = 14.sp, color = TxtSub, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Column(horizontalAlignment = Alignment.End) {
+            val diff = System.currentTimeMillis() - timestamp
+            val timeText = when {
+                diff < 60_000 -> "ahora"
+                diff < 3600_000 -> "${diff / 60_000}m"
+                diff < 86400_000 -> "${diff / 3600_000}h"
+                else -> "${diff / 86400_000}d"
+            }
+            Text(timeText, fontSize = 12.sp, color = TxtMuted)
+            if (messageCount > 0) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Surface(color = Gold, shape = CircleShape) {
+                    Text(
+                        "$messageCount", fontSize = 11.sp, color = Color.Black,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                    )
+                }
+            }
         }
     }
 }
@@ -692,33 +618,33 @@ private fun AgentPill(icon: String, name: String, onClick: () -> Unit) {
 // ── Emoji to Material Icon Mapping ──────────────
 private fun agentIconToMaterial(emoji: String): ImageVector {
     return when (emoji) {
-        "\uD83D\uDC1D" -> Icons.Filled.SmartToy      // bee -> AI bot
-        "\uD83D\uDCBC" -> Icons.Filled.Work           // briefcase -> work
-        "\uD83D\uDCC5" -> Icons.Filled.CalendarMonth  // calendar
-        "\uD83C\uDFA8" -> Icons.Filled.Palette        // art palette
-        "\uD83D\uDD0D" -> Icons.Filled.Search         // magnifier
-        "\uD83D\uDCE7" -> Icons.Filled.Email          // email
-        "\u2699\uFE0F" -> Icons.Filled.Settings        // gear
-        "\uD83E\uDD16" -> Icons.Filled.SmartToy       // robot
-        "\uD83D\uDCCA" -> Icons.Filled.Analytics      // chart
-        "\uD83C\uDF10" -> Icons.Filled.Language       // globe
-        "\uD83D\uDCF7" -> Icons.Filled.CameraAlt     // camera
-        "\uD83D\uDCC4" -> Icons.Filled.Description   // document
-        else -> Icons.Filled.SmartToy                  // default: AI bot
+        "\uD83D\uDC1D" -> Icons.Filled.SmartToy
+        "\uD83D\uDCBC" -> Icons.Filled.Work
+        "\uD83D\uDCC5" -> Icons.Filled.CalendarMonth
+        "\uD83C\uDFA8" -> Icons.Filled.Palette
+        "\uD83D\uDD0D" -> Icons.Filled.Search
+        "\uD83D\uDCE7" -> Icons.Filled.Email
+        "\u2699\uFE0F" -> Icons.Filled.Settings
+        "\uD83E\uDD16" -> Icons.Filled.SmartToy
+        "\uD83D\uDCCA" -> Icons.Filled.Analytics
+        "\uD83C\uDF10" -> Icons.Filled.Language
+        "\uD83D\uDCF7" -> Icons.Filled.CameraAlt
+        "\uD83D\uDCC4" -> Icons.Filled.Description
+        else -> Icons.Filled.SmartToy
     }
 }
 
 private fun agentIconToColor(emoji: String): Color {
     return when (emoji) {
-        "\uD83D\uDC1D" -> HoneyGold                  // bee -> gold
-        "\uD83D\uDCBC" -> AccentBlue                   // briefcase -> blue
-        "\uD83D\uDCC5" -> AccentGreen                  // calendar -> green
-        "\uD83C\uDFA8" -> AccentPurple                 // art -> purple
-        "\uD83D\uDD0D" -> AccentOrange                 // search -> orange
-        "\uD83D\uDCE7" -> AccentBlue                   // email -> blue
-        "\u2699\uFE0F" -> TextGrayLight                // gear -> gray
-        "\uD83E\uDD16" -> AccentCyan                   // robot -> cyan
-        "\uD83D\uDCCA" -> AccentTeal                   // chart -> teal
-        else -> HoneyGold                              // default gold
+        "\uD83D\uDC1D" -> Gold
+        "\uD83D\uDCBC" -> Blue
+        "\uD83D\uDCC5" -> Green
+        "\uD83C\uDFA8" -> Purple
+        "\uD83D\uDD0D" -> Orange
+        "\uD83D\uDCE7" -> Blue
+        "\u2699\uFE0F" -> TxtSub
+        "\uD83E\uDD16" -> Teal
+        "\uD83D\uDCCA" -> Teal
+        else -> Gold
     }
 }

@@ -10,6 +10,9 @@ import android.util.Log
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import com.beemovil.agent.AgentConfig
 import com.beemovil.agent.BeeAgent
 import com.beemovil.agent.DefaultAgents
@@ -77,6 +80,10 @@ class ChatViewModel : ViewModel() {
     var voiceManager: com.beemovil.skills.VoiceInputManager? = null
     val isRecording = mutableStateOf(false)
 
+    // Dashboard AI insight (dynamic, context-aware)
+    val dashboardInsight = mutableStateOf("")
+    val dashboardInsightLoading = mutableStateOf(false)
+
     fun toggleVoiceInput(onText: (String) -> Unit) {
         val vm = voiceManager ?: return
         if (isRecording.value) {
@@ -122,8 +129,97 @@ class ChatViewModel : ViewModel() {
     fun getProviderDisplayName(): String = when (currentProvider.value) {
         "openrouter" -> "OpenRouter"
         "ollama" -> "Ollama Cloud"
-        "local" -> "📱 Local (Gemma 4)"
+        "local" -> "Local (Gemma 4)"
         else -> currentProvider.value
+    }
+
+    /**
+     * Generate a contextual AI insight for the dashboard.
+     * Pulls from: time of day, recent memories, calendar, random context.
+     */
+    fun generateDashboardInsight() {
+        if (dashboardInsightLoading.value) return
+        dashboardInsightLoading.value = true
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Build context from available data
+                val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+                val timeContext = when {
+                    hour < 6 -> "Es de madrugada"
+                    hour < 12 -> "Es por la manana"
+                    hour < 18 -> "Es por la tarde"
+                    else -> "Es de noche"
+                }
+
+                // Get recent memories for context
+                val recentMemories = try {
+                    memoryDB?.getAllMemories()?.takeLast(3)?.joinToString("; ") { it.content.take(60) } ?: ""
+                } catch (_: Exception) { "" }
+
+                // Get today's calendar events if available
+                val calendarContext = try {
+                    val calSkill = skills["read_calendar"]
+                    if (calSkill != null) {
+                        val result = calSkill.execute(org.json.JSONObject().apply {
+                            put("days", 1)
+                        }).toString()
+                        if (result.length < 200) result else result.take(200)
+                    } else ""
+                } catch (_: Exception) { "" }
+
+                val prompt = buildString {
+                    append("Eres Bee-Movil, un asistente AI. ")
+                    append("Genera UNA frase corta (max 15 palabras) para el dashboard. ")
+                    append("$timeContext. ")
+                    if (recentMemories.isNotBlank()) append("Contexto del usuario: $recentMemories. ")
+                    if (calendarContext.isNotBlank()) append("Agenda hoy: $calendarContext. ")
+                    append("Puede ser: un dato curioso, un tip de productividad, algo motivacional, ")
+                    append("un recordatorio basado en el contexto, o un saludo creativo. ")
+                    append("Solo la frase, nada mas. Sin comillas.")
+                }
+
+                // Try to get AI response (quick, no tools)
+                val provider = currentProvider.value
+                val key = apiKeys[provider] ?: ""
+                if (key.isBlank() && provider != "local") {
+                    // Fallback: random tips
+                    val tips = listOf(
+                        "Tip: Puedes usar voz para dictar mensajes",
+                        "Preguntame lo que necesites, estoy listo",
+                        "Puedo crear PDFs, emails y landing pages",
+                        "Dime 'agenda' para revisar tu calendario",
+                        "Intenta: 'Investiga sobre tendencias de IA'",
+                        "Puedo analizar fotos con Vision AI",
+                        "Tu asistente inteligente, siempre disponible"
+                    )
+                    mainHandler.post { dashboardInsight.value = tips.random() }
+                    return@launch
+                }
+
+                val messages = listOf(
+                    com.beemovil.llm.ChatMessage("user", prompt)
+                )
+                val llmProvider = com.beemovil.llm.LlmFactory.createProvider(
+                    provider, key, currentModel.value
+                )
+                val response = llmProvider.complete(messages, emptyList())
+                val text = response.text?.trim()?.take(80) ?: ""
+                if (text.isNotBlank()) {
+                    mainHandler.post { dashboardInsight.value = text }
+                }
+            } catch (e: Exception) {
+                android.util.Log.w(TAG, "Dashboard insight failed: ${e.message}")
+                val fallbacks = listOf(
+                    "Listo para ayudarte",
+                    "Que necesitas hoy?",
+                    "Tu asistente AI, siempre contigo"
+                )
+                mainHandler.post { dashboardInsight.value = fallbacks.random() }
+            } finally {
+                mainHandler.post { dashboardInsightLoading.value = false }
+            }
+        }
     }
 
     fun updateApiKey(provider: String, key: String) {

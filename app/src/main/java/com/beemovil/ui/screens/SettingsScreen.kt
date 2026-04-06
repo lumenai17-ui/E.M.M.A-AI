@@ -97,6 +97,42 @@ fun SettingsScreen(
         ) {
 
             // ═══════════════════════════════════════
+            // PERFIL
+            // ═══════════════════════════════════════
+            SectionCard {
+                SectionTitle("TU NOMBRE")
+                Spacer(modifier = Modifier.height(8.dp))
+                var displayName by remember { mutableStateOf(prefs.getString("user_display_name", "") ?: "") }
+                OutlinedTextField(
+                    value = displayName,
+                    onValueChange = { displayName = it },
+                    placeholder = { Text("Como quieres que te llame?", color = Color.Gray) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = BeeYellow,
+                        unfocusedBorderColor = BeeGray,
+                        focusedTextColor = BeeWhite,
+                        unfocusedTextColor = BeeWhite,
+                        cursorColor = BeeYellow
+                    ),
+                    shape = RoundedCornerShape(10.dp)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        prefs.edit().putString("user_display_name", displayName.trim()).apply()
+                        Toast.makeText(context, "Nombre guardado", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = BeeGray.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Guardar", color = BeeWhite, fontSize = 13.sp)
+                }
+            }
+
+            // ═══════════════════════════════════════
             // PROVEEDOR AI
             // ═══════════════════════════════════════
             SectionCard {
@@ -112,7 +148,7 @@ fun SettingsScreen(
                         selectedProvider = it
                         selectedModel = LlmFactory.OLLAMA_CLOUD.models.first().id
                     }
-                    ProviderChip("📱 Local", "local", selectedProvider) {
+                    ProviderChip("Local", "local", selectedProvider) {
                         selectedProvider = it
                         selectedModel = LlmFactory.LOCAL.models.first().id
                     }
