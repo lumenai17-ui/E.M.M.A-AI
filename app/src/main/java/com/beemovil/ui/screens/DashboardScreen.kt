@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -21,6 +22,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -97,74 +99,130 @@ fun DashboardScreen(
         }
     }
 
+    // Animated pulse for status dot
+    val pulseAnim = rememberInfiniteTransition(label = "pulse")
+    val pulseScale by pulseAnim.animateFloat(
+        initialValue = 0.8f, targetValue = 1.3f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ), label = "pulseScale"
+    )
+    val pulseAlpha by pulseAnim.animateFloat(
+        initialValue = 0.6f, targetValue = 0.15f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ), label = "pulseAlpha"
+    )
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .background(ScreenBg),
         contentPadding = PaddingValues(bottom = 48.dp)
     ) {
-        // ─── HEADER ──────────────────────────────
+        // ─── HEADER with Honeycomb Background ─────────
         item {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(Color(0xFF161616), Color(0xFF111116), ScreenBg)
-                        )
-                    )
-                    .statusBarsPadding()
-                    .padding(horizontal = 24.dp)
-                    .padding(top = 16.dp, bottom = 24.dp)
+            Box(
+                modifier = Modifier.fillMaxWidth()
             ) {
-                // Top bar
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.bee_logo),
-                        contentDescription = "Bee-Movil",
-                        modifier = Modifier.size(38.dp).clip(CircleShape),
-                        contentScale = ContentScale.Crop
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Bee-Movil", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = TextPrimary)
-                        Text("$skillCount skills activos", fontSize = 11.sp, color = TextTertiary)
-                    }
-                    // Status indicator
-                    Surface(
-                        color = if (viewModel.hasApiKey()) AccentGreen.copy(alpha = 0.15f) else AccentPink.copy(alpha = 0.15f),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier.size(6.dp).clip(CircleShape)
-                                    .background(if (viewModel.hasApiKey()) AccentGreen else AccentPink)
+                // Honeycomb background image
+                Image(
+                    painter = painterResource(id = R.drawable.bg_home_honeycomb),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxWidth().height(280.dp),
+                    contentScale = ContentScale.Crop,
+                    alpha = 0.3f
+                )
+                // Gradient overlay for readability
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(280.dp)
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color.Transparent,
+                                    ScreenBg.copy(alpha = 0.6f),
+                                    ScreenBg
+                                )
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                if (viewModel.hasApiKey()) "AI activa" else "Sin API",
-                                fontSize = 10.sp, color = if (viewModel.hasApiKey()) AccentGreen else AccentPink,
-                                fontWeight = FontWeight.Medium
+                        )
+                )
+                // Header content
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(horizontal = 24.dp)
+                        .padding(top = 16.dp, bottom = 24.dp)
+                ) {
+                    // Top bar
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Premium bee avatar with glow
+                        Box(contentAlignment = Alignment.Center) {
+                            // Glow ring
+                            val isActive = viewModel.hasApiKey()
+                            val glowColor = if (isActive) HoneyGold else AccentPink
+                            Canvas(modifier = Modifier.size(44.dp)) {
+                                drawCircle(
+                                    color = glowColor.copy(alpha = pulseAlpha),
+                                    radius = size.minDimension / 2 * pulseScale
+                                )
+                            }
+                            Image(
+                                painter = painterResource(id = R.drawable.bee_agent_avatar),
+                                contentDescription = "Bee-Movil",
+                                modifier = Modifier.size(38.dp).clip(CircleShape),
+                                contentScale = ContentScale.Crop
                             )
                         }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Bee-Movil", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = TextPrimary)
+                            Text("$skillCount skills activos", fontSize = 11.sp, color = TextTertiary)
+                        }
+                        // Status indicator with animated pulse dot
+                        Surface(
+                            color = if (viewModel.hasApiKey()) AccentGreen.copy(alpha = 0.15f) else AccentPink.copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Animated pulse dot
+                                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(10.dp)) {
+                                    val dotColor = if (viewModel.hasApiKey()) AccentGreen else AccentPink
+                                    Canvas(modifier = Modifier.size(10.dp)) {
+                                        drawCircle(dotColor.copy(alpha = pulseAlpha), radius = 5f * pulseScale)
+                                        drawCircle(dotColor, radius = 3f)
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    if (viewModel.hasApiKey()) "AI activa" else "Sin API",
+                                    fontSize = 10.sp, color = if (viewModel.hasApiKey()) AccentGreen else AccentPink,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        IconButton(onClick = onSettingsClick, modifier = Modifier.size(36.dp)) {
+                            Icon(Icons.Outlined.Settings, "Settings", tint = TextTertiary, modifier = Modifier.size(20.dp))
+                        }
                     }
-                    Spacer(modifier = Modifier.width(6.dp))
-                    IconButton(onClick = onSettingsClick, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Outlined.Settings, "Settings", tint = TextTertiary, modifier = Modifier.size(20.dp))
-                    }
+
+                    Spacer(modifier = Modifier.height(28.dp))
+
+                    Text(greeting, fontSize = 15.sp, color = TextSecondary)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(now, fontWeight = FontWeight.Bold, fontSize = 30.sp, color = TextPrimary, lineHeight = 34.sp)
                 }
-
-                Spacer(modifier = Modifier.height(28.dp))
-
-                Text(greeting, fontSize = 15.sp, color = TextSecondary)
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(now, fontWeight = FontWeight.Bold, fontSize = 30.sp, color = TextPrimary, lineHeight = 34.sp)
             }
         }
 
@@ -311,7 +369,7 @@ fun DashboardScreen(
                     val providers = listOf(
                         Triple("openrouter", "OpenRouter", AccentBlue),
                         Triple("ollama", "Ollama", AccentPurple),
-                        Triple("local", "📱 Local", AccentGreen)
+                        Triple("local", "Local", AccentGreen)
                     )
 
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -411,7 +469,7 @@ fun DashboardScreen(
                     modifier = Modifier.size(12.dp).clip(CircleShape), contentScale = ContentScale.Crop
                 )
                 Spacer(modifier = Modifier.width(5.dp))
-                Text("Bee-Movil v4.2.7", fontSize = 10.sp, color = TextTertiary.copy(alpha = 0.5f))
+                Text("Bee-Movil v4.3.0", fontSize = 10.sp, color = TextTertiary.copy(alpha = 0.5f))
             }
         }
     }
@@ -557,6 +615,10 @@ private fun Chip(icon: ImageVector, label: String, color: Color, modifier: Modif
 @Composable
 private fun RecentChat(agentIcon: String, agentName: String, lastMessage: String,
                        timestamp: Long, messageCount: Int, onClick: () -> Unit) {
+    // Map emoji icons to Material Icons
+    val icon = agentIconToMaterial(agentIcon)
+    val iconColor = agentIconToColor(agentIcon)
+
     Card(
         onClick = onClick,
         colors = CardDefaults.cardColors(containerColor = CardBg),
@@ -568,8 +630,10 @@ private fun RecentChat(agentIcon: String, agentName: String, lastMessage: String
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Surface(color = Honey.copy(alpha = 0.1f), shape = CircleShape, modifier = Modifier.size(44.dp)) {
-                Box(contentAlignment = Alignment.Center) { Text(agentIcon, fontSize = 20.sp) }
+            Surface(color = iconColor.copy(alpha = 0.12f), shape = CircleShape, modifier = Modifier.size(44.dp)) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(icon, agentName, tint = iconColor, modifier = Modifier.size(22.dp))
+                }
             }
             Spacer(modifier = Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -598,6 +662,9 @@ private fun RecentChat(agentIcon: String, agentName: String, lastMessage: String
 
 @Composable
 private fun AgentPill(icon: String, name: String, onClick: () -> Unit) {
+    val matIcon = agentIconToMaterial(icon)
+    val matColor = agentIconToColor(icon)
+
     Card(
         onClick = onClick,
         colors = CardDefaults.cardColors(containerColor = CardBg),
@@ -606,12 +673,52 @@ private fun AgentPill(icon: String, name: String, onClick: () -> Unit) {
         modifier = Modifier.width(100.dp)
     ) {
         Column(modifier = Modifier.padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Surface(color = Honey.copy(alpha = 0.08f), shape = CircleShape, modifier = Modifier.size(44.dp)) {
-                Box(contentAlignment = Alignment.Center) { Text(icon, fontSize = 22.sp) }
+            Surface(
+                color = matColor.copy(alpha = 0.12f),
+                shape = CircleShape,
+                modifier = Modifier.size(44.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(matIcon, name, tint = matColor, modifier = Modifier.size(22.dp))
+                }
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(name, fontSize = 12.sp, color = TextSecondary, fontWeight = FontWeight.Medium,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
+    }
+}
+
+// ── Emoji to Material Icon Mapping ──────────────
+private fun agentIconToMaterial(emoji: String): ImageVector {
+    return when (emoji) {
+        "\uD83D\uDC1D" -> Icons.Filled.SmartToy      // bee -> AI bot
+        "\uD83D\uDCBC" -> Icons.Filled.Work           // briefcase -> work
+        "\uD83D\uDCC5" -> Icons.Filled.CalendarMonth  // calendar
+        "\uD83C\uDFA8" -> Icons.Filled.Palette        // art palette
+        "\uD83D\uDD0D" -> Icons.Filled.Search         // magnifier
+        "\uD83D\uDCE7" -> Icons.Filled.Email          // email
+        "\u2699\uFE0F" -> Icons.Filled.Settings        // gear
+        "\uD83E\uDD16" -> Icons.Filled.SmartToy       // robot
+        "\uD83D\uDCCA" -> Icons.Filled.Analytics      // chart
+        "\uD83C\uDF10" -> Icons.Filled.Language       // globe
+        "\uD83D\uDCF7" -> Icons.Filled.CameraAlt     // camera
+        "\uD83D\uDCC4" -> Icons.Filled.Description   // document
+        else -> Icons.Filled.SmartToy                  // default: AI bot
+    }
+}
+
+private fun agentIconToColor(emoji: String): Color {
+    return when (emoji) {
+        "\uD83D\uDC1D" -> HoneyGold                  // bee -> gold
+        "\uD83D\uDCBC" -> AccentBlue                   // briefcase -> blue
+        "\uD83D\uDCC5" -> AccentGreen                  // calendar -> green
+        "\uD83C\uDFA8" -> AccentPurple                 // art -> purple
+        "\uD83D\uDD0D" -> AccentOrange                 // search -> orange
+        "\uD83D\uDCE7" -> AccentBlue                   // email -> blue
+        "\u2699\uFE0F" -> TextGrayLight                // gear -> gray
+        "\uD83E\uDD16" -> AccentCyan                   // robot -> cyan
+        "\uD83D\uDCCA" -> AccentTeal                   // chart -> teal
+        else -> HoneyGold                              // default gold
     }
 }
