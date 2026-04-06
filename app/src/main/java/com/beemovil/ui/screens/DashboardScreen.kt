@@ -382,6 +382,12 @@ fun DashboardScreen(
                 ActionCard(Icons.Filled.Folder, "Archivos", Purple, Modifier.weight(1f)) { viewModel.currentScreen.value = "file_explorer" }
                 ActionCard(Icons.Filled.AccountTree, "Workflows", Color(0xFF4DD0E1), Modifier.weight(1f)) { viewModel.currentScreen.value = "workflows" }
             }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ActionCard(Icons.Filled.Notifications, "Notif", Color(0xFFFF6B6B), Modifier.weight(1f)) { viewModel.currentScreen.value = "notification_dashboard" }
+                ActionCard(Icons.Filled.TaskAlt, "Tareas", Gold, Modifier.weight(1f)) { viewModel.currentScreen.value = "tasks" }
+                Spacer(modifier = Modifier.weight(1f))
+                Spacer(modifier = Modifier.weight(1f))
+            }
         }
 
         Spacer(modifier = Modifier.height(28.dp))

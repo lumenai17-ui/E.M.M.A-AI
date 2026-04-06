@@ -16,13 +16,12 @@
 > Task :app:processDebugResources UP-TO-DATE
 
 > Task :app:compileDebugKotlin
-w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/components/PremiumBottomNav.kt:100:9 Variable 'textColor' is never used
 w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/screens/DashboardScreen.kt:66:5 Parameter 'memoryDB' is never used
 w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/screens/DashboardScreen.kt:323:40 'Send: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Outlined.Send
-w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/screens/TaskScreen.kt:54:5 Parameter 'viewModel' is never used
-w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/screens/TaskScreen.kt:57:9 Variable 'context' is never used
-w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/screens/TaskScreen.kt:95:60 'ViewList: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.ViewList
-w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/screens/TaskScreen.kt:503:9 Variable 'hasDueDate' is never used
+w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/screens/NotificationConfigScreen.kt:67:39 'ArrowBack: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.ArrowBack
+w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/screens/NotificationDashboardScreen.kt:52:5 Parameter 'viewModel' is never used
+w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/screens/NotificationDashboardScreen.kt:89:43 'ArrowBack: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.ArrowBack
+w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/screens/NotificationDashboardScreen.kt:103:96 'ViewList: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.ViewList
 [Incubating] Problems report is available at: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/build/reports/problems/problems-report.html
 
 Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.

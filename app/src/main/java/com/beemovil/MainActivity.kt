@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.beemovil.agent.CustomAgentDB
 import com.beemovil.memory.ChatHistoryDB
+import com.beemovil.memory.NotificationLogDB
 import com.beemovil.memory.TaskDB
 import com.beemovil.skills.*
 import com.beemovil.ui.ChatUiMessage
@@ -111,6 +112,10 @@ class MainActivity : ComponentActivity() {
                 getRegisteredAgents = { com.beemovil.a2a.RemoteAgentRegistry.getRegisteredAgents() }
             )
         } catch (e: Throwable) { Log.e("BeeMovil", "RemoteAgentSkill: ${e.message}") }
+
+        // Phase 19D: Notification Intelligence
+        val notifDB = NotificationLogDB(this)
+        try { skills["notification_query"] = NotificationQuerySkill(notifDB) } catch (e: Throwable) { Log.e("BeeMovil", "NotifQuerySkill: ${e.message}") }
 
         // Load saved preferences
         val prefs = getSharedPreferences("beemovil", Context.MODE_PRIVATE)
@@ -330,6 +335,20 @@ class MainActivity : ComponentActivity() {
                                 WorkflowScreen(
                                     viewModel = viewModel,
                                     onBack = { viewModel.currentScreen.value = "dashboard" }
+                                )
+                            }
+                            "notification_dashboard" -> {
+                                NotificationDashboardScreen(
+                                    viewModel = viewModel,
+                                    notifDB = notifDB,
+                                    onBack = { viewModel.currentScreen.value = "dashboard" },
+                                    onConfigClick = { viewModel.currentScreen.value = "notification_config" }
+                                )
+                            }
+                            "notification_config" -> {
+                                NotificationConfigScreen(
+                                    notifDB = notifDB,
+                                    onBack = { viewModel.currentScreen.value = "notification_dashboard" }
                                 )
                             }
                             "settings" -> {
