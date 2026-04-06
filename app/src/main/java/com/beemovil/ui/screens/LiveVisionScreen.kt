@@ -73,6 +73,7 @@ fun LiveVisionScreen(
     var showSettings by remember { mutableStateOf(false) }
     var showModules by remember { mutableStateOf(false) }
     var customPrompt by remember { mutableStateOf("Describe lo que ves en esta imagen en espanol. Se conciso.") }
+    var isVoiceListening by remember { mutableStateOf(false) }
 
     // Vision Pro state — 7 toggleable modules
     var visionState by remember { mutableStateOf(VisionProState()) }
@@ -365,30 +366,45 @@ fun LiveVisionScreen(
         }
 
         // ═══════════════════════════════════════
-        // GPS OVERLAY (top-right)
+        // GPS OVERLAY (full width, prominent)
         // ═══════════════════════════════════════
         if (visionState.gpsOverlay && gpsData.latitude != 0.0) {
             Card(
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 72.dp, end = 8.dp),
-                colors = CardDefaults.cardColors(containerColor = BeeBlack.copy(alpha = 0.7f)),
-                shape = RoundedCornerShape(8.dp)
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .padding(top = 68.dp, start = 10.dp, end = 10.dp),
+                colors = CardDefaults.cardColors(containerColor = BeeBlack.copy(alpha = 0.75f)),
+                shape = RoundedCornerShape(12.dp)
             ) {
-                Column(modifier = Modifier.padding(8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.LocationOn, "GPS", tint = Color(0xFF4CAF50), modifier = Modifier.size(12.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(gpsData.coordsShort, fontSize = 9.sp, color = Color(0xFF4CAF50))
-                    }
-                    if (gpsData.speed > 0.5f) {
-                        Text("${"%.0f".format(gpsData.speedKmh)} km/h ${gpsData.bearingCardinal}",
-                            fontSize = 10.sp, color = BeeWhite, fontWeight = FontWeight.Bold)
-                    }
-                    if (gpsData.address.isNotBlank()) {
-                        Text(gpsData.address, fontSize = 8.sp, color = BeeGray,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.widthIn(max = 120.dp))
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Filled.LocationOn, "GPS", tint = Color(0xFF4CAF50), modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(gpsData.coordsShort, fontSize = 13.sp, color = Color(0xFF4CAF50), fontWeight = FontWeight.Bold)
+                            if (gpsData.address.isNotBlank()) {
+                                Text(gpsData.address, fontSize = 12.sp, color = BeeWhite,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                        if (gpsData.speed > 0.5f) {
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("${"%,.0f".format(gpsData.speedKmh)}", fontSize = 22.sp,
+                                    color = BeeWhite, fontWeight = FontWeight.Bold)
+                                Text("km/h ${gpsData.bearingCardinal}", fontSize = 11.sp, color = BeeGray)
+                            }
+                        }
+                        if (gpsData.altitude > 0) {
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("${"%,.0f".format(gpsData.altitude)}m", fontSize = 14.sp, color = BeeGray)
+                                Text("alt", fontSize = 9.sp, color = BeeGray)
+                            }
+                        }
                     }
                 }
             }
@@ -613,36 +629,37 @@ fun LiveVisionScreen(
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
         ) {
-            // AR overlay mode: text on camera
+            // AR overlay mode: text on camera — PROMINENT
             if (visionState.arTextOverlay && liveResult.isNotBlank()) {
-                Box(
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp)
-                        .background(BeeBlack.copy(alpha = 0.55f), RoundedCornerShape(12.dp))
-                        .padding(12.dp)
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF00BCD4).copy(alpha = 0.15f)),
+                    shape = RoundedCornerShape(14.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF00BCD4).copy(alpha = 0.5f))
                 ) {
-                    Column {
+                    Column(modifier = Modifier.padding(14.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.Visibility, "AR", tint = Color(0xFF00BCD4), modifier = Modifier.size(12.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("VISION AI", fontSize = 9.sp, color = Color(0xFF00BCD4),
+                            Icon(Icons.Filled.Visibility, "AR", tint = Color(0xFF00BCD4), modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("VISION AI", fontSize = 11.sp, color = Color(0xFF00BCD4),
                                 fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                             Spacer(modifier = Modifier.weight(1f))
                             if (isProcessing) {
                                 CircularProgressIndicator(
-                                    modifier = Modifier.size(12.dp),
+                                    modifier = Modifier.size(14.dp),
                                     color = BeeYellow, strokeWidth = 2.dp
                                 )
                             }
                         }
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             liveResult,
-                            fontSize = 13.sp,
-                            color = Color.White.copy(alpha = 0.95f),
-                            lineHeight = 18.sp,
-                            maxLines = 5,
+                            fontSize = 15.sp,
+                            color = Color.White,
+                            lineHeight = 22.sp,
+                            maxLines = 6,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
@@ -675,61 +692,113 @@ fun LiveVisionScreen(
                 }
             }
 
-            // Control buttons
+            // Control buttons — BIG and well spaced
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(BeeBlack.copy(alpha = 0.9f))
-                    .padding(12.dp),
+                    .background(BeeBlack.copy(alpha = 0.92f))
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Single capture
-                OutlinedButton(
-                    onClick = { triggerSingleCapture(imageCapture, cameraExecutor, viewModel, context,
-                        selectedModel, customPrompt, visionState, gpsData, dgVoice, dashcamLogger,
-                        onResult = { liveResult = it; frameCount++ },
-                        onProcessing = { isProcessing = it }) },
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = BeeWhite),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(Icons.Filled.CameraAlt, "Capture", modifier = Modifier.size(20.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Foto", fontSize = 13.sp)
+                // Snap photo
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Button(
+                        onClick = { triggerSingleCapture(imageCapture, cameraExecutor, viewModel, context,
+                            selectedModel, customPrompt, visionState, gpsData, dgVoice, dashcamLogger,
+                            onResult = { liveResult = it; frameCount++ },
+                            onProcessing = { isProcessing = it }) },
+                        modifier = Modifier.size(52.dp),
+                        shape = CircleShape,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF333355)),
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Icon(Icons.Filled.CameraAlt, "Foto", tint = BeeWhite, modifier = Modifier.size(24.dp))
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Foto", fontSize = 10.sp, color = BeeGray)
                 }
 
-                // Live toggle (big circle)
-                Button(
-                    onClick = { isLiveActive = !isLiveActive },
-                    modifier = Modifier.size(64.dp),
-                    shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isLiveActive) Color(0xFFF44336) else BeeYellow
-                    ),
-                    contentPadding = PaddingValues(0.dp)
-                ) {
-                    if (isLiveActive) {
-                        Icon(Icons.Filled.Stop, "Stop", tint = BeeWhite, modifier = Modifier.size(28.dp))
-                    } else {
-                        Icon(Icons.Filled.PlayArrow, "Start", tint = BeeBlack, modifier = Modifier.size(28.dp))
+                // Mic — voice question
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Button(
+                        onClick = {
+                            if (isVoiceListening) {
+                                dgVoice?.stopListening()
+                                isVoiceListening = false
+                            } else {
+                                isVoiceListening = true
+                                dgVoice?.startListening(
+                                    onResult = { text ->
+                                        isVoiceListening = false
+                                        // Use voice question as the custom prompt for next analysis
+                                        customPrompt = text
+                                        // Trigger single capture with the voice question
+                                        triggerSingleCapture(imageCapture, cameraExecutor, viewModel, context,
+                                            selectedModel, text, visionState, gpsData, dgVoice, dashcamLogger,
+                                            onResult = { liveResult = it; frameCount++ },
+                                            onProcessing = { isProcessing = it })
+                                    },
+                                    onError = { isVoiceListening = false }
+                                )
+                            }
+                        },
+                        modifier = Modifier.size(52.dp),
+                        shape = CircleShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isVoiceListening) Color(0xFF4CAF50) else Color(0xFF333355)
+                        ),
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Icon(Icons.Filled.Mic, "Mic", tint = BeeWhite, modifier = Modifier.size(24.dp))
                     }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(if (isVoiceListening) "Escuchando" else "Preguntar", fontSize = 10.sp,
+                        color = if (isVoiceListening) Color(0xFF4CAF50) else BeeGray)
+                }
+
+                // Live toggle (BIGGEST button)
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Button(
+                        onClick = { isLiveActive = !isLiveActive },
+                        modifier = Modifier.size(72.dp),
+                        shape = CircleShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isLiveActive) Color(0xFFF44336) else BeeYellow
+                        ),
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Icon(
+                            if (isLiveActive) Icons.Filled.Stop else Icons.Filled.PlayArrow,
+                            "Live",
+                            tint = if (isLiveActive) BeeWhite else BeeBlack,
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(if (isLiveActive) "Parar" else "Live", fontSize = 10.sp,
+                        color = if (isLiveActive) Color(0xFFF44336) else BeeYellow)
                 }
 
                 // Copy result
-                OutlinedButton(
-                    onClick = {
-                        if (liveResult.isNotBlank()) {
-                            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("vision", liveResult))
-                            Toast.makeText(context, "Copiado", Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = BeeWhite),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(Icons.Filled.ContentCopy, "Copy", modifier = Modifier.size(20.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Copiar", fontSize = 13.sp)
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Button(
+                        onClick = {
+                            if (liveResult.isNotBlank()) {
+                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("vision", liveResult))
+                                Toast.makeText(context, "Copiado", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier.size(52.dp),
+                        shape = CircleShape,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF333355)),
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Icon(Icons.Filled.ContentCopy, "Copy", tint = BeeWhite, modifier = Modifier.size(24.dp))
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Copiar", fontSize = 10.sp, color = BeeGray)
                 }
             }
         }
