@@ -16,10 +16,12 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -362,6 +364,53 @@ fun ChatScreen(viewModel: ChatViewModel, onSettingsClick: () -> Unit = {}, onBac
                 }
             }
         }
+
+            // ── Suggestion Chips (visible when few messages) ──
+            if (viewModel.messages.size <= 1) {
+                val suggestions = listOf(
+                    "Que puedes hacer?",
+                    "Genera un PDF",
+                    "Busca en la web",
+                    "Crea una landing page",
+                    "Analiza una imagen",
+                    "Clima actual",
+                    "Programa una alarma",
+                    "Lee mi correo"
+                )
+                LazyRow(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 8.dp, start = 12.dp, end = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(suggestions.size) { i ->
+                        SuggestionChip(
+                            onClick = {
+                                inputText = suggestions[i]
+                                viewModel.sendMessage(suggestions[i])
+                                inputText = ""
+                            },
+                            label = {
+                                Text(
+                                    suggestions[i],
+                                    fontSize = 13.sp,
+                                    color = BeeWhite,
+                                    maxLines = 1
+                                )
+                            },
+                            modifier = Modifier,
+                            colors = SuggestionChipDefaults.suggestionChipColors(
+                                containerColor = BeeGray.copy(alpha = 0.7f)
+                            ),
+                            border = SuggestionChipDefaults.suggestionChipBorder(
+                                borderColor = BeeYellow.copy(alpha = 0.3f),
+                                enabled = true
+                            ),
+                            shape = RoundedCornerShape(20.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 
@@ -500,8 +549,10 @@ fun MessageBubble(message: ChatUiMessage) {
                             }
                         }
 
-                        // Message content
-                        RenderMarkdown(message.text, isUser)
+                        // Message content — selectable
+                        SelectionContainer {
+                            RenderMarkdown(message.text, isUser)
+                        }
 
                         // File attachments
                         if (message.filePaths.isNotEmpty()) {

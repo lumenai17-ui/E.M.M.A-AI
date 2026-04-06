@@ -7,6 +7,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -165,10 +167,19 @@ class MainActivity : ComponentActivity() {
             ))
         }
 
+        // Restore theme preference
+        val savedTheme = prefs.getString("app_theme", null)
+        BeeThemeState.forceDark.value = when (savedTheme) {
+            "dark" -> true
+            "light" -> false
+            else -> null
+        }
+
         setContent {
             BeeMovilTheme {
+                val isDark = BeeThemeState.forceDark.value ?: true
                 Scaffold(
-                    containerColor = BeeBlack,
+                    containerColor = if (isDark) BeeBlack else LightBackground,
                     bottomBar = {
                         val screen = viewModel.currentScreen.value
                         // Show bottom bar only on main screens
@@ -186,7 +197,19 @@ class MainActivity : ComponentActivity() {
                     ) {
                         val screen = viewModel.currentScreen.value
                         val editingAgentId = remember { mutableStateOf<String?>(null) }
-                        when (screen) {
+                        AnimatedContent(
+                            targetState = screen,
+                            label = "screen_transition",
+                            transitionSpec = {
+                                (fadeIn(animationSpec = tween(250)) +
+                                    slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Start, tween(250)))
+                                    .togetherWith(
+                                        fadeOut(animationSpec = tween(200)) +
+                                            slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Start, tween(200))
+                                    )
+                            }
+                        ) { currentScreen ->
+                        when (currentScreen) {
                             "dashboard" -> {
                                 DashboardScreen(
                                     viewModel = viewModel,
@@ -310,6 +333,7 @@ class MainActivity : ComponentActivity() {
                                     }
                                 )
                             }
+                        }
                         }
                     }
                 }

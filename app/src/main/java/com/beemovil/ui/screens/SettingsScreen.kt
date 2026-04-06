@@ -1,4 +1,4 @@
-﻿package com.beemovil.ui.screens
+package com.beemovil.ui.screens
 
 import android.content.Context
 import android.content.Intent
@@ -75,7 +75,7 @@ fun SettingsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(BeeBlack)
+            .background(MaterialTheme.colorScheme.background)
             .verticalScroll(rememberScrollState())
     ) {
         // Header
@@ -130,6 +130,61 @@ fun SettingsScreen(
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Text("Guardar", color = BeeWhite, fontSize = 13.sp)
+                }
+            }
+
+            // ═══════════════════════════════════════
+            // TEMA VISUAL
+            // ═══════════════════════════════════════
+            SectionCard {
+                SectionTitle("TEMA")
+                Spacer(modifier = Modifier.height(8.dp))
+
+                val currentTheme = BeeThemeState.forceDark.value
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(
+                        Triple(true, "Oscuro", Icons.Filled.DarkMode),
+                        Triple(false, "Claro", Icons.Filled.LightMode),
+                    ).forEach { (isDark, label, icon) ->
+                        FilterChip(
+                            selected = currentTheme == isDark,
+                            onClick = {
+                                BeeThemeState.forceDark.value = isDark
+                                prefs.edit().putString("app_theme", if (isDark) "dark" else "light").apply()
+                            },
+                            label = {
+                                Row(verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Icon(icon, label, modifier = Modifier.size(16.dp))
+                                    Text(label, fontSize = 13.sp)
+                                }
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = BeeYellow.copy(alpha = 0.2f),
+                                selectedLabelColor = BeeYellow
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                borderColor = BeeGray, selectedBorderColor = BeeYellow,
+                                enabled = true, selected = currentTheme == isDark
+                            )
+                        )
+                    }
+                    FilterChip(
+                        selected = currentTheme == null,
+                        onClick = {
+                            BeeThemeState.forceDark.value = null
+                            prefs.edit().remove("app_theme").apply()
+                        },
+                        label = { Text("Sistema", fontSize = 13.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = BeeYellow.copy(alpha = 0.2f),
+                            selectedLabelColor = BeeYellow
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            borderColor = BeeGray, selectedBorderColor = BeeYellow,
+                            enabled = true, selected = currentTheme == null
+                        )
+                    )
                 }
             }
 

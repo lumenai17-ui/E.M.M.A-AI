@@ -443,7 +443,7 @@ fun DashboardScreen(
         // Footer
         Spacer(modifier = Modifier.height(32.dp))
         Text(
-            "Bee-Movil v4.3.0",
+            "Bee-Movil v4.4.0",
             fontSize = 12.sp,
             color = TxtMuted.copy(alpha = 0.4f),
             modifier = Modifier.fillMaxWidth().padding(bottom = 80.dp),
@@ -519,7 +519,7 @@ private fun AgentStory(icon: ImageVector, color: Color, name: String, onClick: (
     }
 }
 
-/** Compact action card */
+/** Compact action card — Premium with gradient icon bg */
 @Composable
 private fun ActionCard(icon: ImageVector, label: String, color: Color, modifier: Modifier, onClick: () -> Unit) {
     Card(
@@ -527,20 +527,25 @@ private fun ActionCard(icon: ImageVector, label: String, color: Color, modifier:
         colors = CardDefaults.cardColors(containerColor = CardBg),
         shape = RoundedCornerShape(16.dp),
         border = BorderStroke(0.5.dp, CardBorder),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp, pressedElevation = 8.dp),
         modifier = modifier
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Surface(
-                color = color.copy(alpha = 0.12f),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.size(40.dp)
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(42.dp)
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(color.copy(alpha = 0.25f), color.copy(alpha = 0.05f))
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(icon, label, tint = color, modifier = Modifier.size(22.dp))
-                }
+                Icon(icon, label, tint = color, modifier = Modifier.size(22.dp))
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(label, fontSize = 12.sp, color = TxtSub, fontWeight = FontWeight.Medium)

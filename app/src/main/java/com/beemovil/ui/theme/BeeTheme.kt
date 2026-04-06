@@ -17,8 +17,12 @@ import androidx.core.view.WindowCompat
 import com.beemovil.R
 
 // ── Inter Font Family ─────────────────────────────
-// Uses system default (Inter is Android 12+ default, falls back gracefully)
-val InterFont = FontFamily.Default
+val InterFont = FontFamily(
+    Font(R.font.inter_regular, FontWeight.Normal),
+    Font(R.font.inter_medium, FontWeight.Medium),
+    Font(R.font.inter_semibold, FontWeight.SemiBold),
+    Font(R.font.inter_bold, FontWeight.Bold)
+)
 
 // ── Typography System ─────────────────────────────
 val BeeTypography = Typography(
