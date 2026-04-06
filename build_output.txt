@@ -16,8 +16,8 @@
 > Task :app:processDebugResources UP-TO-DATE
 
 > Task :app:compileDebugKotlin
-w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/screens/LiveVisionScreen.kt:336:39 'ArrowBack: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.ArrowBack
-w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/screens/LiveVisionScreen.kt:868:5 Parameter 'logger' is never used
+w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/screens/LiveVisionScreen.kt:341:39 'ArrowBack: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.ArrowBack
+w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/screens/LiveVisionScreen.kt:1000:5 Parameter 'logger' is never used
 [Incubating] Problems report is available at: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/build/reports/problems/problems-report.html
 
 Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.

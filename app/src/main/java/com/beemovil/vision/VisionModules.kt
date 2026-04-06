@@ -12,7 +12,9 @@ data class VisionProState(
     val videoRecording: Boolean = false,
     val dashcamMode: Boolean = false,
     val backgroundAgent: Boolean = false,
-    val backgroundAgentPrompt: String = "Si detectas algo peligroso o inusual, avisame."
+    val backgroundAgentPrompt: String = "Si detectas algo peligroso o inusual, avisame.",
+    val touristGuide: Boolean = false,
+    val touristDestination: String = ""
 )
 
 /**

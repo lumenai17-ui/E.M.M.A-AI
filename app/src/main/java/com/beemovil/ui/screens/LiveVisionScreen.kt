@@ -94,6 +94,11 @@ fun LiveVisionScreen(
     // Voice manager for narration
     val dgVoice = viewModel.deepgramVoiceManager
 
+    // Tourist guide: destination coords (resolved by AI)
+    var touristBearing by remember { mutableStateOf(0f) }
+    var touristDistance by remember { mutableStateOf(0f) }
+    var touristDestCoords by remember { mutableStateOf<Pair<Double, Double>?>(null) }
+
     val permLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -425,7 +430,6 @@ fun LiveVisionScreen(
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Pulsing red dot
                     Surface(
                         color = Color.White,
                         shape = CircleShape,
@@ -435,6 +439,58 @@ fun LiveVisionScreen(
                     Text("DASHCAM", fontSize = 10.sp, color = BeeWhite, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("${dashcamLogger.entryCount} frames", fontSize = 9.sp, color = BeeWhite.copy(alpha = 0.8f))
+                }
+            }
+        }
+
+        // ═══════════════════════════════════════
+        // TOURIST GUIDE OVERLAY (center)
+        // ═══════════════════════════════════════
+        if (visionState.touristGuide && touristDestCoords != null && gpsData.latitude != 0.0) {
+            // Calculate bearing and distance to destination
+            val destLat = touristDestCoords!!.first
+            val destLng = touristDestCoords!!.second
+            val results = FloatArray(3)
+            android.location.Location.distanceBetween(
+                gpsData.latitude, gpsData.longitude, destLat, destLng, results
+            )
+            touristDistance = results[0]
+            touristBearing = if (results.size > 1) results[1] else 0f
+
+            // Direction arrow relative to phone bearing
+            val relativeBearing = touristBearing - gpsData.bearing
+            val distText = if (touristDistance > 1000) "${"%.1f".format(touristDistance / 1000)} km"
+                          else "${"%.0f".format(touristDistance)} m"
+
+            Card(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .padding(start = 10.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF8BC34A).copy(alpha = 0.85f)),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Arrow pointing toward destination
+                    Text(
+                        when {
+                            relativeBearing > -22.5 && relativeBearing <= 22.5 -> "^"
+                            relativeBearing > 22.5 && relativeBearing <= 67.5 -> "/"
+                            relativeBearing > 67.5 && relativeBearing <= 112.5 -> ">"
+                            relativeBearing > 112.5 && relativeBearing <= 157.5 -> "\\"
+                            relativeBearing > 157.5 || relativeBearing <= -157.5 -> "v"
+                            relativeBearing > -157.5 && relativeBearing <= -112.5 -> "/"
+                            relativeBearing > -112.5 && relativeBearing <= -67.5 -> "<"
+                            else -> "\\"
+                        },
+                        fontSize = 36.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = BeeBlack
+                    )
+                    Text(distText, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = BeeBlack)
+                    Text(visionState.touristDestination.take(20), fontSize = 11.sp, color = BeeBlack.copy(alpha = 0.7f))
                 }
             }
         }
@@ -450,15 +506,15 @@ fun LiveVisionScreen(
         ) {
             Card(
                 modifier = Modifier
-                    .width(220.dp)
+                    .width(260.dp)
                     .fillMaxHeight()
-                    .padding(vertical = 60.dp),
+                    .padding(vertical = 56.dp),
                 colors = CardDefaults.cardColors(containerColor = BeeBlack.copy(alpha = 0.92f)),
                 shape = RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp)
             ) {
                 Column(
                     modifier = Modifier
-                        .padding(12.dp)
+                        .padding(16.dp)
                         .verticalScroll(rememberScrollState())
                 ) {
                     Text("MODULOS", fontSize = 12.sp, color = BeeYellow,
@@ -499,6 +555,11 @@ fun LiveVisionScreen(
                         visionState.backgroundAgent, Color(0xFFFF9800)) {
                         visionState = visionState.copy(backgroundAgent = it)
                     }
+                    ModuleToggle("Guia Turista", Icons.Filled.Explore,
+                        visionState.touristGuide, Color(0xFF8BC34A)) {
+                        visionState = visionState.copy(touristGuide = it)
+                        if (it) visionState = visionState.copy(gpsOverlay = true, voiceNarration = true)
+                    }
 
                     // Background agent prompt
                     if (visionState.backgroundAgent) {
@@ -520,6 +581,137 @@ fun LiveVisionScreen(
                                 cursorColor = BeeYellow
                             )
                         )
+                    }
+
+                    // Tourist destination input
+                    if (visionState.touristGuide) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        HorizontalDivider(color = BeeGray.copy(alpha = 0.3f))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("GUIA TURISTA", fontSize = 10.sp, color = Color(0xFF8BC34A),
+                            fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text("Destino + navegacion + traduccion", fontSize = 9.sp, color = BeeGray)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        OutlinedTextField(
+                            value = visionState.touristDestination,
+                            onValueChange = { visionState = visionState.copy(touristDestination = it) },
+                            placeholder = { Text("Ej: Torre Eiffel, Starbucks", fontSize = 10.sp, color = BeeGray) },
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 2,
+                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = BeeWhite),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color(0xFF8BC34A),
+                                unfocusedBorderColor = BeeGray.copy(alpha = 0.3f),
+                                cursorColor = Color(0xFF8BC34A)
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // Navigate button
+                        Button(
+                            onClick = {
+                                if (visionState.touristDestination.isNotBlank() && gpsData.latitude != 0.0) {
+                                    Thread {
+                                        try {
+                                            val currentProviderType = viewModel.currentProvider.value
+                                            val apiKey = when (currentProviderType) {
+                                                "openrouter" -> com.beemovil.security.SecurePrefs.get(context).getString("openrouter_api_key", "") ?: ""
+                                                "ollama" -> com.beemovil.security.SecurePrefs.get(context).getString("ollama_api_key", "") ?: ""
+                                                else -> ""
+                                            }
+                                            val nav = """Eres un guia turistico experto. Mi ubicacion actual:
+                                                |Coordenadas: ${gpsData.coordsShort}
+                                                |Direccion: ${gpsData.address}
+                                                |Mirando hacia: ${gpsData.bearingCardinal}
+                                                |
+                                                |Quiero llegar a: ${visionState.touristDestination}
+                                                |
+                                                |Instrucciones:
+                                                |1. COORDS:lat,lng (coordenadas exactas del destino)
+                                                |2. Instrucciones paso a paso para CAMINAR (breves, maximo 5 pasos)
+                                                |3. Distancia estimada y tiempo caminando
+                                                |4. Si el destino esta en un pais donde se habla otro idioma, incluye frases utiles traducidas para preguntar direcciones a locales (ej: "Excuse me, how do I get to...?")
+                                                |
+                                                |Responde en espanol.""".trimMargin()
+                                            val provider = LlmFactory.createProvider(currentProviderType, apiKey, viewModel.currentModel.value)
+                                            val msgs = listOf(com.beemovil.llm.ChatMessage(role = "user", content = nav))
+                                            val response = provider.complete(msgs, emptyList())
+                                            val text = response.text ?: ""
+                                            val coordsMatch = Regex("COORDS:\\s*(-?[\\d.]+)\\s*,\\s*(-?[\\d.]+)").find(text)
+                                            if (coordsMatch != null) {
+                                                val lat = coordsMatch.groupValues[1].toDoubleOrNull() ?: 0.0
+                                                val lng = coordsMatch.groupValues[2].toDoubleOrNull() ?: 0.0
+                                                touristDestCoords = Pair(lat, lng)
+                                            }
+                                            liveResult = text.replace(Regex("COORDS:\\s*-?[\\d.]+\\s*,\\s*-?[\\d.]+"), "").trim()
+                                            if (visionState.voiceNarration) {
+                                                dgVoice?.speak(text = liveResult.take(400))
+                                            }
+                                        } catch (e: Exception) {
+                                            liveResult = "[ERR] ${e.message?.take(80)}"
+                                        }
+                                    }.start()
+                                } else {
+                                    Toast.makeText(context, "Activa GPS y escribe un destino", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8BC34A), contentColor = BeeBlack),
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(Icons.Filled.Navigation, "Nav", modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Navegar", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        // Translate / ask for directions button
+                        OutlinedButton(
+                            onClick = {
+                                Thread {
+                                    try {
+                                        val currentProviderType = viewModel.currentProvider.value
+                                        val apiKey = when (currentProviderType) {
+                                            "openrouter" -> com.beemovil.security.SecurePrefs.get(context).getString("openrouter_api_key", "") ?: ""
+                                            "ollama" -> com.beemovil.security.SecurePrefs.get(context).getString("ollama_api_key", "") ?: ""
+                                            else -> ""
+                                        }
+                                        val dest = visionState.touristDestination.ifBlank { "un lugar cercano" }
+                                        val translatePrompt = """Estoy de turista y necesito pedir direcciones a alguien local.
+                                            |Quiero llegar a: $dest
+                                            |Mi ubicacion: ${gpsData.address.ifBlank { gpsData.coordsShort }}
+                                            |
+                                            |Dame las frases traducidas en el idioma local del pais donde estoy para:
+                                            |1. "Disculpe, como llego a $dest?"
+                                            |2. "Esta lejos para caminar?"
+                                            |3. "Muchas gracias por su ayuda"
+                                            |4. "Donde esta la parada de autobus/metro mas cercana?"
+                                            |
+                                            |Incluye pronunciacion fonetica si el idioma no usa alfabeto latino.
+                                            |Responde primero en espanol con la traduccion al lado.""".trimMargin()
+                                        val provider = LlmFactory.createProvider(currentProviderType, apiKey, viewModel.currentModel.value)
+                                        val msgs = listOf(com.beemovil.llm.ChatMessage(role = "user", content = translatePrompt))
+                                        val response = provider.complete(msgs, emptyList())
+                                        liveResult = response.text ?: ""
+                                        if (visionState.voiceNarration) {
+                                            dgVoice?.speak(text = liveResult.take(300))
+                                        }
+                                    } catch (e: Exception) {
+                                        liveResult = "[ERR] ${e.message?.take(80)}"
+                                    }
+                                }.start()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF8BC34A)),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF8BC34A).copy(alpha = 0.5f))
+                        ) {
+                            Icon(Icons.Filled.Translate, "Translate", modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Traducir / Pedir Direcciones", fontSize = 11.sp)
+                        }
                     }
                 }
             }
@@ -831,17 +1023,17 @@ private fun ModuleToggle(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 2.dp),
+            .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, label, tint = if (checked) color else BeeGray, modifier = Modifier.size(18.dp))
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(label, fontSize = 12.sp, color = if (checked) BeeWhite else BeeGray,
+        Icon(icon, label, tint = if (checked) color else BeeGray, modifier = Modifier.size(22.dp))
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(label, fontSize = 13.sp, color = if (checked) BeeWhite else BeeGray,
             modifier = Modifier.weight(1f))
         Switch(
             checked = checked,
             onCheckedChange = onToggle,
-            modifier = Modifier.height(24.dp),
+            modifier = Modifier.height(28.dp),
             colors = SwitchDefaults.colors(
                 checkedThumbColor = BeeBlack,
                 checkedTrackColor = color,
