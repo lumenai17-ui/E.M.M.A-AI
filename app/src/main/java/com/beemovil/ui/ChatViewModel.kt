@@ -111,7 +111,10 @@ class ChatViewModel : ViewModel() {
         if (ollamaKey.isNotBlank()) apiKeys["ollama"] = ollamaKey
     }
 
-    fun hasApiKey(): Boolean = apiKeys[currentProvider.value]?.isNotBlank() == true
+    fun hasApiKey(): Boolean {
+        if (currentProvider.value == "local") return true  // Local models don't need API key
+        return apiKeys[currentProvider.value]?.isNotBlank() == true
+    }
 
     fun getApiKey(provider: String): String = apiKeys[provider] ?: ""
 
@@ -229,13 +232,25 @@ class ChatViewModel : ViewModel() {
         val key = "${config.id}_${currentProvider.value}_${currentModel.value}"
         return agents.getOrPut(key) {
             val apiKey = apiKeys[currentProvider.value] ?: ""
-            val provider = LlmFactory.createProvider(
-                providerType = currentProvider.value,
-                apiKey = apiKey,
-                model = currentModel.value
-            )
-            Log.d(TAG, "Created agent: ${config.id} on ${currentProvider.value}/${currentModel.value}")
-            BeeAgent(config, provider, skills, memoryDB)
+            try {
+                val provider = LlmFactory.createProvider(
+                    providerType = currentProvider.value,
+                    apiKey = apiKey,
+                    model = currentModel.value
+                )
+                Log.d(TAG, "Created agent: ${config.id} on ${currentProvider.value}/${currentModel.value}")
+                BeeAgent(config, provider, skills, memoryDB)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to create provider: ${e.message}")
+                // Throw with user-friendly message
+                throw Exception(when {
+                    e.message?.contains("no descargado") == true ->
+                        "📱 Modelo local no descargado.\nVe a Settings → 📱 Local → Descargar"
+                    e.message?.contains("appContext") == true ->
+                        "📱 Error de inicialización. Reinicia la app."
+                    else -> "Error de proveedor: ${e.message}"
+                })
+            }
         }
     }
 
@@ -253,7 +268,7 @@ class ChatViewModel : ViewModel() {
         chatHistoryDB?.saveMessage(config.id, text, true, config.icon)
 
         val apiKey = apiKeys[currentProvider.value] ?: ""
-        if (apiKey.isBlank()) {
+        if (apiKey.isBlank() && currentProvider.value != "local") {
             val errorMsg = "⚠️ Configura tu API key para **${getProviderDisplayName()}** primero (⚙️)"
             messages.add(ChatUiMessage(text = errorMsg, isUser = false, agentIcon = "⚠️", isError = true))
             chatHistoryDB?.saveMessage(config.id, errorMsg, false, "⚠️", true)

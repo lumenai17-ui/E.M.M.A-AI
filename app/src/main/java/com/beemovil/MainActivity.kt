@@ -121,6 +121,7 @@ class MainActivity : ComponentActivity() {
 
         val hasKey = when (savedProvider) {
             "ollama" -> olKey.isNotBlank()
+            "local" -> true  // Local models don't need API key
             else -> orKey.isNotBlank()
         }
 
