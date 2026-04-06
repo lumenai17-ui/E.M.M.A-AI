@@ -1,5 +1,5 @@
 # 🐝 Bee-Movil Native — Roadmap & Checklist
-### Última actualización: 5 de Abril 2026 · v4.2.5
+### Última actualización: 6 de Abril 2026 · v4.2.6
 
 ---
 
@@ -145,10 +145,18 @@
 ### ⚡ FASE 18B — Bug Sweep 2 + Multi-Agente + A2A Gateway
 > *Antes de pulir UI, convertir Bee-Movil de "asistente" a "orquestador de agentes"*
 
-**18B-1 — 🐛 Bug Sweep Round 2**
-- [ ] Auditoría de bugs detectados por el usuario en uso real
-- [ ] Revisión de código post-Fase 17/18 (SecurePrefs, LocalGemma)
-- [ ] Mejoras de estabilidad general
+**18B-1 — ✅ Bug Sweep Round 2 (v4.2.6) — 12 items resueltos**
+- [x] BUG-1: Herramientas Dashboard → prefillAgentChat (editable, no auto-send)
+- [x] BUG-2: WebSearch reescrito (DuckDuckGo HTML, resultados reales)
+- [x] BUG-3: PDF storage con fallback Android 11+
+- [x] BUG-4: AgentCreator muestra modelos de TODOS los providers
+- [x] BUG-5: Agentes default ahora editables
+- [x] BUG-6: Email: Yahoo eliminado, dominio propio, Gmail App Password hint
+- [x] BUG-7: Versiones actualizadas a v4.2.5→v4.2.6
+- [x] BUG-8/9: Skill counts corregidos (25→35)
+- [x] MEJORA-1: Provider quick-selector en Dashboard
+- [x] FEATURE-7: Archivos organizados (PDFs/, HTML/, Excel/)
+- [x] Fix: Download crash (timeout, thread safety, storage) — anterior commit
 
 **18B-2 — 🤖 delegate_to_agent (Multi-Agente desde el Chat)**
 - [ ] Nuevo skill `delegate_to_agent` — el agente principal puede llamar a otros agentes como tools
