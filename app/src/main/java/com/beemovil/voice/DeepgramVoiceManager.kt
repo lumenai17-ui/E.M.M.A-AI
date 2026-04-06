@@ -115,12 +115,18 @@ class DeepgramVoiceManager(private val context: Context) {
 
     fun speak(
         text: String,
+        language: String = "es",
         onDone: (() -> Unit)? = null,
         onStart: (() -> Unit)? = null,
         onError: ((String) -> Unit)? = null
     ) {
-        if (useDeepgramTTS) {
-            Log.i(TAG, "Using Deepgram TTS (voice: $selectedVoice)")
+        // Deepgram Aura voices are English-only.
+        // For Spanish (or any non-English), always use native Android TTS
+        // which has native Spanish voices built in.
+        val isEnglish = language.lowercase().startsWith("en")
+
+        if (useDeepgramTTS && isEnglish) {
+            Log.i(TAG, "Using Deepgram TTS (voice: $selectedVoice, lang: $language)")
             deepgramTTS.speak(
                 text = text,
                 apiKey = apiKey,
@@ -133,6 +139,7 @@ class DeepgramVoiceManager(private val context: Context) {
                 }
             )
         } else {
+            Log.i(TAG, "Using native TTS (Spanish content, Deepgram Aura is English-only)")
             speakNative(text, onDone)
         }
     }

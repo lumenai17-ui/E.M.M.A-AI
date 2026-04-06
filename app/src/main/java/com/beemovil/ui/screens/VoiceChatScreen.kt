@@ -233,6 +233,8 @@ fun VoiceChatScreen(
     // Stop everything
     fun stopAll() {
         viewModel.voiceManager?.stopListening()
+        dgVoice?.stopListening()
+        dgVoice?.stopSpeaking()
         tts?.stop()
         voiceState = VoiceState.IDLE
         autoListen = false
@@ -402,10 +404,10 @@ fun VoiceChatScreen(
                 // Status text
                 Text(
                     when (voiceState) {
-                        VoiceState.IDLE -> if (autoListen) "Toca para iniciar conversación" else "Toca para hablar"
+                        VoiceState.IDLE -> if (autoListen) "Toca para iniciar conversacion" else "Toca para hablar"
                         VoiceState.LISTENING -> "Escuchando..."
                         VoiceState.THINKING -> "Procesando respuesta..."
-                        VoiceState.SPEAKING -> "Hablando..."
+                        VoiceState.SPEAKING -> "Toca para interrumpir"
                     },
                     fontSize = 13.sp,
                     color = when (voiceState) {
@@ -438,11 +440,21 @@ fun VoiceChatScreen(
                             when (voiceState) {
                                 VoiceState.IDLE -> startListening()
                                 VoiceState.LISTENING -> {
+                                    dgVoice?.stopListening()
                                     viewModel.voiceManager?.stopListening()
+                                    voiceState = VoiceState.IDLE
                                 }
                                 VoiceState.SPEAKING -> {
+                                    // Interrupt TTS and restart listening
+                                    dgVoice?.stopSpeaking()
                                     tts?.stop()
                                     voiceState = VoiceState.IDLE
+                                    // Auto-restart listening after interrupt
+                                    if (autoListen) {
+                                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                            startListening()
+                                        }, 300)
+                                    }
                                 }
                                 VoiceState.THINKING -> { /* Can't interrupt */ }
                             }
