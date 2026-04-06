@@ -13,6 +13,7 @@ import androidx.lifecycle.ViewModel
 import com.beemovil.agent.AgentConfig
 import com.beemovil.agent.BeeAgent
 import com.beemovil.agent.DefaultAgents
+import com.beemovil.security.SecurePrefs
 import com.beemovil.llm.ChatMessage
 import com.beemovil.llm.LlmFactory
 import com.beemovil.llm.OllamaCloudProvider
@@ -327,7 +328,7 @@ class ChatViewModel : ViewModel() {
         Thread {
             try {
                 val prefs = context.getSharedPreferences("beemovil", Context.MODE_PRIVATE)
-                val apiKey = prefs.getString("ollama_api_key", "") ?: ""
+                val apiKey = SecurePrefs.get(context).getString("ollama_api_key", "") ?: ""
 
                 if (apiKey.isBlank()) {
                     mainHandler.post {

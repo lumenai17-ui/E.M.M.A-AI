@@ -72,7 +72,7 @@ class GitSkill(private val context: Context) : BeeSkill {
         if (token.isBlank()) {
             // Try saved token from prefs
             val prefs = context.getSharedPreferences("beemovil", Context.MODE_PRIVATE)
-            val saved = prefs.getString("github_token", "") ?: ""
+            val saved = com.beemovil.security.SecurePrefs.get(context).getString("github_token", "") ?: ""
             return if (saved.isNotBlank()) UsernamePasswordCredentialsProvider("token", saved) else null
         }
         return UsernamePasswordCredentialsProvider("token", token)

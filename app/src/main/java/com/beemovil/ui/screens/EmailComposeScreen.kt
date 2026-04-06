@@ -35,8 +35,9 @@ fun EmailComposeScreen(
     val prefs = context.getSharedPreferences("beemovil", android.content.Context.MODE_PRIVATE)
     val scope = rememberCoroutineScope()
 
-    val emailAddr = prefs.getString("email_address", "") ?: ""
-    val emailPass = prefs.getString("email_password", "") ?: ""
+    val securePrefs = com.beemovil.security.SecurePrefs.get(context)
+    val emailAddr = securePrefs.getString("email_address", "") ?: ""
+    val emailPass = securePrefs.getString("email_password", "") ?: ""
     val config = EmailService.EmailConfig(
         prefs.getString("email_imap_host", "imap.gmail.com") ?: "imap.gmail.com",
         prefs.getInt("email_imap_port", 993),

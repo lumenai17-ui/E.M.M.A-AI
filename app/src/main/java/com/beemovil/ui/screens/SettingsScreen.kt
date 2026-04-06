@@ -26,6 +26,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.beemovil.llm.LlmFactory
+import com.beemovil.security.SecurePrefs
 import com.beemovil.telegram.TelegramBotService
 import com.beemovil.ui.ChatViewModel
 import com.beemovil.ui.theme.*
@@ -38,23 +39,24 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val prefs = context.getSharedPreferences("beemovil", Context.MODE_PRIVATE)
+    val securePrefs = remember { SecurePrefs.get(context) }
 
-    var openRouterKey by remember { mutableStateOf(prefs.getString("openrouter_api_key", "") ?: "") }
-    var ollamaKey by remember { mutableStateOf(prefs.getString("ollama_api_key", "") ?: "") }
+    var openRouterKey by remember { mutableStateOf(securePrefs.getString("openrouter_api_key", "") ?: "") }
+    var ollamaKey by remember { mutableStateOf(securePrefs.getString("ollama_api_key", "") ?: "") }
     var showOrKey by remember { mutableStateOf(false) }
     var showOlKey by remember { mutableStateOf(false) }
     var selectedProvider by remember { mutableStateOf(viewModel.currentProvider.value) }
     var selectedModel by remember { mutableStateOf(viewModel.currentModel.value) }
 
     // Telegram
-    var telegramToken by remember { mutableStateOf(prefs.getString("telegram_bot_token", "") ?: "") }
+    var telegramToken by remember { mutableStateOf(securePrefs.getString("telegram_bot_token", "") ?: "") }
     var showToken by remember { mutableStateOf(false) }
     val botStatus = viewModel.telegramBotStatus.value
     val botName = viewModel.telegramBotName.value
 
     // Telegram allowlist
     val allowedChatsStr = prefs.getString(TelegramBotService.PREF_ALLOWED_CHATS, "") ?: ""
-    var telegramUsername by remember { mutableStateOf(prefs.getString("telegram_owner_username", "") ?: "") }
+    var telegramUsername by remember { mutableStateOf(securePrefs.getString("telegram_owner_username", "") ?: "") }
 
     // Register status callback
     DisposableEffect(Unit) {
@@ -151,7 +153,7 @@ fun SettingsScreen(
                     onClick = {
                         val key = if (selectedProvider == "openrouter") openRouterKey.trim() else ollamaKey.trim()
                         val prefKey = if (selectedProvider == "openrouter") "openrouter_api_key" else "ollama_api_key"
-                        prefs.edit().putString(prefKey, key).apply()
+                        securePrefs.edit().putString(prefKey, key).apply()
                         viewModel.updateApiKey(selectedProvider, key)
                         Toast.makeText(context, "✅ Key guardada", Toast.LENGTH_SHORT).show()
                     },
@@ -286,7 +288,7 @@ fun SettingsScreen(
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = {
-                            prefs.edit().putString("telegram_bot_token", telegramToken).apply()
+                            securePrefs.edit().putString("telegram_bot_token", telegramToken).apply()
                             viewModel.telegramBotStatus.value = "connecting"
                             val intent = Intent(context, TelegramBotService::class.java).apply {
                                 action = TelegramBotService.ACTION_START
@@ -354,7 +356,7 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(4.dp))
                 Button(
                     onClick = {
-                        prefs.edit().putString("telegram_owner_username", telegramUsername.trim()).apply()
+                        securePrefs.edit().putString("telegram_owner_username", telegramUsername.trim()).apply()
                         Toast.makeText(context, "✅ Username guardado", Toast.LENGTH_SHORT).show()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = BeeGray.copy(alpha = 0.5f)),
@@ -401,7 +403,7 @@ fun SettingsScreen(
                 Text("Configura GitHub y herramientas de desarrollo", fontSize = 12.sp, color = BeeGray)
                 Spacer(modifier = Modifier.height(8.dp))
 
-                var githubToken by remember { mutableStateOf(prefs.getString("github_token", "") ?: "") }
+                var githubToken by remember { mutableStateOf(securePrefs.getString("github_token", "") ?: "") }
                 var showGithubToken by remember { mutableStateOf(false) }
                 var browserHomepage by remember { mutableStateOf(prefs.getString("browser_homepage", "https://www.google.com") ?: "https://www.google.com") }
 
@@ -438,10 +440,8 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
                     onClick = {
-                        prefs.edit()
-                            .putString("github_token", githubToken.trim())
-                            .putString("browser_homepage", browserHomepage.trim())
-                            .apply()
+                        securePrefs.edit().putString("github_token", githubToken.trim()).apply()
+                        prefs.edit().putString("browser_homepage", browserHomepage.trim()).apply()
                         Toast.makeText(context, "Developer settings guardados", Toast.LENGTH_SHORT).show()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = BeeGray.copy(alpha = 0.5f)),
@@ -466,8 +466,8 @@ fun SettingsScreen(
                 Text("Configura tu email para usar la bandeja de entrada", fontSize = 12.sp, color = BeeGray)
                 Spacer(modifier = Modifier.height(8.dp))
 
-                var emailAddr by remember { mutableStateOf(prefs.getString("email_address", "") ?: "") }
-                var emailPasswd by remember { mutableStateOf(prefs.getString("email_password", "") ?: "") }
+                var emailAddr by remember { mutableStateOf(securePrefs.getString("email_address", "") ?: "") }
+                var emailPasswd by remember { mutableStateOf(securePrefs.getString("email_password", "") ?: "") }
                 var showEmailPass by remember { mutableStateOf(false) }
                 var emailImapHost by remember { mutableStateOf(prefs.getString("email_imap_host", "imap.gmail.com") ?: "imap.gmail.com") }
                 var emailImapPort by remember { mutableStateOf(prefs.getInt("email_imap_port", 993).toString()) }
@@ -618,9 +618,11 @@ fun SettingsScreen(
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = {
-                            prefs.edit()
+                            securePrefs.edit()
                                 .putString("email_address", emailAddr.trim())
                                 .putString("email_password", emailPasswd)
+                                .apply()
+                            prefs.edit()
                                 .putString("email_imap_host", emailImapHost)
                                 .putInt("email_imap_port", emailImapPort.toIntOrNull() ?: 993)
                                 .putString("email_smtp_host", emailSmtpHost)
@@ -638,9 +640,11 @@ fun SettingsScreen(
                         onClick = {
                             emailTestResult = "⏳ Conectando a $emailImapHost..."
                             // Also save before testing
-                            prefs.edit()
+                            securePrefs.edit()
                                 .putString("email_address", emailAddr.trim())
                                 .putString("email_password", emailPasswd)
+                                .apply()
+                            prefs.edit()
                                 .putString("email_imap_host", emailImapHost)
                                 .putInt("email_imap_port", emailImapPort.toIntOrNull() ?: 993)
                                 .putString("email_smtp_host", emailSmtpHost)

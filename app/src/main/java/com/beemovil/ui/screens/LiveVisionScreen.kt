@@ -109,7 +109,7 @@ fun LiveVisionScreen(
                             // Send to vision model
                             Thread {
                                 try {
-                                    val apiKey = prefs.getString("ollama_api_key", "") ?: ""
+                                    val apiKey = com.beemovil.security.SecurePrefs.get(context).getString("ollama_api_key", "") ?: ""
                                     if (apiKey.isBlank()) {
                                         liveResult = "⚠️ Configura API key de Ollama"
                                         isProcessing = false
@@ -398,7 +398,7 @@ fun LiveVisionScreen(
 
                                         Thread {
                                             try {
-                                                val apiKey = prefs.getString("ollama_api_key", "") ?: ""
+                                                val apiKey = com.beemovil.security.SecurePrefs.get(context).getString("ollama_api_key", "") ?: ""
                                                 val provider = OllamaCloudProvider(apiKey, selectedModel)
                                                 val msgs = listOf(ChatMessage(role = "user", content = customPrompt, images = listOf(b64)))
                                                 val response = provider.complete(msgs, emptyList())

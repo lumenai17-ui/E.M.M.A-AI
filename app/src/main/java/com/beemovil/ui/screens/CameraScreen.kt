@@ -146,7 +146,7 @@ fun CameraScreen(
         Thread {
             try {
                 // Get Ollama API key
-                val apiKey = prefs.getString("ollama_api_key", "") ?: ""
+                val apiKey = com.beemovil.security.SecurePrefs.get(context).getString("ollama_api_key", "") ?: ""
                 if (apiKey.isBlank()) {
                     analysisResult = "⚠️ Configura tu API key de Ollama en Settings"
                     isAnalyzing = false

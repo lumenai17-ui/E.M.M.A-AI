@@ -12,7 +12,7 @@ android {
         minSdk = 26
         targetSdk = 34
         versionCode = 1
-        versionName = "1.0.0"
+        versionName = "4.2.4"
     }
 
     buildTypes {
@@ -73,6 +73,9 @@ dependencies {
     // Core
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
+
+    // Security (EncryptedSharedPreferences for API keys/tokens)
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
     // HTTP (for OpenRouter API calls)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

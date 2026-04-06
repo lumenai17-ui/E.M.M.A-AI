@@ -37,8 +37,9 @@ fun EmailInboxScreen(
     val prefs = context.getSharedPreferences("beemovil", android.content.Context.MODE_PRIVATE)
     val scope = rememberCoroutineScope()
 
-    val emailAddr = prefs.getString("email_address", "") ?: ""
-    val emailPass = prefs.getString("email_password", "") ?: ""
+    val securePrefs = com.beemovil.security.SecurePrefs.get(context)
+    val emailAddr = securePrefs.getString("email_address", "") ?: ""
+    val emailPass = securePrefs.getString("email_password", "") ?: ""
     val imapHost = prefs.getString("email_imap_host", "imap.gmail.com") ?: "imap.gmail.com"
     val imapPort = prefs.getInt("email_imap_port", 993)
     val smtpHost = prefs.getString("email_smtp_host", "smtp.gmail.com") ?: "smtp.gmail.com"
