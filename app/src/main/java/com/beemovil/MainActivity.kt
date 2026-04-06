@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.beemovil.agent.CustomAgentDB
 import com.beemovil.memory.ChatHistoryDB
+import com.beemovil.memory.TaskDB
 import com.beemovil.skills.*
 import com.beemovil.ui.ChatUiMessage
 import com.beemovil.ui.ChatViewModel
@@ -145,6 +146,7 @@ class MainActivity : ComponentActivity() {
 
         // Init chat history DB
         val chatHistoryDB = ChatHistoryDB(this)
+        val taskDB = TaskDB(this)
 
         viewModel.initialize(skills, orKey, olKey, memoryDB, chatHistoryDB)
         viewModel.currentProvider.value = savedProvider
@@ -183,7 +185,7 @@ class MainActivity : ComponentActivity() {
                     bottomBar = {
                         val screen = viewModel.currentScreen.value
                         // Show bottom bar only on main screens
-                        if (screen in listOf("dashboard", "conversations", "email_inbox", "settings")) {
+                        if (screen in listOf("dashboard", "conversations", "tasks", "email_inbox", "settings")) {
                             PremiumBottomNav(
                                 currentScreen = screen,
                                 onNavigate = { viewModel.currentScreen.value = it }
@@ -215,6 +217,7 @@ class MainActivity : ComponentActivity() {
                                     viewModel = viewModel,
                                     chatHistoryDB = chatHistoryDB,
                                     memoryDB = memoryDB,
+                                    taskDB = taskDB,
                                     onAgentClick = { agentId -> viewModel.openAgentChat(agentId) },
                                     onSettingsClick = { viewModel.currentScreen.value = "settings" },
                                     skillCount = skills.size
@@ -234,6 +237,12 @@ class MainActivity : ComponentActivity() {
                                         viewModel.currentScreen.value = "create_agent"
                                     },
                                     skillCount = skills.size
+                                )
+                            }
+                            "tasks" -> {
+                                TaskScreen(
+                                    viewModel = viewModel,
+                                    taskDB = taskDB
                                 )
                             }
                             "chat" -> {

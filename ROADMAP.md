@@ -227,111 +227,110 @@
 
 ---
 
-### 🎙️ FASE 20 — Deepgram STT/TTS
+### FASE 19B — Bug Sweep 3 + Smart Routing (Completada v4.4.1)
+> *8 bugs criticos arreglados + provider inteligente*
+
+- [x] Custom agents: system prompt fix
+- [x] Workflows: modelo/provider fix
+- [x] Vision: smart provider routing (no hardcoded)
+- [x] Camera/LiveVision: smart provider routing
+- [x] Local model: prompt limits fix
+- [x] Voz en modo local: API key exemption
+- [x] Chat imagen memory: persist across prompts
+- [x] Multi-image attach: GetMultipleContents
+
+---
+
+### FASE 19C — Tasks + Calendario + Dashboard Upgrade
+> *Nuevos modulos core del app*
+
+- [ ] **Task System (Tab en bottom nav):** Dashboard | Chats | Tareas | Email | Settings
+- [ ] **Calendario:** vista mes/semana/dia, linkeado a Tasks y agentes
+- [ ] **Dashboard: Widget de pendientes** + greeting dinamico + heartbeat variable
+- [ ] **FileExplorer v2:** navegacion recursiva, acciones contextuales, AI interaction
+- [ ] **Dashboard glow up:** icono grande (48dp), recientes mejorados, insight personalizado
+
+---
+
+### FASE 19D — Notification Intelligence Agent
+> *El agente escucha y analiza todas las notificaciones del telefono*
+
+- [ ] NotificationListenerService — captura cada notificacion
+- [ ] NotificationLogDB (SQLite) — log por app, 100% local
+- [ ] Config ON/OFF por app + acciones: loguear/resumir/alertar/actuar
+- [ ] Skill notification_query + NotificationDashboardScreen
+- [ ] AI Daily Summary auto-generado
+
+---
+
+### FASE 20 — Deepgram STT/TTS
 > *Voz natural para el agente*
 
-- [ ] Reemplazar Google STT con Deepgram Nova (mejor accuracy español)
-- [ ] Reemplazar Android TTS con Deepgram Aura (voz natural)
-- [ ] Streaming de audio bidireccional
-- [ ] Selección de voz por agente
+- [ ] Deepgram Nova STT (español) + Aura TTS (voz natural)
+- [ ] Streaming bidireccional + seleccion de voz por agente
 
 ---
 
-### 🖼️ FASE 21 — Image Generation (Stable Diffusion)
-- [ ] Integrar Stable Diffusion API para generación de imágenes
-- [ ] UI de preview y edición
-- [ ] Historial de imágenes generadas
+### FASE 20B — Vision Pro Mode
+> *Camera + GPS + Voice narration + background agent*
+> Prerequisito: Deepgram (Fase 20)
+
+- [ ] Location overlay (GPS en prompt) + camera focus control
+- [ ] Video recording + voice narration (TTS narra lo que ve)
+- [ ] Conversacion en vivo (STT + Vision + TTS pipeline)
+- [ ] Background agent: toma acciones mientras miras
 
 ---
 
-### ⚡ FASE 22 — Deploy & Publish
-> *El agente puede publicar landing pages en la web*
-
-- [ ] Netlify deploy (subir proyecto HTML generado con API)
-- [ ] Vercel deploy alternativo
-- [ ] Vista previa en WebView antes de publicar
-- [ ] URL generada automáticamente → share
-- [ ] Historial de deploys
-- [ ] Deploy via Git push (GitHub Pages, Netlify Git)
+### FASE 21 — Image Generation (Stable Diffusion)
+- [ ] API integration + UI preview/edicion + historial
 
 ---
 
-### 📱 FASE 23 — Widget Android
-> *Presencia constante en el home screen*
-
-- [ ] Widget pequeño (2x1): quick voice / quick chat
-- [ ] Widget mediano (4x2): 4 quick actions + status
-- [ ] Widget grande (4x4): mini-dashboard con stats
-- [ ] Shortcuts (long press icon → Chat, Voz, Cámara)
+### FASE 22 — Deploy + Attach Files
+- [ ] Netlify/Vercel deploy + attach archivos/carpetas a chat
+- [ ] Vista previa WebView + historial de deploys
 
 ---
 
-### 🔄 FASE 24 — Automatizaciones (Workflows)
-> *Cadenas de skills con 1 tap*
+### FASE 22B — Browser Agent Mode
+> *WebView + chat bar + JS injection = Puppeteer movil*
 
-- [ ] Workflow engine (ejecutar lista ordenada de skills)
-- [ ] 8 templates sólidos:
-  - [ ] Research & PDF
-  - [ ] Morning Briefing (voz)
-  - [ ] URL → Landing Page
-  - [ ] Foto → IG Post
-  - [ ] Email Digest
-  - [ ] Data Extractor (URL → Excel)
-  - [ ] Blog Writer
-  - [ ] Voice Memo → PDF
-- [ ] Workflow builder UI (crear/editar)
-- [ ] Scheduler (ejecutar a X hora)
+- [ ] Split layout: WebView (70%) + Chat (30%)
+- [ ] JS bridge: read_dom, fill_input, click, scroll, navigate, screenshot, extract
+- [ ] Chat persistente con log de acciones + confirmacion antes de submit
 
 ---
 
-### 📋 FASE 25 — Onboarding Flow (10 pasos v2.0)
-- [ ] Welcome → Identity → Branding → Channels → Google APIs
-- [ ] Integrations → Automations → Knowledge Base → Billing → Review
-- [ ] Generación de config.json para deployment
-- [ ] Context mapping por tipo de negocio
+### FASE 23 — Widget Android
+- [ ] Widgets 2x1, 4x2, 4x4 + shortcuts
 
 ---
 
-### 🛠️ FASE 26 — Skills Expansion (35 → 58)
-- [ ] **Comunicación:** WhatsApp, Discord, SMS directo
-- [ ] **Inteligencia:** Translate, Summarize, Sentiment, Classify, Rewrite
-- [ ] **Multimedia:** Video process, OCR dedicado
-- [ ] **Web:** Webhooks, Cron/scheduling
-- [ ] **Location:** Maps, Directions
-- [ ] **Business:** Reports, Review monitoring
+### FASE 24 — Workflows v2 (Rewrite)
+- [ ] Steps con agentes existentes + combinaciones dinamicas en UI
+- [ ] Agent self-modify + Foreground Service para background processing
+- [ ] 8 templates + builder UI + scheduler
 
 ---
 
-### ⚡ FASE 27 — Business Automations (20)
-- [ ] **Marketing (7):** Meta Ads, Post Creator, Social Scheduler, GMB, SEO, Lead Capture, Competitor Watch
-- [ ] **Web (4):** WordPress Publisher, Blog Autopilot, Landing Express, Newsletter Auto
-- [ ] **Operations (5):** Invoice Autopilot, Appointment Bot, Review Responder, Daily Report, Customer Follow-up
-- [ ] **E-commerce (4):** Product Catalog, Order Manager, Payment Links, Inventory Alert
+### FASE 25 — Onboarding Flow v2.0
+### FASE 26 — Skills Expansion (37 a 65+)
+### FASE 27 — Business Automations (20)
+### FASE 28 — Play Store + Distribucion
+### FASE 29 — Social Media Hub (Post-Launch)
 
 ---
 
-### 🏪 FASE 28 — Play Store & Distribución
-- [ ] Play Store listing + screenshots
-- [ ] Políticas de privacidad
-- [ ] Beta testing (10-20 testers)
-- [ ] Landing page de descarga
+## Metricas
 
----
-
-## 📊 Métricas
-
-| Metrica | Actual | Target v2.0 |
+| Metrica | Actual | Target v5.0 |
 |---------|--------|-------------|
-| Version | v4.4.0 | v5.0 |
-| Skills | 37 (+delegate, +call_remote) | 58 |
-| Pantallas | 16 (+WorkflowScreen) | ~18 |
-| Providers LLM | 3 (OpenRouter + Ollama Cloud + Local) | 4 (+Deepgram) |
-| Modelos de vision | 7 | 10 |
-| Automations | 6 templates | 20 |
-| Bugs conocidos | 0 | 0 |
-| Tiers de precio | -- | 3 ($25/$40/$100) |
-| Fases completadas | 19 de 28 | 28 |
-| APK tamano | ~78 MB | Optimizar con R8 |
-| Multi-agente | Orquestacion + A2A | Orquestacion + A2A |
-| Hito actual | **PROXIMO: Fase 20** (Deepgram STT/TTS) | |
+| Version | v4.4.1 | v5.0 |
+| Skills | 37 | 65+ |
+| Pantallas | 16 | ~22 |
+| Providers LLM | 3 | 4 (+Deepgram) |
+| Fases completadas | 19B de 29 | 29 |
+| APK tamano | ~78 MB | Optimizar R8 |
+| Hito actual | **PROXIMO: Fase 19C** (Tasks + Calendario) | |
 

@@ -35,6 +35,9 @@ import androidx.compose.ui.unit.sp
 import com.beemovil.R
 import com.beemovil.memory.BeeMemoryDB
 import com.beemovil.memory.ChatHistoryDB
+import com.beemovil.memory.TaskDB
+import com.beemovil.memory.TaskPriority
+import com.beemovil.memory.TaskStatus
 import com.beemovil.ui.ChatViewModel
 import com.beemovil.ui.theme.*
 import java.text.SimpleDateFormat
@@ -61,6 +64,7 @@ fun DashboardScreen(
     viewModel: ChatViewModel,
     chatHistoryDB: ChatHistoryDB?,
     memoryDB: BeeMemoryDB?,
+    taskDB: TaskDB? = null,
     onAgentClick: (String) -> Unit,
     onSettingsClick: () -> Unit,
     skillCount: Int
@@ -121,7 +125,7 @@ fun DashboardScreen(
             Image(
                 painter = painterResource(id = R.drawable.bee_agent_avatar),
                 contentDescription = "Bee-Movil",
-                modifier = Modifier.size(32.dp).clip(CircleShape),
+                modifier = Modifier.size(48.dp).clip(CircleShape),
                 contentScale = ContentScale.Crop
             )
             Spacer(modifier = Modifier.width(10.dp))
@@ -416,6 +420,91 @@ fun DashboardScreen(
 
         Spacer(modifier = Modifier.height(28.dp))
 
+        // ---- PENDING TASKS WIDGET ----
+        val pendingTasks = remember { taskDB?.getPendingTasks(3) ?: emptyList() }
+        if (pendingTasks.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Tareas pendientes", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Txt)
+                Spacer(modifier = Modifier.weight(1f))
+                val totalPending = taskDB?.getTaskCount() ?: 0
+                if (totalPending > 3) {
+                    Surface(
+                        onClick = { viewModel.currentScreen.value = "tasks" },
+                        color = Color.Transparent, shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Ver todas ($totalPending)", fontSize = 13.sp, color = Gold,
+                            modifier = Modifier.padding(4.dp))
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Column(
+                modifier = Modifier.padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                pendingTasks.forEach { task ->
+                    val pColor = when (task.priority) {
+                        TaskPriority.URGENT -> Color(0xFFFF3B30)
+                        TaskPriority.HIGH -> Color(0xFFFF9500)
+                        TaskPriority.NORMAL -> Color(0xFF0A84FF)
+                        TaskPriority.LOW -> TxtMuted
+                    }
+                    Surface(
+                        onClick = { viewModel.currentScreen.value = "tasks" },
+                        color = CardBg,
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .width(4.dp).height(28.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(pColor)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Icon(
+                                if (task.status == TaskStatus.IN_PROGRESS) Icons.Filled.PlayCircle
+                                else Icons.Outlined.RadioButtonUnchecked,
+                                "Status",
+                                tint = if (task.status == TaskStatus.IN_PROGRESS) Gold else TxtMuted,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                task.title, fontSize = 14.sp, color = Txt,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (task.dueDate > 0) {
+                                val diff = task.dueDate - System.currentTimeMillis()
+                                val timeText = when {
+                                    diff < 0 -> "Vencida"
+                                    diff < 3600_000 -> "${diff / 60_000}m"
+                                    diff < 86400_000 -> "${diff / 3600_000}h"
+                                    else -> "${diff / 86400_000}d"
+                                }
+                                val isOverdue = diff < 0
+                                Text(
+                                    timeText, fontSize = 11.sp,
+                                    color = if (isOverdue) Color(0xFFFF3B30) else TxtMuted
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(28.dp))
+        }
+
         // ━━━━ RECENT CONVERSATIONS ━━━━━━━━━━━━━━━
         if (recentChats.isNotEmpty()) {
             Text(
@@ -443,7 +532,7 @@ fun DashboardScreen(
         // Footer
         Spacer(modifier = Modifier.height(32.dp))
         Text(
-            "Bee-Movil v4.4.0",
+            "Bee-Movil v4.5.0",
             fontSize = 12.sp,
             color = TxtMuted.copy(alpha = 0.4f),
             modifier = Modifier.fillMaxWidth().padding(bottom = 80.dp),
@@ -573,47 +662,65 @@ private fun ToolChip(icon: ImageVector, label: String, onClick: () -> Unit) {
     }
 }
 
-/** Recent conversation row */
+/** Recent conversation row — premium glow up */
 @Composable
 private fun RecentChatRow(
     icon: ImageVector, iconColor: Color, agentName: String,
     lastMessage: String, timestamp: Long, messageCount: Int, onClick: () -> Unit
 ) {
-    Row(
+    Card(
+        colors = CardDefaults.cardColors(containerColor = CardBg),
+        shape = RoundedCornerShape(14.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 24.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 20.dp, vertical = 4.dp)
     ) {
-        Surface(color = iconColor.copy(alpha = 0.12f), shape = CircleShape, modifier = Modifier.size(48.dp)) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(icon, agentName, tint = iconColor, modifier = Modifier.size(24.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Agent color accent bar
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(36.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(Brush.verticalGradient(listOf(iconColor, iconColor.copy(alpha = 0.3f))))
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            // Agent avatar
+            Surface(color = iconColor.copy(alpha = 0.12f), shape = CircleShape, modifier = Modifier.size(44.dp)) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(icon, agentName, tint = iconColor, modifier = Modifier.size(22.dp))
+                }
             }
-        }
-        Spacer(modifier = Modifier.width(14.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(agentName, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = Txt)
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(lastMessage, fontSize = 14.sp, color = TxtSub, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        Column(horizontalAlignment = Alignment.End) {
-            val diff = System.currentTimeMillis() - timestamp
-            val timeText = when {
-                diff < 60_000 -> "ahora"
-                diff < 3600_000 -> "${diff / 60_000}m"
-                diff < 86400_000 -> "${diff / 3600_000}h"
-                else -> "${diff / 86400_000}d"
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(agentName, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = Txt)
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(lastMessage, fontSize = 13.sp, color = TxtSub, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            Text(timeText, fontSize = 12.sp, color = TxtMuted)
-            if (messageCount > 0) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Surface(color = Gold, shape = CircleShape) {
-                    Text(
-                        "$messageCount", fontSize = 11.sp, color = Color.Black,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
-                    )
+            Column(horizontalAlignment = Alignment.End) {
+                val diff = System.currentTimeMillis() - timestamp
+                val timeText = when {
+                    diff < 60_000 -> "ahora"
+                    diff < 3600_000 -> "${diff / 60_000}m"
+                    diff < 86400_000 -> "${diff / 3600_000}h"
+                    else -> "${diff / 86400_000}d"
+                }
+                Text(timeText, fontSize = 12.sp, color = TxtMuted)
+                if (messageCount > 0) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Surface(color = Gold, shape = CircleShape) {
+                        Text(
+                            "$messageCount", fontSize = 11.sp, color = Color.Black,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                        )
+                    }
                 }
             }
         }

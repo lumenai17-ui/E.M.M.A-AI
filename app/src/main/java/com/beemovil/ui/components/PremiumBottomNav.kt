@@ -40,6 +40,7 @@ data class NavItem(
 private val navItems = listOf(
     NavItem("dashboard", "Home", Icons.Filled.Home, Icons.Outlined.Home),
     NavItem("conversations", "Agentes", Icons.Filled.Forum, Icons.Outlined.Forum),
+    NavItem("tasks", "Tareas", Icons.Filled.TaskAlt, Icons.Outlined.TaskAlt),
     NavItem("email_inbox", "Correo", Icons.Filled.Email, Icons.Outlined.Email),
     NavItem("settings", "Config", Icons.Filled.Settings, Icons.Outlined.Settings)
 )

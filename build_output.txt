@@ -14,7 +14,15 @@
 > Task :app:processDebugManifest UP-TO-DATE
 > Task :app:processDebugManifestForPackage UP-TO-DATE
 > Task :app:processDebugResources UP-TO-DATE
-> Task :app:compileDebugKotlin UP-TO-DATE
+
+> Task :app:compileDebugKotlin
+w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/components/PremiumBottomNav.kt:100:9 Variable 'textColor' is never used
+w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/screens/DashboardScreen.kt:66:5 Parameter 'memoryDB' is never used
+w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/screens/DashboardScreen.kt:323:40 'Send: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Outlined.Send
+w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/screens/TaskScreen.kt:54:5 Parameter 'viewModel' is never used
+w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/screens/TaskScreen.kt:57:9 Variable 'context' is never used
+w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/screens/TaskScreen.kt:95:60 'ViewList: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.ViewList
+w: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/app/src/main/java/com/beemovil/ui/screens/TaskScreen.kt:503:9 Variable 'hasDueDate' is never used
 [Incubating] Problems report is available at: file:///C:/Users/Usuario/.gemini/antigravity/scratch/bee-movil-native/build/reports/problems/problems-report.html
 
 Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
@@ -23,5 +31,5 @@ You can use '--warning-mode all' to show the individual deprecation warnings and
 
 For more on this, please refer to https://docs.gradle.org/8.11.1/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
 
-BUILD SUCCESSFUL in 770ms
-14 actionable tasks: 1 executed, 13 up-to-date
+BUILD SUCCESSFUL in 4s
+14 actionable tasks: 2 executed, 12 up-to-date
