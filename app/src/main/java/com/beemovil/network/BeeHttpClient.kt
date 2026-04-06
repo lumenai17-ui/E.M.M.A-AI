@@ -45,4 +45,16 @@ object BeeHttpClient {
             .retryOnConnectionFailure(true)
             .build()
     }
+
+    /** Download client — 60s connect, 10 min read. For large file downloads (LLM models ~3GB). */
+    val download: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(60, TimeUnit.SECONDS)
+            .readTimeout(10, TimeUnit.MINUTES)
+            .writeTimeout(60, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .followRedirects(true)
+            .followSslRedirects(true)
+            .build()
+    }
 }

@@ -1,9 +1,10 @@
 package com.beemovil.llm.local
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import com.beemovil.network.BeeHttpClient
-import kotlinx.coroutines.*
 import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
@@ -11,13 +12,17 @@ import java.io.FileOutputStream
 /**
  * Manages local LLM model files — download, storage, and lifecycle.
  *
- * Models are stored in: /sdcard/BeeMovil/models/
- * This allows them to persist across app reinstalls and be shared.
+ * Models are stored in: app external files dir / models/
+ * (e.g. /storage/emulated/0/Android/data/com.beemovil/files/models/)
+ * This does NOT require MANAGE_EXTERNAL_STORAGE permission.
  */
 object LocalModelManager {
 
     private const val TAG = "LocalModelManager"
-    private const val MODELS_DIR = "BeeMovil/models"
+    private const val MODELS_SUBDIR = "models"
+
+    // Main-thread handler for safe Compose state updates from background threads
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     /** Available models for download. */
     data class LocalModel(
@@ -51,25 +56,48 @@ object LocalModelManager {
         )
     )
 
-    /** Get the models directory, creating it if needed. */
+    // Application context — set from BeeMovilApp.onCreate() or SettingsScreen
+    var appContext: Context? = null
+
+    /** Get the models directory using app-private external storage (no special permission needed). */
     fun getModelsDir(): File {
-        val dir = File(android.os.Environment.getExternalStorageDirectory(), MODELS_DIR)
-        if (!dir.exists()) dir.mkdirs()
+        val ctx = appContext
+        val dir = if (ctx != null) {
+            File(ctx.getExternalFilesDir(null), MODELS_SUBDIR)
+        } else {
+            // Fallback — should not happen if appContext is set
+            Log.w(TAG, "appContext not set, using legacy path")
+            File(android.os.Environment.getExternalStorageDirectory(), "BeeMovil/models")
+        }
+        if (!dir.exists()) {
+            val created = dir.mkdirs()
+            if (!created) Log.e(TAG, "Failed to create models dir: ${dir.absolutePath}")
+        }
         return dir
     }
 
     /** Check if a model is downloaded. */
     fun isModelDownloaded(modelId: String): Boolean {
-        val model = AVAILABLE_MODELS.find { it.id == modelId } ?: return false
-        val file = File(getModelsDir(), model.fileName)
-        return file.exists() && file.length() > 100_000_000L // At least 100MB
+        return try {
+            val model = AVAILABLE_MODELS.find { it.id == modelId } ?: return false
+            val file = File(getModelsDir(), model.fileName)
+            file.exists() && file.length() > 100_000_000L // At least 100MB
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking model: ${e.message}")
+            false
+        }
     }
 
     /** Get the path to a downloaded model. */
     fun getModelPath(modelId: String): String? {
-        val model = AVAILABLE_MODELS.find { it.id == modelId } ?: return null
-        val file = File(getModelsDir(), model.fileName)
-        return if (file.exists()) file.absolutePath else null
+        return try {
+            val model = AVAILABLE_MODELS.find { it.id == modelId } ?: return null
+            val file = File(getModelsDir(), model.fileName)
+            if (file.exists()) file.absolutePath else null
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting model path: ${e.message}")
+            null
+        }
     }
 
     /** Get all downloaded models. */
@@ -80,20 +108,34 @@ object LocalModelManager {
     /** Delete a downloaded model. */
     fun deleteModel(modelId: String): Boolean {
         val model = AVAILABLE_MODELS.find { it.id == modelId } ?: return false
-        val file = File(getModelsDir(), model.fileName)
-        return file.delete()
+        return try {
+            val file = File(getModelsDir(), model.fileName)
+            file.delete()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error deleting model: ${e.message}")
+            false
+        }
     }
 
     /** Get available storage in GB. */
     fun getAvailableStorageGB(): Double {
-        val stat = android.os.StatFs(getModelsDir().absolutePath)
-        return stat.availableBytes / 1_073_741_824.0
+        return try {
+            val stat = android.os.StatFs(getModelsDir().absolutePath)
+            stat.availableBytes / 1_073_741_824.0
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting storage: ${e.message}")
+            0.0
+        }
     }
 
     /**
      * Download a model with progress callback.
-     * @param onProgress Called with (bytesDownloaded, totalBytes) — both in bytes.
-     * @param onComplete Called when done (success = true) or failed (success = false, error message).
+     *
+     * IMPORTANT: onProgress and onComplete are dispatched to the MAIN THREAD
+     * so they are safe to use for updating Compose mutableState.
+     *
+     * @param onProgress Called on main thread with (bytesDownloaded, totalBytes).
+     * @param onComplete Called on main thread when done.
      */
     fun downloadModel(
         modelId: String,
@@ -106,13 +148,20 @@ object LocalModelManager {
             return
         }
 
-        val targetFile = File(getModelsDir(), model.fileName)
-        val tempFile = File(getModelsDir(), "${model.fileName}.tmp")
+        val modelsDir = try {
+            getModelsDir()
+        } catch (e: Exception) {
+            onComplete(false, "Error accediendo al almacenamiento: ${e.message}")
+            return
+        }
+
+        val targetFile = File(modelsDir, model.fileName)
+        val tempFile = File(modelsDir, "${model.fileName}.tmp")
 
         // Check available storage
         val availableGB = getAvailableStorageGB()
         val requiredGB = model.sizeBytes / 1_073_741_824.0
-        if (availableGB < requiredGB + 0.5) { // 0.5 GB safety margin
+        if (availableGB < requiredGB + 0.5) {
             onComplete(false, "Espacio insuficiente: necesitas ${String.format("%.1f", requiredGB)} GB, tienes ${String.format("%.1f", availableGB)} GB")
             return
         }
@@ -120,22 +169,26 @@ object LocalModelManager {
         Thread {
             try {
                 Log.i(TAG, "Downloading ${model.name} from ${model.downloadUrl}")
+                Log.i(TAG, "Target dir: ${modelsDir.absolutePath}")
 
                 val request = Request.Builder()
                     .url(model.downloadUrl)
-                    .header("User-Agent", "BeeMovil/4.2.4")
+                    .header("User-Agent", "BeeMovil/4.2.5")
                     .build()
 
-                val response = BeeHttpClient.default.newCall(request).execute()
+                // Use the download client (10 min timeout, follows redirects)
+                val response = BeeHttpClient.download.newCall(request).execute()
                 if (!response.isSuccessful) {
-                    onComplete(false, "Error HTTP ${response.code}")
+                    val code = response.code
                     response.close()
+                    mainHandler.post { onComplete(false, "Error HTTP $code") }
                     return@Thread
                 }
 
-                val body = response.body ?: run {
-                    onComplete(false, "Respuesta vacía")
+                val body = response.body
+                if (body == null) {
                     response.close()
+                    mainHandler.post { onComplete(false, "Respuesta vacía del servidor") }
                     return@Thread
                 }
 
@@ -144,7 +197,7 @@ object LocalModelManager {
                 }
 
                 var downloaded = 0L
-                val buffer = ByteArray(8192)
+                val buffer = ByteArray(32768) // 32KB buffer for faster downloads
 
                 body.byteStream().use { input ->
                     FileOutputStream(tempFile).use { output ->
@@ -154,9 +207,11 @@ object LocalModelManager {
                             output.write(buffer, 0, read)
                             downloaded += read
 
-                            // Report progress every ~1MB
-                            if (downloaded % (1024 * 1024) < 8192) {
-                                onProgress(downloaded, totalBytes)
+                            // Report progress every ~2MB (on main thread)
+                            if (downloaded % (2 * 1024 * 1024) < 32768) {
+                                val dl = downloaded
+                                val total = totalBytes
+                                mainHandler.post { onProgress(dl, total) }
                             }
                         }
                     }
@@ -165,17 +220,36 @@ object LocalModelManager {
 
                 // Rename temp to final
                 if (tempFile.exists()) {
-                    tempFile.renameTo(targetFile)
-                    Log.i(TAG, "Download complete: ${targetFile.absolutePath} (${downloaded / 1_048_576} MB)")
-                    onComplete(true, "✅ ${model.name} descargado (${downloaded / 1_048_576} MB)")
+                    // Delete existing target if any
+                    if (targetFile.exists()) targetFile.delete()
+                    val renamed = tempFile.renameTo(targetFile)
+                    if (renamed) {
+                        Log.i(TAG, "Download complete: ${targetFile.absolutePath} (${downloaded / 1_048_576} MB)")
+                        mainHandler.post {
+                            onComplete(true, "✅ ${model.name} descargado (${downloaded / 1_048_576} MB)")
+                        }
+                    } else {
+                        Log.e(TAG, "Failed to rename temp file")
+                        mainHandler.post { onComplete(false, "Error: no se pudo mover el archivo descargado") }
+                    }
                 } else {
-                    onComplete(false, "Archivo temporal no encontrado")
+                    mainHandler.post { onComplete(false, "Archivo temporal no encontrado") }
                 }
 
             } catch (e: Exception) {
                 Log.e(TAG, "Download failed: ${e.message}", e)
-                tempFile.delete() // Clean up partial download
-                onComplete(false, "Error: ${e.message}")
+                try { tempFile.delete() } catch (_: Exception) {}
+
+                val errorMsg = when {
+                    e.message?.contains("timeout", true) == true ->
+                        "⏱️ Timeout — conexión muy lenta. Intenta con WiFi."
+                    e.message?.contains("Unable to resolve", true) == true ->
+                        "📡 Sin conexión a internet"
+                    e.message?.contains("Permission", true) == true ->
+                        "🔒 Sin permiso de almacenamiento"
+                    else -> "Error: ${e.message?.take(100)}"
+                }
+                mainHandler.post { onComplete(false, errorMsg) }
             }
         }.start()
     }

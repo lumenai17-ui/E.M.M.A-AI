@@ -9,6 +9,8 @@ class BeeMovilApp : Application() {
 
         // Set context for on-device LLM (MediaPipe needs it)
         com.beemovil.llm.local.LocalGemmaProvider.appContext = applicationContext
+        // Set context for model download manager (storage access)
+        com.beemovil.llm.local.LocalModelManager.appContext = applicationContext
 
         // Global crash handler — catch ANY unhandled exception
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
