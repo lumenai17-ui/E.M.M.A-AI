@@ -9,6 +9,7 @@ import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.Conversation
 import com.google.ai.edge.litertlm.Message
 import org.json.JSONObject
+import java.util.concurrent.*
 
 /**
  * LocalGemmaProvider — On-device LLM inference using Gemma 4 via LiteRT-LM.
@@ -16,11 +17,11 @@ import org.json.JSONObject
  * Uses the official Google AI Edge LiteRT-LM SDK (replacement for deprecated MediaPipe GenAI).
  * Runs entirely offline on the device CPU/GPU — no internet needed.
  *
- * API:
- * - Engine(EngineConfig(modelPath)) → engine.initialize() → loads model
- * - engine.createConversation() → conversation session
- * - conversation.sendMessage("prompt") → Message (with contents and toolCalls)
- * - Message.contents.contents → List<Content>, where Content.Text has .text property
+ * Safety features:
+ * - Engine initialization timeout (90s max)
+ * - Inference timeout (120s max)
+ * - OOM protection with catch + release
+ * - Automatic retry with engine recreation
  */
 class LocalGemmaProvider(
     private val modelPath: String,
@@ -31,9 +32,14 @@ class LocalGemmaProvider(
 
     companion object {
         private const val TAG = "LocalGemma"
+        private const val INIT_TIMEOUT_SEC = 90L      // 90s max for model loading
+        private const val INFERENCE_TIMEOUT_SEC = 120L // 120s max for response generation
+
         private var sharedEngine: Engine? = null
-        private var sharedConversation: Conversation? = null
         private var currentModelPath: String? = null
+        @Volatile var isInitializing = false
+            private set
+
         // Store application context for initialization
         var appContext: Context? = null
 
@@ -50,21 +56,18 @@ class LocalGemmaProvider(
         /** Release shared engine resources */
         fun releaseEngine() {
             try {
-                sharedConversation?.close()
-            } catch (_: Exception) {}
-            try {
                 sharedEngine?.close()
             } catch (_: Exception) {}
-            sharedConversation = null
             sharedEngine = null
             currentModelPath = null
+            isInitializing = false
             Log.i(TAG, "Engine released")
         }
     }
 
     /**
-     * Get or create the LiteRT-LM engine.
-     * Lazily initialized, shared across calls. Thread-safe.
+     * Get or create the LiteRT-LM engine with timeout protection.
+     * Engine.initialize() loads 2.6GB+ into RAM and can take 15-60s.
      */
     @Synchronized
     private fun getEngine(): Engine {
@@ -77,19 +80,47 @@ class LocalGemmaProvider(
         releaseEngine()
 
         Log.i(TAG, "Initializing LiteRT-LM engine from: $modelPath")
+        isInitializing = true
         val startTime = System.currentTimeMillis()
 
-        val config = EngineConfig(modelPath = modelPath)
-        val engine = Engine(config)
-        engine.initialize()
+        try {
+            // Run initialization on a separate thread with timeout
+            val executor = Executors.newSingleThreadExecutor()
+            val future: Future<Engine> = executor.submit(Callable {
+                val config = EngineConfig(modelPath = modelPath)
+                val engine = Engine(config)
+                engine.initialize()
+                engine
+            })
 
-        sharedEngine = engine
-        currentModelPath = modelPath
+            val engine = try {
+                future.get(INIT_TIMEOUT_SEC, TimeUnit.SECONDS)
+            } catch (e: TimeoutException) {
+                future.cancel(true)
+                throw RuntimeException("⏱️ El modelo tardó más de ${INIT_TIMEOUT_SEC}s en cargar. Tu dispositivo puede no tener suficiente RAM.")
+            } finally {
+                executor.shutdown()
+            }
 
-        val elapsed = System.currentTimeMillis() - startTime
-        Log.i(TAG, "Engine initialized in ${elapsed}ms")
+            sharedEngine = engine
+            currentModelPath = modelPath
 
-        return engine
+            val elapsed = System.currentTimeMillis() - startTime
+            Log.i(TAG, "Engine initialized in ${elapsed}ms")
+            isInitializing = false
+
+            return engine
+
+        } catch (e: OutOfMemoryError) {
+            isInitializing = false
+            releaseEngine()
+            System.gc()
+            throw RuntimeException("📱 Sin memoria RAM suficiente para este modelo. Cierra otras apps e intenta de nuevo, o usa un modelo en la nube.")
+        } catch (e: Exception) {
+            isInitializing = false
+            releaseEngine()
+            throw e
+        }
     }
 
     override fun complete(messages: List<ChatMessage>, tools: List<ToolDefinition>): LlmResponse {
@@ -100,17 +131,36 @@ class LocalGemmaProvider(
         val responseText = try {
             val engine = getEngine()
 
-            // Create a fresh conversation for each request to avoid context pollution.
-            // We build the full conversation history in the prompt.
-            val conversation = engine.createConversation()
+            // Run inference with timeout
+            val executor = Executors.newSingleThreadExecutor()
+            val future = executor.submit(Callable {
+                val conversation = engine.createConversation()
+                try {
+                    val response: Message = conversation.sendMessage(prompt)
+                    extractText(response)
+                } finally {
+                    try { conversation.close() } catch (_: Exception) {}
+                }
+            })
+
             try {
-                val response: Message = conversation.sendMessage(prompt)
-                extractText(response)
+                future.get(INFERENCE_TIMEOUT_SEC, TimeUnit.SECONDS)
+            } catch (e: TimeoutException) {
+                future.cancel(true)
+                "⏱️ El modelo tardó demasiado en responder. Intenta con un mensaje más corto."
+            } catch (e: ExecutionException) {
+                throw e.cause ?: e
             } finally {
-                conversation.close()
+                executor.shutdown()
             }
+
+        } catch (e: OutOfMemoryError) {
+            releaseEngine()
+            System.gc()
+            "📱 Sin memoria. Cierra otras apps e intenta de nuevo."
         } catch (e: Exception) {
             Log.e(TAG, "Inference failed: ${e.message}", e)
+
             // Try to recover by releasing and retrying once
             try {
                 releaseEngine()
@@ -120,11 +170,11 @@ class LocalGemmaProvider(
                     val response = conversation.sendMessage(prompt)
                     extractText(response)
                 } finally {
-                    conversation.close()
+                    try { conversation.close() } catch (_: Exception) {}
                 }
             } catch (e2: Exception) {
                 Log.e(TAG, "Retry also failed: ${e2.message}", e2)
-                "⚠️ Error en modelo local: ${e.message?.take(150)}"
+                "⚠️ Error en modelo local: ${e.message?.take(200)}"
             }
         }
 

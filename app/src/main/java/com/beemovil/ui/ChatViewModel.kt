@@ -308,7 +308,27 @@ class ChatViewModel : ViewModel() {
             var detectedFiles = emptyList<String>()
 
             try {
+                // Show loading message for local models (engine.initialize can take 15-60s)
+                if (currentProvider.value == "local") {
+                    mainHandler.post {
+                        if (messages.lastOrNull()?.text?.startsWith("🔄") != true) {
+                            messages.add(ChatUiMessage(
+                                text = "🔄 Cargando modelo local en memoria (~15-30s la primera vez)...",
+                                isUser = false, agentIcon = "⏳"
+                            ))
+                        }
+                    }
+                }
+
                 val agent = getOrCreateAgent(config)
+
+                // Remove loading message if we added one
+                if (currentProvider.value == "local") {
+                    mainHandler.post {
+                        messages.removeAll { it.text.startsWith("🔄 Cargando modelo") }
+                    }
+                }
+
                 val response = agent.chat(text)
                 responseText = response.text
                 isError = response.isError
