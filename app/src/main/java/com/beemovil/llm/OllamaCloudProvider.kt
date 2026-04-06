@@ -2,7 +2,7 @@ package com.beemovil.llm
 
 import android.util.Log
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
+import com.beemovil.network.BeeHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
@@ -33,11 +33,7 @@ class OllamaCloudProvider(
         private val JSON_MEDIA = "application/json".toMediaType()
     }
 
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(120, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .build()
+    private val client = BeeHttpClient.llm
 
     override fun complete(messages: List<ChatMessage>, tools: List<ToolDefinition>): LlmResponse {
         val body = JSONObject().apply {

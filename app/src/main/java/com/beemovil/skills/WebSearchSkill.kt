@@ -1,6 +1,6 @@
 package com.beemovil.skills
 
-import okhttp3.OkHttpClient
+import com.beemovil.network.BeeHttpClient
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
@@ -18,10 +18,7 @@ class WebSearchSkill : BeeSkill {
         },"required":["query"]}
     """.trimIndent())
 
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(10, TimeUnit.SECONDS)
-        .build()
+    private val client = BeeHttpClient.default
 
     override fun execute(params: JSONObject): JSONObject {
         val query = params.optString("query", "")

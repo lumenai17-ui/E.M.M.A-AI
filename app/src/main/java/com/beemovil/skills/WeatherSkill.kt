@@ -1,6 +1,6 @@
 package com.beemovil.skills
 
-import okhttp3.OkHttpClient
+import com.beemovil.network.BeeHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
@@ -20,10 +20,7 @@ class WeatherSkill : BeeSkill {
         }}
     """.trimIndent())
 
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(10, TimeUnit.SECONDS)
-        .build()
+    private val client = BeeHttpClient.default
 
     override fun execute(params: JSONObject): JSONObject {
         var lat = params.optDouble("latitude", Double.NaN)

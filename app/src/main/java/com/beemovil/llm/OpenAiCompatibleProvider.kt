@@ -1,8 +1,8 @@
 package com.beemovil.llm
 
 import android.util.Log
+import com.beemovil.network.BeeHttpClient
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
@@ -28,11 +28,7 @@ class OpenAiCompatibleProvider(
         private val JSON_MEDIA = "application/json".toMediaType()
     }
 
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(120, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .build()
+    private val client = BeeHttpClient.llm
 
     override fun complete(messages: List<ChatMessage>, tools: List<ToolDefinition>): LlmResponse {
         val body = JSONObject().apply {
@@ -58,18 +54,22 @@ class OpenAiCompatibleProvider(
             .build()
 
         val response = client.newCall(request).execute()
-        val responseBody = response.body?.string() ?: throw Exception("Empty response body")
+        try {
+            val responseBody = response.body?.string() ?: throw Exception("Empty response body")
 
-        Log.d(TAG, "[$providerName] Response: ${response.code}")
+            Log.d(TAG, "[$providerName] Response: ${response.code}")
 
-        val json = JSONObject(responseBody)
+            val json = JSONObject(responseBody)
 
-        if (!response.isSuccessful) {
-            val error = json.optJSONObject("error")?.optString("message") ?: responseBody.take(200)
-            throw Exception("$providerName ${response.code}: $error")
+            if (!response.isSuccessful) {
+                val error = json.optJSONObject("error")?.optString("message") ?: responseBody.take(200)
+                throw Exception("$providerName ${response.code}: $error")
+            }
+
+            return parseResponse(json)
+        } finally {
+            response.close()
         }
-
-        return parseResponse(json)
     }
 
     private fun parseResponse(json: JSONObject): LlmResponse {

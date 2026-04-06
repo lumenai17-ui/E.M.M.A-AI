@@ -109,9 +109,11 @@ fun VoiceChatScreen(
             },
             onErrorCallback = { error ->
                 if (error.contains("No se entendió") || error.contains("No se detectó")) {
-                    // Silence — auto-restart if in continuous mode
+                    // Silence — auto-restart if in continuous mode (via Handler to avoid stack overflow)
                     if (autoListen && voiceState == VoiceState.LISTENING) {
-                        startListening()
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            if (autoListen && voiceState == VoiceState.LISTENING) startListening()
+                        }, 500)
                     } else {
                         voiceState = VoiceState.IDLE
                     }

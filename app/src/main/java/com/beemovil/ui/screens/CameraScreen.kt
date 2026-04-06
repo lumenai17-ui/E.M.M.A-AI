@@ -68,19 +68,25 @@ fun CameraScreen(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
         if (success && photoFile.exists()) {
-            val bitmap = BitmapFactory.decodeFile(photoFile.absolutePath)
-            if (bitmap != null) {
-                val scale = minOf(800f / bitmap.width, 800f / bitmap.height, 1f)
-                val resized = Bitmap.createScaledBitmap(
-                    bitmap,
-                    (bitmap.width * scale).toInt(),
-                    (bitmap.height * scale).toInt(),
-                    true
-                )
-                capturedBitmap = resized
-                val baos = ByteArrayOutputStream()
-                resized.compress(Bitmap.CompressFormat.JPEG, 85, baos)
-                imageBase64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
+            try {
+                val bitmap = BitmapFactory.decodeFile(photoFile.absolutePath)
+                if (bitmap != null && bitmap.width > 0 && bitmap.height > 0) {
+                    val scale = minOf(800f / bitmap.width, 800f / bitmap.height, 1f)
+                    val resized = Bitmap.createScaledBitmap(
+                        bitmap,
+                        maxOf(1, (bitmap.width * scale).toInt()),
+                        maxOf(1, (bitmap.height * scale).toInt()),
+                        true
+                    )
+                    capturedBitmap = resized
+                    val baos = ByteArrayOutputStream()
+                    resized.compress(Bitmap.CompressFormat.JPEG, 85, baos)
+                    imageBase64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
+                } else {
+                    Toast.makeText(context, "Error: imagen corrupta", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -94,12 +100,12 @@ fun CameraScreen(
                 val input = context.contentResolver.openInputStream(it)
                 val bitmap = BitmapFactory.decodeStream(input)
                 input?.close()
-                if (bitmap != null) {
+                if (bitmap != null && bitmap.width > 0 && bitmap.height > 0) {
                     val scale = minOf(800f / bitmap.width, 800f / bitmap.height, 1f)
                     val resized = Bitmap.createScaledBitmap(
                         bitmap,
-                        (bitmap.width * scale).toInt(),
-                        (bitmap.height * scale).toInt(),
+                        maxOf(1, (bitmap.width * scale).toInt()),
+                        maxOf(1, (bitmap.height * scale).toInt()),
                         true
                     )
                     capturedBitmap = resized
@@ -264,15 +270,17 @@ fun CameraScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Box {
-                        Image(
-                            bitmap = capturedBitmap!!.asImageBitmap(),
-                            contentDescription = "Captured",
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 300.dp)
-                                .clip(RoundedCornerShape(16.dp)),
-                            contentScale = ContentScale.Fit
-                        )
+                        capturedBitmap?.let { bmp ->
+                            Image(
+                                bitmap = bmp.asImageBitmap(),
+                                contentDescription = "Captured",
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 300.dp)
+                                    .clip(RoundedCornerShape(16.dp)),
+                                contentScale = ContentScale.Fit
+                            )
+                        }
                         // Clear button
                         IconButton(
                             onClick = { capturedBitmap = null; imageBase64 = ""; analysisResult = "" },

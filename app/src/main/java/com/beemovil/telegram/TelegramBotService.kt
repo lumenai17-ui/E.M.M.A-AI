@@ -62,11 +62,7 @@ class TelegramBotService : Service() {
         Thread(r, "TelegramMsgHandler").apply { isDaemon = true }
     }
 
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(35, TimeUnit.SECONDS)
-        .readTimeout(35, TimeUnit.SECONDS)
-        .writeTimeout(10, TimeUnit.SECONDS)
-        .build()
+    private val client = com.beemovil.network.BeeHttpClient.longPoll
 
     override fun onBind(intent: Intent?): IBinder? = null
 

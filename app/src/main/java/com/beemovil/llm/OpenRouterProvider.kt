@@ -2,7 +2,7 @@ package com.beemovil.llm
 
 import android.util.Log
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
+import com.beemovil.network.BeeHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
@@ -41,11 +41,7 @@ class OpenRouterProvider(
         )
     }
 
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(120, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .build()
+    private val client = BeeHttpClient.llm
 
     private val isFreeModel get() = model.contains(":free")
 
