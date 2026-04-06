@@ -398,7 +398,7 @@ fun DashboardScreen(
                     modifier = Modifier.size(12.dp).clip(CircleShape), contentScale = ContentScale.Crop
                 )
                 Spacer(modifier = Modifier.width(5.dp))
-                Text("Bee-Movil v4.2.5", fontSize = 10.sp, color = TextTertiary.copy(alpha = 0.5f))
+                Text("Bee-Movil v4.2.7", fontSize = 10.sp, color = TextTertiary.copy(alpha = 0.5f))
             }
         }
     }

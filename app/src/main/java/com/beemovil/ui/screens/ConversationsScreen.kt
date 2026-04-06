@@ -189,7 +189,7 @@ fun ConversationsScreen(
         item {
             Spacer(modifier = Modifier.height(16.dp))
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Text("Bee-Movil v4.2.5 · Kotlin nativo", fontSize = 11.sp, color = BeeGray)
+                Text("Bee-Movil v4.2.7 · Kotlin nativo", fontSize = 11.sp, color = BeeGray)
             }
         }
     }

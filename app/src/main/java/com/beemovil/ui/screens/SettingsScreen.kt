@@ -26,6 +26,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.beemovil.llm.LlmFactory
+import com.beemovil.llm.ModelRegistry
 import com.beemovil.security.SecurePrefs
 import com.beemovil.telegram.TelegramBotService
 import com.beemovil.ui.ChatViewModel
@@ -45,6 +46,8 @@ fun SettingsScreen(
     var ollamaKey by remember { mutableStateOf(securePrefs.getString("ollama_api_key", "") ?: "") }
     var showOrKey by remember { mutableStateOf(false) }
     var showOlKey by remember { mutableStateOf(false) }
+    var hfToken by remember { mutableStateOf(securePrefs.getString("huggingface_token", "") ?: "") }
+    var showHfToken by remember { mutableStateOf(false) }
     var selectedProvider by remember { mutableStateOf(viewModel.currentProvider.value) }
     var selectedModel by remember { mutableStateOf(viewModel.currentModel.value) }
 
@@ -204,6 +207,45 @@ fun SettingsScreen(
                         "💾 Espacio disponible: ${String.format("%.1f", availableGB)} GB",
                         fontSize = 11.sp, color = if (availableGB > 2.0) Color(0xFF4CAF50) else Color(0xFFF44336)
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // HuggingFace Token (required for model download)
+                    OutlinedTextField(
+                        value = hfToken,
+                        onValueChange = { hfToken = it },
+                        label = { Text("🤗 HuggingFace Token") },
+                        placeholder = { Text("hf_...", color = BeeGray) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        visualTransformation = if (showHfToken) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { showHfToken = !showHfToken }) {
+                                Icon(if (showHfToken) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Toggle", tint = BeeGrayLight)
+                            }
+                        },
+                        colors = fieldColors()
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "Necesario para descargar Gemma 4.\nhuggingface.co/settings/tokens",
+                            fontSize = 9.sp, color = BeeGray.copy(alpha = 0.8f)
+                        )
+                        Button(
+                            onClick = {
+                                securePrefs.edit().putString("huggingface_token", hfToken.trim()).apply()
+                                Toast.makeText(context, "✅ HuggingFace token guardado", Toast.LENGTH_SHORT).show()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = BeeGray.copy(alpha = 0.5f)),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                            modifier = Modifier.height(28.dp)
+                        ) {
+                            Text("Guardar", fontSize = 11.sp)
+                        }
+                    }
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 

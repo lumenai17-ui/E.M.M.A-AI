@@ -148,6 +148,29 @@ object LocalModelManager {
             return
         }
 
+        val ctx = appContext
+        if (ctx == null) {
+            onComplete(false, "Error: contexto de app no disponible")
+            return
+        }
+
+        // Get HuggingFace token from SecurePrefs
+        val securePrefs = try {
+            com.beemovil.security.SecurePrefs.get(ctx)
+        } catch (e: Exception) {
+            null
+        }
+        val hfToken = securePrefs?.getString("huggingface_token", null)?.trim()
+
+        if (hfToken.isNullOrBlank()) {
+            mainHandler.post {
+                onComplete(false, "🤗 Necesitas un HuggingFace Token para descargar Gemma 4.\n" +
+                    "Ve a Settings → Proveedor AI → 📱 Local y pega tu token.\n" +
+                    "Obtener en: huggingface.co/settings/tokens")
+            }
+            return
+        }
+
         val modelsDir = try {
             getModelsDir()
         } catch (e: Exception) {
@@ -173,7 +196,8 @@ object LocalModelManager {
 
                 val request = Request.Builder()
                     .url(model.downloadUrl)
-                    .header("User-Agent", "BeeMovil/4.2.5")
+                    .header("User-Agent", "BeeMovil/4.2.6")
+                    .header("Authorization", "Bearer $hfToken")
                     .build()
 
                 // Use the download client (10 min timeout, follows redirects)
@@ -181,7 +205,13 @@ object LocalModelManager {
                 if (!response.isSuccessful) {
                     val code = response.code
                     response.close()
-                    mainHandler.post { onComplete(false, "Error HTTP $code") }
+                    val errorMsg = when (code) {
+                        401, 403 -> "🔑 Token de HuggingFace inválido o sin acceso a Gemma.\n" +
+                            "Acepta la licencia en huggingface.co/litert-community"
+                        404 -> "❌ Modelo no encontrado en HuggingFace"
+                        else -> "Error HTTP $code"
+                    }
+                    mainHandler.post { onComplete(false, errorMsg) }
                     return@Thread
                 }
 
@@ -192,12 +222,23 @@ object LocalModelManager {
                     return@Thread
                 }
 
+                // Validate content type — ensure it's not an HTML login page
+                val contentType = response.header("Content-Type", "") ?: ""
+                if (contentType.contains("text/html")) {
+                    response.close()
+                    mainHandler.post {
+                        onComplete(false, "🔑 HuggingFace requiere aceptar la licencia de Gemma.\n" +
+                            "Visita: huggingface.co/litert-community y acepta los términos.")
+                    }
+                    return@Thread
+                }
+
                 val totalBytes = body.contentLength().let {
                     if (it > 0) it else model.sizeBytes
                 }
 
                 var downloaded = 0L
-                val buffer = ByteArray(32768) // 32KB buffer for faster downloads
+                val buffer = ByteArray(65536) // 64KB buffer for faster downloads
 
                 body.byteStream().use { input ->
                     FileOutputStream(tempFile).use { output ->
@@ -208,7 +249,7 @@ object LocalModelManager {
                             downloaded += read
 
                             // Report progress every ~2MB (on main thread)
-                            if (downloaded % (2 * 1024 * 1024) < 32768) {
+                            if (downloaded % (2 * 1024 * 1024) < 65536) {
                                 val dl = downloaded
                                 val total = totalBytes
                                 mainHandler.post { onProgress(dl, total) }
@@ -218,22 +259,27 @@ object LocalModelManager {
                 }
                 response.close()
 
+                // Validate: file must be at least 100MB (model, not error page)
+                if (tempFile.length() < 100_000_000L) {
+                    tempFile.delete()
+                    mainHandler.post {
+                        onComplete(false, "❌ Archivo descargado es demasiado pequeño (${tempFile.length() / 1024} KB).\n" +
+                            "Posible error de autenticación. Verifica tu token HuggingFace.")
+                    }
+                    return@Thread
+                }
+
                 // Rename temp to final
-                if (tempFile.exists()) {
-                    // Delete existing target if any
-                    if (targetFile.exists()) targetFile.delete()
-                    val renamed = tempFile.renameTo(targetFile)
-                    if (renamed) {
-                        Log.i(TAG, "Download complete: ${targetFile.absolutePath} (${downloaded / 1_048_576} MB)")
-                        mainHandler.post {
-                            onComplete(true, "✅ ${model.name} descargado (${downloaded / 1_048_576} MB)")
-                        }
-                    } else {
-                        Log.e(TAG, "Failed to rename temp file")
-                        mainHandler.post { onComplete(false, "Error: no se pudo mover el archivo descargado") }
+                if (targetFile.exists()) targetFile.delete()
+                val renamed = tempFile.renameTo(targetFile)
+                if (renamed) {
+                    Log.i(TAG, "Download complete: ${targetFile.absolutePath} (${downloaded / 1_048_576} MB)")
+                    mainHandler.post {
+                        onComplete(true, "✅ ${model.name} descargado (${downloaded / 1_048_576} MB)")
                     }
                 } else {
-                    mainHandler.post { onComplete(false, "Archivo temporal no encontrado") }
+                    Log.e(TAG, "Failed to rename temp file")
+                    mainHandler.post { onComplete(false, "Error: no se pudo mover el archivo descargado") }
                 }
 
             } catch (e: Exception) {

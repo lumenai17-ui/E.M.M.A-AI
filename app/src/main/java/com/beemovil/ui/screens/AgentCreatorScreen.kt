@@ -163,40 +163,65 @@ fun AgentCreatorScreen(
                 Text("Selecciona un modelo de cualquier proveedor:", fontSize = 11.sp, color = BeeGray)
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Show ALL providers grouped
+                // Show ALL providers with categorized models
                 val allProviders = listOf(
-                    Triple("OpenRouter", "openrouter", com.beemovil.llm.LlmFactory.OPENROUTER.models),
-                    Triple("Ollama Cloud", "ollama", com.beemovil.llm.LlmFactory.OLLAMA_CLOUD.models),
-                    Triple("📱 Local", "local", com.beemovil.llm.LlmFactory.LOCAL.models)
+                    Triple("OpenRouter", "openrouter", com.beemovil.llm.ModelRegistry.OPENROUTER),
+                    Triple("Ollama Cloud", "ollama", com.beemovil.llm.ModelRegistry.OLLAMA_CLOUD),
+                    Triple("📱 Local", "local", com.beemovil.llm.ModelRegistry.LOCAL)
                 )
 
-                allProviders.forEach { (providerName, _, models) ->
+                allProviders.forEach { (providerName, _, entries) ->
                     Text(
                         providerName.uppercase(),
                         fontSize = 10.sp, color = BeeYellow.copy(alpha = 0.7f),
                         fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp,
                         modifier = Modifier.padding(vertical = 4.dp)
                     )
-                    models.forEach { model ->
-                        val isSelected = customModel == model.id
-                        Surface(
-                            onClick = { customModel = model.id },
-                            color = if (isSelected) BeeYellow.copy(alpha = 0.15f) else Color(0xFF1A1A2E),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(10.dp),
-                                verticalAlignment = Alignment.CenterVertically
+
+                    // Group by category
+                    val grouped = entries.groupBy { it.category }
+                    grouped.forEach { (category, models) ->
+                        Text(
+                            "${category.icon} ${category.label}",
+                            fontSize = 9.sp, color = BeeGray.copy(alpha = 0.8f),
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+                        )
+                        models.forEach { entry ->
+                            val isSelected = customModel == entry.id
+                            Surface(
+                                onClick = { customModel = entry.id },
+                                color = if (isSelected) BeeYellow.copy(alpha = 0.15f) else Color(0xFF1A1A2E),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
                             ) {
-                                Text(if (model.free) "🆓" else "🤖", fontSize = 14.sp)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(model.name, fontSize = 13.sp,
-                                        color = if (isSelected) BeeYellow else Color(0xFFE0E0E0))
-                                    Text(model.id, fontSize = 10.sp, color = BeeGray)
+                                Row(
+                                    modifier = Modifier.padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        when {
+                                            entry.free -> "🆓"
+                                            entry.hasVision -> "👁️"
+                                            entry.hasThinking -> "🧠"
+                                            else -> "🤖"
+                                        },
+                                        fontSize = 14.sp
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(entry.name, fontSize = 13.sp,
+                                            color = if (isSelected) BeeYellow else Color(0xFFE0E0E0))
+                                        Row {
+                                            if (entry.sizeLabel.isNotBlank()) {
+                                                Text(entry.sizeLabel, fontSize = 9.sp, color = BeeGray)
+                                                Text(" · ", fontSize = 9.sp, color = BeeGray)
+                                            }
+                                            Text(entry.id, fontSize = 9.sp, color = BeeGray.copy(alpha = 0.6f))
+                                        }
+                                    }
+                                    if (isSelected) Text("✓", color = BeeYellow, fontWeight = FontWeight.Bold)
                                 }
-                                if (isSelected) Text("✓", color = BeeYellow, fontWeight = FontWeight.Bold)
                             }
                         }
                     }

@@ -123,19 +123,13 @@ object LlmFactory {
         val free: Boolean = false
     )
 
-    // Predefined providers
+    // Predefined providers — models now come from ModelRegistry
     val OPENROUTER = ProviderConfig(
         id = "openrouter",
         name = "OpenRouter",
         baseUrl = "https://openrouter.ai/api/v1/chat/completions",
-        apiKey = "", // set by user
-        models = listOf(
-            ModelOption("qwen/qwen3.6-plus:free", "Qwen 3.6+ (Free)", free = true),
-            ModelOption("meta-llama/llama-3.3-70b-instruct:free", "Llama 3.3 70B (Free)", free = true),
-            ModelOption("google/gemini-2.5-flash", "Gemini 2.5 Flash"),
-            ModelOption("openai/gpt-4o", "GPT-4o"),
-            ModelOption("anthropic/claude-3.5-sonnet", "Claude 3.5 Sonnet")
-        )
+        apiKey = "",
+        models = ModelRegistry.getModelOptions("openrouter")
     )
 
     val OLLAMA_CLOUD = ProviderConfig(
@@ -144,23 +138,7 @@ object LlmFactory {
         baseUrl = "https://ollama.com/api/chat",
         apiKey = "",
         supportsTools = true,
-        models = listOf(
-            ModelOption("gemma4:31b-cloud", "Gemma 4 31B (👁️ Vision + Chat)"),
-            ModelOption("glm4:32b", "GLM-4 32B"),
-            ModelOption("llama3.3", "Llama 3.3 70B"),
-            ModelOption("qwen3", "Qwen 3 32B"),
-            ModelOption("qwen3:235b", "Qwen 3 235B (Large)"),
-            ModelOption("deepseek-r1", "DeepSeek R1 (Reasoning)"),
-            ModelOption("gemma3:27b", "Gemma 3 27B"),
-            ModelOption("mistral", "Mistral 7B"),
-            ModelOption("command-r-plus", "Command R+ 104B"),
-            ModelOption("phi4", "Phi-4 14B"),
-            // Vision models (for camera/image analysis)
-            ModelOption("llava", "LLaVA 7B (👁️ Vision)"),
-            ModelOption("llama3.2-vision", "Llama 3.2 Vision 11B (👁️)"),
-            ModelOption("bakllava", "BakLLaVA 7B (👁️ Vision)"),
-            ModelOption("moondream", "Moondream 2 (👁️ Vision)")
-        )
+        models = ModelRegistry.getModelOptions("ollama")
     )
 
     val LOCAL = ProviderConfig(
@@ -169,22 +147,12 @@ object LlmFactory {
         baseUrl = "",
         apiKey = "",
         supportsTools = true,
-        models = listOf(
-            ModelOption("gemma4-e2b", "⚡ Gemma 4 E2B (Rápido, ~2.6GB)"),
-            ModelOption("gemma4-e4b", "🧠 Gemma 4 E4B (Inteligente, ~3.7GB)")
-        )
+        models = ModelRegistry.getModelOptions("local")
     )
 
-    // Vision models list for CameraScreen
-    val VISION_MODELS = listOf(
-        ModelOption("gemma4:31b-cloud", "Gemma 4 31B (Recomendado)"),
-        ModelOption("gemma3:27b", "Gemma 3 27B"),
-        ModelOption("gemma3:12b", "Gemma 3 12B (Ligero)"),
-        ModelOption("llava", "LLaVA 7B"),
-        ModelOption("llama3.2-vision", "Llama 3.2 Vision 11B"),
-        ModelOption("bakllava", "BakLLaVA 7B"),
-        ModelOption("moondream", "Moondream 2 (Ultra-ligero)")
-    )
+    // Vision models — dynamically from registry
+    val VISION_MODELS: List<ModelOption>
+        get() = ModelRegistry.getVisionModels().map { ModelOption(it.id, it.name, it.free) }
 
     fun createProvider(
         providerType: String,
