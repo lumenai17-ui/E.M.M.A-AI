@@ -1,16 +1,19 @@
 package com.beemovil.ui.screens
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Environment
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -28,6 +31,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -36,6 +40,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
@@ -160,17 +165,17 @@ fun ChatScreen(viewModel: ChatViewModel, onSettingsClick: () -> Unit = {}, onBac
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.padding(vertical = 4.dp)
                         ) {
-                            // Agent avatar — bee logo
+                            // Agent avatar — premium bee
                             Surface(
                                 onClick = { showAgentPicker = true },
-                                color = BeeYellow.copy(alpha = 0.15f),
+                                color = Color.Transparent,
                                 shape = CircleShape,
                                 modifier = Modifier.size(38.dp)
                             ) {
                                 Image(
-                                    painter = painterResource(id = R.drawable.bee_logo),
-                                    contentDescription = "Bee Logo",
-                                    modifier = Modifier.size(32.dp).clip(CircleShape),
+                                    painter = painterResource(id = R.drawable.bee_agent_avatar),
+                                    contentDescription = "Agent",
+                                    modifier = Modifier.size(38.dp).clip(CircleShape),
                                     contentScale = ContentScale.Crop
                                 )
                             }
@@ -278,10 +283,16 @@ fun ChatScreen(viewModel: ChatViewModel, onSettingsClick: () -> Unit = {}, onBac
                         onValueChange = { inputText = it },
                         modifier = Modifier.weight(1f),
                         placeholder = {
-                            Text(
-                                if (viewModel.isRecording.value) "🎙️ Escuchando..." else "Escribe un mensaje...",
-                                color = if (viewModel.isRecording.value) Color(0xFFFF6666) else BeeGrayLight
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (viewModel.isRecording.value) {
+                                    Icon(Icons.Filled.Mic, "Mic", tint = Color(0xFFFF6666), modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                }
+                                Text(
+                                    if (viewModel.isRecording.value) "Escuchando..." else "Escribe un mensaje...",
+                                    color = if (viewModel.isRecording.value) Color(0xFFFF6666) else BeeGrayLight
+                                )
+                            }
                         },
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = BeeGray,
@@ -371,6 +382,8 @@ fun ChatScreen(viewModel: ChatViewModel, onSettingsClick: () -> Unit = {}, onBac
 @Composable
 fun MessageBubble(message: ChatUiMessage) {
     val isUser = message.isUser
+    val context = LocalContext.current
+    var showContextMenu by remember { mutableStateOf(false) }
 
     val bubbleGradient = when {
         message.isError -> Brush.linearGradient(listOf(Color(0xFF4A1A1A), Color(0xFF3A1515)))
@@ -384,104 +397,153 @@ fun MessageBubble(message: ChatUiMessage) {
             .padding(vertical = 2.dp),
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
     ) {
-        // Agent icon for non-user messages
+        // Agent icon for non-user messages (Material Icon instead of emoji)
         if (!isUser) {
-            Text(
-                message.agentIcon,
-                fontSize = 14.sp,
-                modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
+            Icon(
+                Icons.Filled.SmartToy,
+                contentDescription = "AI",
+                tint = HoneyGold.copy(alpha = 0.6f),
+                modifier = Modifier.size(16.dp).padding(start = 4.dp, bottom = 2.dp)
             )
         }
 
-        // Bubble
-        Surface(
-            color = Color.Transparent,
-            shape = RoundedCornerShape(
-                topStart = if (isUser) 16.dp else 4.dp,
-                topEnd = if (isUser) 4.dp else 16.dp,
-                bottomStart = 16.dp,
-                bottomEnd = 16.dp
-            ),
-            modifier = Modifier.widthIn(max = 320.dp)
-        ) {
-            Box(
+        // Bubble with gestures
+        Box {
+            Surface(
+                color = Color.Transparent,
+                shape = RoundedCornerShape(
+                    topStart = if (isUser) 16.dp else 4.dp,
+                    topEnd = if (isUser) 4.dp else 16.dp,
+                    bottomStart = 16.dp,
+                    bottomEnd = 16.dp
+                ),
                 modifier = Modifier
-                    .background(bubbleGradient)
-                    .padding(12.dp)
+                    .widthIn(max = 320.dp)
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onDoubleTap = {
+                                // Double-tap to copy
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                clipboard.setPrimaryClip(ClipData.newPlainText("message", message.text))
+                                Toast.makeText(context, "Copiado", Toast.LENGTH_SHORT).show()
+                            },
+                            onLongPress = {
+                                showContextMenu = true
+                            }
+                        )
+                    }
             ) {
-                Column {
-                    // Tool badges
-                    // Tool badges + delegation cards
-                    if (message.toolsUsed.isNotEmpty()) {
-                        val hasDelegation = message.toolsUsed.contains("delegate_to_agent")
-                        val regularTools = message.toolsUsed.filter { it != "delegate_to_agent" }
+                Box(
+                    modifier = Modifier
+                        .background(bubbleGradient)
+                        .padding(12.dp)
+                ) {
+                    Column {
+                        // Tool badges + delegation cards
+                        if (message.toolsUsed.isNotEmpty()) {
+                            val hasDelegation = message.toolsUsed.contains("delegate_to_agent")
+                            val regularTools = message.toolsUsed.filter { it != "delegate_to_agent" }
 
-                        // Delegation card (special visual)
-                        if (hasDelegation) {
-                            Surface(
-                                color = Color(0xFF1A1A3E),
-                                shape = RoundedCornerShape(10.dp),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, BeeYellow.copy(alpha = 0.4f)),
-                                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                            // Delegation card
+                            if (hasDelegation) {
+                                Surface(
+                                    color = Color(0xFF1A1A3E),
+                                    shape = RoundedCornerShape(10.dp),
+                                    border = BorderStroke(1.dp, BeeYellow.copy(alpha = 0.4f)),
+                                    modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
                                 ) {
-                                    Text("🔄", fontSize = 16.sp)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Column {
-                                        Text(
-                                            "Tarea delegada a agente especializado",
-                                            fontSize = 10.sp, color = BeeYellow,
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                        if (regularTools.isNotEmpty()) {
+                                    Row(
+                                        modifier = Modifier.padding(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Filled.SwapHoriz, "Delegate", tint = BeeYellow, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Column {
                                             Text(
-                                                "Tools: ${regularTools.joinToString(", ")}",
-                                                fontSize = 9.sp, color = BeeGray
+                                                "Tarea delegada a agente especializado",
+                                                fontSize = 10.sp, color = BeeYellow,
+                                                fontWeight = FontWeight.Medium
                                             )
+                                            if (regularTools.isNotEmpty()) {
+                                                Text(
+                                                    "Tools: ${regularTools.joinToString(", ")}",
+                                                    fontSize = 9.sp, color = BeeGray
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Regular tool badges
+                            if (regularTools.isNotEmpty() && !hasDelegation) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    modifier = Modifier.padding(bottom = 6.dp)
+                                ) {
+                                    regularTools.forEach { tool ->
+                                        Surface(
+                                            color = BeeYellow.copy(alpha = 0.2f),
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(Icons.Filled.Build, tool, tint = BeeYellow, modifier = Modifier.size(10.dp))
+                                                Spacer(modifier = Modifier.width(3.dp))
+                                                Text(tool, fontSize = 10.sp, color = BeeYellow)
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
 
-                        // Regular tool badges (excluding delegate)
-                        if (regularTools.isNotEmpty() && !hasDelegation) {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                modifier = Modifier.padding(bottom = 6.dp)
-                            ) {
-                                regularTools.forEach { tool ->
-                                    Surface(
-                                        color = BeeYellow.copy(alpha = 0.2f),
-                                        shape = RoundedCornerShape(8.dp)
-                                    ) {
-                                        Text(
-                                            "🔧 $tool",
-                                            fontSize = 10.sp,
-                                            color = BeeYellow,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                        )
-                                    }
-                                }
+                        // Message content
+                        RenderMarkdown(message.text, isUser)
+
+                        // File attachments
+                        if (message.filePaths.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            message.filePaths.forEach { path ->
+                                FileAttachmentCard(path)
+                                Spacer(modifier = Modifier.height(4.dp))
                             }
                         }
                     }
-
-                    // Message content with basic markdown
-                    RenderMarkdown(message.text, isUser)
-
-                    // File attachments
-                    if (message.filePaths.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        message.filePaths.forEach { path ->
-                            FileAttachmentCard(path)
-                            Spacer(modifier = Modifier.height(4.dp))
-                        }
-                    }
                 }
+            }
+
+            // Context menu popup
+            DropdownMenu(
+                expanded = showContextMenu,
+                onDismissRequest = { showContextMenu = false },
+                offset = DpOffset(0.dp, 0.dp),
+                modifier = Modifier.background(Color(0xFF1C1C2E))
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Copiar", color = Color.White, fontSize = 14.sp) },
+                    leadingIcon = { Icon(Icons.Outlined.ContentCopy, "Copy", tint = HoneyGold) },
+                    onClick = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.setPrimaryClip(ClipData.newPlainText("message", message.text))
+                        Toast.makeText(context, "Copiado", Toast.LENGTH_SHORT).show()
+                        showContextMenu = false
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Compartir", color = Color.White, fontSize = 14.sp) },
+                    leadingIcon = { Icon(Icons.Outlined.Share, "Share", tint = HoneyGold) },
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, message.text)
+                        }
+                        context.startActivity(Intent.createChooser(intent, "Compartir"))
+                        showContextMenu = false
+                    }
+                )
             }
         }
     }
@@ -613,7 +675,8 @@ fun TypingIndicator(agentIcon: String) {
         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
         horizontalAlignment = Alignment.Start
     ) {
-        Text(agentIcon, fontSize = 14.sp, modifier = Modifier.padding(start = 4.dp, bottom = 2.dp))
+        Icon(Icons.Filled.SmartToy, "AI", tint = HoneyGold.copy(alpha = 0.6f),
+            modifier = Modifier.size(16.dp).padding(start = 4.dp, bottom = 2.dp))
         Surface(
             color = Color(0xFF1A1A2E).copy(alpha = alpha),
             shape = RoundedCornerShape(topStart = 4.dp, topEnd = 16.dp, bottomStart = 16.dp, bottomEnd = 16.dp)
@@ -670,14 +733,14 @@ fun AgentPickerDialog(
                             modifier = Modifier.padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(agent.icon, fontSize = 24.sp)
+                            Icon(Icons.Filled.SmartToy, agent.name, tint = HoneyGold, modifier = Modifier.size(24.dp))
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(agent.name, color = BeeWhite, fontWeight = FontWeight.Bold)
                                 Text(agent.description, color = BeeGrayLight, fontSize = 12.sp)
                             }
                             if (isSelected) {
-                                Text("✓", color = BeeYellow, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                Icon(Icons.Filled.CheckCircle, "Selected", tint = BeeYellow, modifier = Modifier.size(20.dp))
                             }
                         }
                     }
