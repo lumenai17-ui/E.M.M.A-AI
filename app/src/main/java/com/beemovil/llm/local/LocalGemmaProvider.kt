@@ -221,26 +221,19 @@ class LocalGemmaProvider(
     private fun buildPrompt(messages: List<ChatMessage>, tools: List<ToolDefinition>): String {
         val sb = StringBuilder()
 
-        // If tools available, inject tool definitions
-        if (tools.isNotEmpty()) {
-            sb.appendLine("You are a helpful AI assistant with access to the following tools:")
-            sb.appendLine()
-            tools.forEach { tool ->
-                sb.appendLine("- ${tool.name}: ${tool.description}")
-                sb.appendLine("  Parameters: ${tool.parameters}")
-            }
-            sb.appendLine()
-            sb.appendLine("To use a tool, respond with: <tool_call>{\"name\": \"tool_name\", \"arguments\": {\"param\": \"value\"}}</tool_call>")
-            sb.appendLine("You can use multiple tools. After tool results are provided, give a natural language summary.")
-            sb.appendLine()
-        }
+        // LOCAL MODELS: Skip tool definitions entirely.
+        // E2B has 4096 token context — 37 tool schemas alone use ~3000 tokens.
+        // Local models are for simple chat, not full agentic tool-calling.
+        // Tool calling still works via cloud providers (Ollama, OpenRouter).
 
         // Add conversation messages in Gemma chat format
+        // Compact system prompt for local (skip long agent instructions)
         messages.forEach { msg ->
             when (msg.role) {
                 "system" -> {
+                    // Replace the massive system prompt with a compact one
                     sb.appendLine("<start_of_turn>user")
-                    sb.appendLine("[System Instructions] ${msg.content}")
+                    sb.appendLine("[System] Eres Bee-Movil, un asistente AI amigable. Responde en español, conciso y útil.")
                     sb.appendLine("<end_of_turn>")
                 }
                 "user" -> {
@@ -254,9 +247,7 @@ class LocalGemmaProvider(
                     sb.appendLine("<end_of_turn>")
                 }
                 "tool" -> {
-                    sb.appendLine("<start_of_turn>user")
-                    sb.appendLine("[Tool Result] ${msg.content}")
-                    sb.appendLine("<end_of_turn>")
+                    // Skip tool results for local (shouldn't reach here)
                 }
             }
         }
