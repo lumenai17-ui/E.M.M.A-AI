@@ -49,7 +49,11 @@ fun VoiceChatScreen(
     var conversationLog by remember { mutableStateOf(listOf<VoiceTurn>()) }
     var autoListen by remember { mutableStateOf(true) }  // Auto-listen after TTS finishes
 
-    // TTS engine
+    // Voice manager — uses Deepgram if configured, falls back to native
+    val dgVoice = viewModel.deepgramVoiceManager
+    val usingDeepgram = dgVoice?.hasApiKey == true
+
+    // Native TTS fallback
     val tts = remember {
         var engine: TextToSpeech? = null
         engine = TextToSpeech(context) { status ->
@@ -61,11 +65,12 @@ fun VoiceChatScreen(
         engine
     }
 
-    // Cleanup
     DisposableEffect(Unit) {
         onDispose {
             tts?.stop()
             tts?.shutdown()
+            dgVoice?.stopListening()
+            dgVoice?.stopSpeaking()
             viewModel.voiceManager?.stopListening()
         }
     }
@@ -82,95 +87,147 @@ fun VoiceChatScreen(
         label = "pulseScale"
     )
 
-    // Start listening function
     fun startListening() {
-        val vm = viewModel.voiceManager ?: run {
-            errorText = "Voice input not available"
-            return
-        }
-        if (!vm.hasPermission) {
-            errorText = "Permiso de micrófono necesario"
-            return
-        }
-        voiceState = VoiceState.LISTENING
-        partialText = ""
-        transcribedText = ""
-        errorText = ""
+        if (usingDeepgram) {
+            // Use Deepgram STT
+            voiceState = VoiceState.LISTENING
+            partialText = ""
+            transcribedText = ""
+            errorText = ""
 
-        vm.startListening(
-            language = "es-MX",
-            onPartialResult = { partial ->
-                partialText = partial
-            },
-            onListeningState = { listening ->
-                if (!listening && voiceState == VoiceState.LISTENING) {
-                    // Will transition when result comes
-                }
-            },
-            onErrorCallback = { error ->
-                if (error.contains("No se entendió") || error.contains("No se detectó")) {
-                    // Silence — auto-restart if in continuous mode (via Handler to avoid stack overflow)
-                    if (autoListen && voiceState == VoiceState.LISTENING) {
-                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                            if (autoListen && voiceState == VoiceState.LISTENING) startListening()
-                        }, 500)
+            dgVoice?.startListening(
+                language = "es-MX",
+                onPartial = { partial -> partialText = partial },
+                onResult = { text ->
+                    transcribedText = text
+                    voiceState = VoiceState.THINKING
+                    partialText = ""
+                    conversationLog = conversationLog + VoiceTurn("user", text)
+
+                    // Send to agent
+                    Thread {
+                        try {
+                            val response = viewModel.sendMessageSync(text)
+                            agentResponse = response
+                            conversationLog = conversationLog + VoiceTurn("agent", response)
+                            voiceState = VoiceState.SPEAKING
+
+                            // Speak response with Deepgram TTS
+                            dgVoice.speak(
+                                text = response,
+                                onDone = {
+                                    voiceState = if (autoListen) VoiceState.LISTENING else VoiceState.IDLE
+                                    if (autoListen) {
+                                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                            startListening()
+                                        }
+                                    }
+                                },
+                                onError = { error ->
+                                    Log.e("VoiceChat", "TTS error: $error")
+                                    voiceState = VoiceState.IDLE
+                                }
+                            )
+                        } catch (e: Exception) {
+                            errorText = "Error: ${e.message}"
+                            voiceState = VoiceState.IDLE
+                        }
+                    }.start()
+                },
+                onError = { error ->
+                    if (error.contains("No se detecto") || error.contains("muy corta")) {
+                        if (autoListen) {
+                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                if (autoListen && voiceState == VoiceState.LISTENING) startListening()
+                            }, 500)
+                        } else voiceState = VoiceState.IDLE
                     } else {
+                        errorText = error
                         voiceState = VoiceState.IDLE
                     }
-                } else {
-                    errorText = error
-                    voiceState = VoiceState.IDLE
+                },
+                onState = { listening ->
+                    if (!listening && voiceState == VoiceState.LISTENING) {
+                        // Will transition when result comes
+                    }
                 }
-            },
-            onFinalResult = { text ->
-                transcribedText = text
-                voiceState = VoiceState.THINKING
-                partialText = ""
+            )
+        } else {
+            // Fallback: native Android STT + TTS
+            val vm = viewModel.voiceManager ?: run {
+                errorText = "Voice input not available"
+                return
+            }
+            if (!vm.hasPermission) {
+                errorText = "Permiso de microfono necesario"
+                return
+            }
+            voiceState = VoiceState.LISTENING
+            partialText = ""
+            transcribedText = ""
+            errorText = ""
 
-                // Add to log
-                conversationLog = conversationLog + VoiceTurn("user", text)
+            vm.startListening(
+                language = "es-MX",
+                onPartialResult = { partial -> partialText = partial },
+                onListeningState = { listening ->
+                    if (!listening && voiceState == VoiceState.LISTENING) {}
+                },
+                onErrorCallback = { error ->
+                    if (error.contains("No se entendio") || error.contains("No se detecto")) {
+                        if (autoListen && voiceState == VoiceState.LISTENING) {
+                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                if (autoListen && voiceState == VoiceState.LISTENING) startListening()
+                            }, 500)
+                        } else voiceState = VoiceState.IDLE
+                    } else {
+                        errorText = error
+                        voiceState = VoiceState.IDLE
+                    }
+                },
+                onFinalResult = { text ->
+                    transcribedText = text
+                    voiceState = VoiceState.THINKING
+                    partialText = ""
+                    conversationLog = conversationLog + VoiceTurn("user", text)
 
-                // Send to agent
-                Thread {
-                    try {
-                        val response = viewModel.sendMessageSync(text)
-                        agentResponse = response
-                        conversationLog = conversationLog + VoiceTurn("agent", response)
-                        voiceState = VoiceState.SPEAKING
+                    Thread {
+                        try {
+                            val response = viewModel.sendMessageSync(text)
+                            agentResponse = response
+                            conversationLog = conversationLog + VoiceTurn("agent", response)
+                            voiceState = VoiceState.SPEAKING
 
-                        // Speak response
-                        tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                            override fun onStart(utteranceId: String?) {}
-                            override fun onDone(utteranceId: String?) {
-                                voiceState = if (autoListen) VoiceState.LISTENING else VoiceState.IDLE
-                                // Auto-restart listening
-                                if (autoListen) {
-                                    android.os.Handler(android.os.Looper.getMainLooper()).post {
-                                        startListening()
+                            tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                                override fun onStart(utteranceId: String?) {}
+                                override fun onDone(utteranceId: String?) {
+                                    voiceState = if (autoListen) VoiceState.LISTENING else VoiceState.IDLE
+                                    if (autoListen) {
+                                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                            startListening()
+                                        }
                                     }
                                 }
-                            }
-                            @Deprecated("Deprecated in Java")
-                            override fun onError(utteranceId: String?) {
-                                voiceState = VoiceState.IDLE
-                            }
-                        })
+                                @Deprecated("Deprecated in Java")
+                                override fun onError(utteranceId: String?) {
+                                    voiceState = VoiceState.IDLE
+                                }
+                            })
 
-                        // Clean response for TTS (remove emojis, markdown)
-                        val cleanText = response
-                            .replace(Regex("[\\p{So}\\p{Cn}]"), "") // Remove emojis
-                            .replace(Regex("[*_#`]"), "")           // Remove markdown
-                            .replace(Regex("\\[.*?\\]\\(.*?\\)"), "") // Remove links
-                            .take(500) // Limit TTS length
-
-                        tts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, "bee_voice_${System.currentTimeMillis()}")
-                    } catch (e: Exception) {
-                        errorText = "Error: ${e.message}"
-                        voiceState = VoiceState.IDLE
-                    }
-                }.start()
-            }
-        )
+                            val cleanText = response
+                                .replace(Regex("[\\p{So}\\p{Cn}]"), "")
+                                .replace(Regex("[*_#`]"), "")
+                                .replace(Regex("\\[.*?\\]\\(.*?\\)"), "")
+                                .take(500)
+                            tts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, "bee_voice_${System.currentTimeMillis()}")
+                        } catch (e: Exception) {
+                            errorText = "Error: ${e.message}"
+                            voiceState = VoiceState.IDLE
+                        }
+                    }.start()
+                }
+            )
+    }
     }
 
     // Stop everything

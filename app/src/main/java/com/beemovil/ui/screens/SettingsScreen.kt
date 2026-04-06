@@ -653,6 +653,156 @@ fun SettingsScreen(
             }
 
             // ═══════════════════════════════════════
+            // DEEPGRAM VOICE (Phase 20)
+            // ═══════════════════════════════════════
+            SectionCard {
+                SectionTitle("VOZ (DEEPGRAM)")
+                Text("Text-to-Speech y Speech-to-Text avanzado", fontSize = 12.sp, color = BeeGray)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                var dgKey by remember { mutableStateOf(prefs.getString("deepgram_api_key", "") ?: "") }
+                var showDgKey by remember { mutableStateOf(false) }
+                var dgVoice by remember { mutableStateOf(prefs.getString("deepgram_voice", "aura-asteria-en") ?: "aura-asteria-en") }
+                var useDgSTT by remember { mutableStateOf(prefs.getBoolean("use_deepgram_stt", true)) }
+                var useDgTTS by remember { mutableStateOf(prefs.getBoolean("use_deepgram_tts", true)) }
+
+                OutlinedTextField(
+                    value = dgKey,
+                    onValueChange = { dgKey = it },
+                    label = { Text("Deepgram API Key") },
+                    placeholder = { Text("dg_xxxxxxxxxxxx", color = BeeGray) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    visualTransformation = if (showDgKey) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { showDgKey = !showDgKey }) {
+                            Icon(if (showDgKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Toggle", tint = BeeGrayLight)
+                        }
+                    },
+                    colors = fieldColors()
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Voice selector
+                Text("VOZ DEL AGENTE", fontSize = 11.sp, color = BeeYellow,
+                    fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                Spacer(modifier = Modifier.height(6.dp))
+
+                val voices = listOf(
+                    Triple("aura-asteria-en", "Asteria", "Femenina, calida"),
+                    Triple("aura-luna-en", "Luna", "Femenina, suave"),
+                    Triple("aura-stella-en", "Stella", "Femenina, segura"),
+                    Triple("aura-orion-en", "Orion", "Masculina, profunda"),
+                    Triple("aura-arcas-en", "Arcas", "Masculina, amigable")
+                )
+
+                voices.forEach { (id, name, desc) ->
+                    Surface(
+                        onClick = { dgVoice = id },
+                        color = if (dgVoice == id) BeeYellow.copy(alpha = 0.1f) else Color.Transparent,
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                if (name.startsWith("A") || name.startsWith("L") || name.startsWith("S"))
+                                    Icons.Filled.Face else Icons.Filled.RecordVoiceOver,
+                                name,
+                                tint = if (dgVoice == id) BeeYellow else BeeGray,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(name, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                                    color = if (dgVoice == id) BeeYellow else BeeWhite)
+                                Text(desc, fontSize = 11.sp, color = BeeGray)
+                            }
+                            if (dgVoice == id) {
+                                Icon(Icons.Filled.CheckCircle, "Selected", tint = BeeYellow, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+                HorizontalDivider(color = BeeGray.copy(alpha = 0.2f))
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // STT Toggle
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Deepgram STT", fontSize = 14.sp, color = BeeWhite)
+                        Text("Transcripcion con Nova-3", fontSize = 11.sp, color = BeeGray)
+                    }
+                    Switch(
+                        checked = useDgSTT,
+                        onCheckedChange = { useDgSTT = it },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = BeeBlack,
+                            checkedTrackColor = BeeYellow,
+                            uncheckedTrackColor = BeeGray.copy(alpha = 0.3f)
+                        )
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // TTS Toggle
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Deepgram TTS", fontSize = 14.sp, color = BeeWhite)
+                        Text("Voz Aura (alta calidad)", fontSize = 11.sp, color = BeeGray)
+                    }
+                    Switch(
+                        checked = useDgTTS,
+                        onCheckedChange = { useDgTTS = it },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = BeeBlack,
+                            checkedTrackColor = BeeYellow,
+                            uncheckedTrackColor = BeeGray.copy(alpha = 0.3f)
+                        )
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        prefs.edit()
+                            .putString("deepgram_api_key", dgKey.trim())
+                            .putString("deepgram_voice", dgVoice)
+                            .putBoolean("use_deepgram_stt", useDgSTT)
+                            .putBoolean("use_deepgram_tts", useDgTTS)
+                            .apply()
+                        Toast.makeText(context, "Deepgram guardado", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = BeeYellow, contentColor = BeeBlack),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(Icons.Filled.Mic, "Save", modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Guardar Deepgram", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+
+                if (dgKey.isBlank()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "Sin API key: se usa voz nativa de Android (gratis)",
+                        fontSize = 11.sp, color = BeeGray
+                    )
+                }
+            }
+
+            // ═══════════════════════════════════════
             // DEVELOPER / GIT / BROWSER
             // ═══════════════════════════════════════
             SectionCard {

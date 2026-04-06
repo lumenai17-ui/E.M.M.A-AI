@@ -130,6 +130,11 @@ class MainActivity : ComponentActivity() {
         voiceManager.initialize()
         viewModel.voiceManager = voiceManager
 
+        // Init Deepgram voice manager (Phase 20)
+        val deepgramVoiceMgr = com.beemovil.voice.DeepgramVoiceManager(this)
+        deepgramVoiceMgr.initialize()
+        viewModel.deepgramVoiceManager = deepgramVoiceMgr
+
         // Request permissions (mic, location, contacts, calendar)
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
             val perms = mutableListOf<String>()

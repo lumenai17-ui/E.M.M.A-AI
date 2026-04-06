@@ -78,6 +78,7 @@ class ChatViewModel : ViewModel() {
 
     // Voice input
     var voiceManager: com.beemovil.skills.VoiceInputManager? = null
+    var deepgramVoiceManager: com.beemovil.voice.DeepgramVoiceManager? = null
     val isRecording = mutableStateOf(false)
 
     // Dashboard AI insight (dynamic, context-aware)
