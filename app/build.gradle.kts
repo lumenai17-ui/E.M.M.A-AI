@@ -29,6 +29,8 @@ android {
 
     kotlinOptions {
         jvmTarget = "17"
+        // LiteRT-LM 0.9+ is compiled with Kotlin 2.2, allow cross-version usage
+        freeCompilerArgs += "-Xskip-metadata-version-check"
     }
 
     buildFeatures {
@@ -80,8 +82,8 @@ dependencies {
     // HTTP (for OpenRouter API calls)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
-    // On-device LLM inference (Gemma 4 via MediaPipe GenAI)
-    implementation("com.google.mediapipe:tasks-genai:0.10.33")
+    // On-device LLM inference (Gemma 4 via LiteRT-LM — replaces deprecated MediaPipe GenAI)
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.9.0")
 
     // JSON parsing — Android includes org.json natively, no extra dependency needed
 

@@ -3,18 +3,24 @@ package com.beemovil.llm.local
 import android.content.Context
 import android.util.Log
 import com.beemovil.llm.*
-import com.google.mediapipe.tasks.genai.llminference.LlmInference
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import com.google.ai.edge.litertlm.Content
+import com.google.ai.edge.litertlm.Engine
+import com.google.ai.edge.litertlm.EngineConfig
+import com.google.ai.edge.litertlm.Conversation
+import com.google.ai.edge.litertlm.Message
 import org.json.JSONObject
 
 /**
- * LocalGemmaProvider — On-device LLM inference using Gemma 4 via MediaPipe.
+ * LocalGemmaProvider — On-device LLM inference using Gemma 4 via LiteRT-LM.
  *
- * Implements the same synchronous LlmProvider interface as the cloud providers.
+ * Uses the official Google AI Edge LiteRT-LM SDK (replacement for deprecated MediaPipe GenAI).
  * Runs entirely offline on the device CPU/GPU — no internet needed.
  *
- * Tool calling is supported via text-based format injection (same approach as
- * OpenRouterProvider uses for free models).
+ * API:
+ * - Engine(EngineConfig(modelPath)) → engine.initialize() → loads model
+ * - engine.createConversation() → conversation session
+ * - conversation.sendMessage("prompt") → Message (with contents and toolCalls)
+ * - Message.contents.contents → List<Content>, where Content.Text has .text property
  */
 class LocalGemmaProvider(
     private val modelPath: String,
@@ -25,9 +31,10 @@ class LocalGemmaProvider(
 
     companion object {
         private const val TAG = "LocalGemma"
-        private var sharedInference: LlmInference? = null
+        private var sharedEngine: Engine? = null
+        private var sharedConversation: Conversation? = null
         private var currentModelPath: String? = null
-        // Store application context for MediaPipe initialization
+        // Store application context for initialization
         var appContext: Context? = null
 
         // Regex to extract tool calls from text output
@@ -43,45 +50,46 @@ class LocalGemmaProvider(
         /** Release shared engine resources */
         fun releaseEngine() {
             try {
-                sharedInference?.close()
+                sharedConversation?.close()
             } catch (_: Exception) {}
-            sharedInference = null
+            try {
+                sharedEngine?.close()
+            } catch (_: Exception) {}
+            sharedConversation = null
+            sharedEngine = null
             currentModelPath = null
+            Log.i(TAG, "Engine released")
         }
     }
 
     /**
-     * Get or create the LlmInference engine.
+     * Get or create the LiteRT-LM engine.
      * Lazily initialized, shared across calls. Thread-safe.
      */
     @Synchronized
-    private fun getEngine(): LlmInference {
+    private fun getEngine(): Engine {
         // Reuse if same model
-        if (sharedInference != null && currentModelPath == modelPath) {
-            return sharedInference!!
+        if (sharedEngine != null && currentModelPath == modelPath) {
+            return sharedEngine!!
         }
 
         // Close old engine if different model
         releaseEngine()
 
-        val ctx = appContext
-            ?: throw IllegalStateException("LocalGemmaProvider.appContext not set. Call LocalGemmaProvider.appContext = applicationContext first.")
-
-        Log.i(TAG, "Initializing MediaPipe LLM from: $modelPath")
+        Log.i(TAG, "Initializing LiteRT-LM engine from: $modelPath")
         val startTime = System.currentTimeMillis()
 
-        val options = LlmInference.LlmInferenceOptions.builder()
-            .setModelPath(modelPath)
-            .setMaxTokens(2048)
-            .build()
+        val config = EngineConfig(modelPath = modelPath)
+        val engine = Engine(config)
+        engine.initialize()
 
-        sharedInference = LlmInference.createFromOptions(ctx, options)
+        sharedEngine = engine
         currentModelPath = modelPath
 
         val elapsed = System.currentTimeMillis() - startTime
         Log.i(TAG, "Engine initialized in ${elapsed}ms")
 
-        return sharedInference!!
+        return engine
     }
 
     override fun complete(messages: List<ChatMessage>, tools: List<ToolDefinition>): LlmResponse {
@@ -91,11 +99,33 @@ class LocalGemmaProvider(
 
         val responseText = try {
             val engine = getEngine()
-            engine.generateResponse(prompt)
+
+            // Create a fresh conversation for each request to avoid context pollution.
+            // We build the full conversation history in the prompt.
+            val conversation = engine.createConversation()
+            try {
+                val response: Message = conversation.sendMessage(prompt)
+                extractText(response)
+            } finally {
+                conversation.close()
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Inference failed: ${e.message}", e)
-            // Try fallback
-            runOllamaFallback(prompt)
+            // Try to recover by releasing and retrying once
+            try {
+                releaseEngine()
+                val engine = getEngine()
+                val conversation = engine.createConversation()
+                try {
+                    val response = conversation.sendMessage(prompt)
+                    extractText(response)
+                } finally {
+                    conversation.close()
+                }
+            } catch (e2: Exception) {
+                Log.e(TAG, "Retry also failed: ${e2.message}", e2)
+                "⚠️ Error en modelo local: ${e.message?.take(150)}"
+            }
         }
 
         Log.d(TAG, "Response: ${responseText.take(200)}")
@@ -120,36 +150,24 @@ class LocalGemmaProvider(
     }
 
     /**
-     * Fallback: Use local Ollama server if MediaPipe fails or model isn't loaded.
+     * Extract text from a LiteRT-LM Message.
+     * Message.contents → Contents → List<Content> → filter Content.Text → join .text
      */
-    private fun runOllamaFallback(prompt: String): String {
-        try {
-            val body = JSONObject().apply {
-                put("model", "gemma4:2b")
-                put("prompt", prompt)
-                put("stream", false)
-            }
-
-            val request = okhttp3.Request.Builder()
-                .url("http://localhost:11434/api/generate")
-                .post(
-                    okhttp3.RequestBody.create(
-                        "application/json; charset=utf-8".toMediaTypeOrNull(),
-                        body.toString()
-                    )
-                )
-                .build()
-
-            val response = com.beemovil.network.BeeHttpClient.llm.newCall(request).execute()
-            val responseBody = response.body?.string() ?: ""
-            response.close()
-
-            val json = JSONObject(responseBody)
-            return json.optString("response", "")
+    private fun extractText(message: Message): String {
+        return try {
+            val contents = message.contents?.contents ?: emptyList()
+            contents.filterIsInstance<Content.Text>()
+                .joinToString("") { it.text }
+                .ifBlank {
+                    // Fallback: try toString on the message
+                    message.toString()
+                }
         } catch (e: Exception) {
-            return "⚠️ Modelo local no disponible. Descarga el modelo en Settings → Proveedor AI → 📱 Local."
+            Log.e(TAG, "Text extraction error: ${e.message}")
+            message.toString()
         }
     }
+
     private fun buildPrompt(messages: List<ChatMessage>, tools: List<ToolDefinition>): String {
         val sb = StringBuilder()
 
