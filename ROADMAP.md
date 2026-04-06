@@ -193,17 +193,17 @@
 
 **18B-4 — 🌐 A2A Gateway (Agent-to-Agent Protocol de Google)**
 - [ ] **Cliente A2A** — Bee-Movil envía tareas a agentes externos:
-  - [ ] Registro de agentes remotos (URL + Agent Card)
-  - [ ] Enviar Task a agente externo (OpenClaw, BEE-Dashboard, etc.)
-  - [ ] Recibir resultados y mostrarlos en el chat
-- [ ] **Servidor A2A** — Bee-Movil recibe tareas de agentes externos:
-  - [ ] Mini HTTP server (WiFi local o tunnel)
-  - [ ] Agent Card publicando capacidades (35 skills)
-  - [ ] POST /tasks → recibir tareas
-  - [ ] GET /tasks/:id → estado de tarea
-  - [ ] SSE streaming de progreso
-- [ ] UI en Settings para configurar agentes remotos
-- [ ] Skill `call_remote_agent` para usar desde el chat
+  - [x] Registro de agentes remotos (URL + Agent Card) — RemoteAgentRegistry
+  - [x] Enviar Task a agente externo (OpenClaw, BEE-Dashboard, etc.)
+  - [x] Recibir resultados y mostrarlos en el chat
+- [x] **Servidor A2A** — Bee-Movil recibe tareas de agentes externos:
+  - [x] Mini HTTP server (WiFi local, port 8765)
+  - [x] Agent Card publicando capacidades (37 skills)
+  - [x] POST /tasks → recibir tareas
+  - [x] GET /tasks/:id → estado de tarea
+  - [ ] SSE streaming de progreso (pendiente)
+- [ ] UI en Settings para configurar agentes remotos (pendiente)
+- [x] Skill `call_remote_agent` para usar desde el chat
 
 ---
 
