@@ -241,39 +241,37 @@
 
 ---
 
-### FASE 19C — Tasks + Calendario + Dashboard Upgrade
-> *Nuevos modulos core del app*
-
-- [ ] **Task System (Tab en bottom nav):** Dashboard | Chats | Tareas | Email | Settings
-- [ ] **Calendario:** vista mes/semana/dia, linkeado a Tasks y agentes
-- [ ] **Dashboard: Widget de pendientes** + greeting dinamico + heartbeat variable
-- [ ] **FileExplorer v2:** navegacion recursiva, acciones contextuales, AI interaction
-- [ ] **Dashboard glow up:** icono grande (48dp), recientes mejorados, insight personalizado
+### FASE 19C — Tasks + Dashboard Upgrade (Completada v4.5.0)
+- [x] TaskDB (SQLite) con CRUD, prioridad, status tracking
+- [x] TaskScreen con vista lista/calendario
+- [x] Widget de pendientes en Dashboard
+- [x] Dashboard 3ra fila: Notificaciones + Tareas
 
 ---
 
-### FASE 19D — Notification Intelligence Agent
-> *El agente escucha y analiza todas las notificaciones del telefono*
-
-- [ ] NotificationListenerService — captura cada notificacion
-- [ ] NotificationLogDB (SQLite) — log por app, 100% local
-- [ ] Config ON/OFF por app + acciones: loguear/resumir/alertar/actuar
-- [ ] Skill notification_query + NotificationDashboardScreen
-- [ ] AI Daily Summary auto-generado
+### FASE 19D — Notification Intelligence Agent (Completada v4.5.1)
+- [x] BeeNotificationService (NotificationListenerService)
+- [x] NotificationLogDB (SQLite, auto-purge 30 dias)
+- [x] NotificationDashboardScreen + NotificationConfigScreen
+- [x] NotificationQuerySkill (consultas por lenguaje natural)
+- [x] Config ON/OFF por app, 100% local
 
 ---
 
-### FASE 20 — Deepgram STT/TTS
-> *Voz natural para el agente*
+### FASE 20 — Deepgram STT/TTS (Completada v4.6.0)
+> *Voz mejorada para el agente*
 
-- [ ] Deepgram Nova STT (español) + Aura TTS (voz natural)
-- [ ] Streaming bidireccional + seleccion de voz por agente
+- [x] DeepgramSTT: Nova-3 REST API, auto silence detection, multi-idioma
+- [x] DeepgramTTS: Aura con 5 voces (Asteria, Luna, Stella, Orion, Arcas)
+- [x] DeepgramVoiceManager: orquestador unificado con fallback a nativo
+- [x] Settings: API key (SecurePrefs), voice selector, STT/TTS toggles
+- [x] Spanish TTS: usa voz nativa Android (Aura es solo ingles)
+- [x] Tap-to-interrupt: detiene TTS y reinicia escucha
 
 ---
 
 ### FASE 20B — Vision Pro Mode
 > *Camera + GPS + Voice narration + background agent*
-> Prerequisito: Deepgram (Fase 20)
 
 - [ ] Location overlay (GPS en prompt) + camera focus control
 - [ ] Video recording + voice narration (TTS narra lo que ve)
@@ -318,7 +316,21 @@
 ### FASE 26 — Skills Expansion (37 a 65+)
 ### FASE 27 — Business Automations (20)
 ### FASE 28 — Play Store + Distribucion
-### FASE 29 — Social Media Hub (Post-Launch)
+
+---
+
+## POST-LANZAMIENTO
+
+### FASE 29 — Social Media Hub
+### FASE 30 — Voice Realtime Mode (Full-Duplex)
+> *Conversacion estilo ChatGPT Voice — interrumpibilidad natural*
+
+- [ ] Deepgram WebSocket streaming STT (conexion persistente)
+- [ ] VAD (Voice Activity Detection) — detecta voz en tiempo real
+- [ ] Barge-in: mic abierto durante TTS, si hablas = corta al instante
+- [ ] Echo cancellation (AcousticEchoCanceler)
+- [ ] Streaming TTS: empieza a hablar antes de respuesta completa
+- [ ] Full-duplex audio pipeline
 
 ---
 
@@ -326,11 +338,14 @@
 
 | Metrica | Actual | Target v5.0 |
 |---------|--------|-------------|
-| Version | v4.4.1 | v5.0 |
+| Version | v4.6.0 | v5.0 |
 | Skills | 37 | 65+ |
-| Pantallas | 16 | ~22 |
-| Providers LLM | 3 | 4 (+Deepgram) |
-| Fases completadas | 19B de 29 | 29 |
+| Pantallas | 18 | ~22 |
+| Providers LLM | 3 | 4 |
+| Fases completadas | 20 de 30 | 28 (pre-launch) |
 | APK tamano | ~78 MB | Optimizar R8 |
-| Hito actual | **PROXIMO: Fase 19C** (Tasks + Calendario) | |
+| Hito actual | **PROXIMO: Fase 20B** (Vision Pro Mode) |
+
+
+---
 
