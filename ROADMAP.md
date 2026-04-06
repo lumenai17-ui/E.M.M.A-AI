@@ -138,7 +138,52 @@
 
 ## 🔜 ROADMAP — Lo que sigue
 
-> Orden: UI polish → Deploy capability → Widgets → Workflows → Expansión
+> Orden: Estabilizar + Multi-Agente → UI polish → Deploy → Widgets → Expansión
+
+---
+
+### ⚡ FASE 18B — Bug Sweep 2 + Multi-Agente + A2A Gateway
+> *Antes de pulir UI, convertir Bee-Movil de "asistente" a "orquestador de agentes"*
+
+**18B-1 — 🐛 Bug Sweep Round 2**
+- [ ] Auditoría de bugs detectados por el usuario en uso real
+- [ ] Revisión de código post-Fase 17/18 (SecurePrefs, LocalGemma)
+- [ ] Mejoras de estabilidad general
+
+**18B-2 — 🤖 delegate_to_agent (Multi-Agente desde el Chat)**
+- [ ] Nuevo skill `delegate_to_agent` — el agente principal puede llamar a otros agentes como tools
+- [ ] Delegación por petición del usuario: "pásale esto al agente de ventas"
+- [ ] Delegación autónoma: el agente decide solo cuándo delegar
+- [ ] UI inline en el chat: burbuja visual mostrando qué agente fue llamado y su respuesta
+- [ ] El agente principal recibe el resultado y continúa la conversación
+
+**18B-3 — 🔄 Workflow Engine + WorkflowScreen (estilo n8n)**
+- [ ] `Workflow` data class: lista de pasos, cada paso = agente + prompt + input/output mapping
+- [ ] `WorkflowRunner` — ejecuta pasos secuencialmente con estado visible
+- [ ] **WorkflowScreen** — nueva pantalla visual tipo n8n:
+  - [ ] Nodos conectados representando agentes/skills
+  - [ ] Estado en vivo por nodo: ⏳ esperando → 🔄 ejecutando → ✅ listo
+  - [ ] Output fluyendo visualmente entre nodos
+- [ ] Templates pre-construidos:
+  - [ ] Research → Redacción → PDF → Email
+  - [ ] URL → Análisis → Landing Page
+  - [ ] Foto → Descripción → Post IG
+- [ ] Guardar/cargar workflows personalizados
+- [ ] Pantalla 16: WorkflowScreen en Dashboard
+
+**18B-4 — 🌐 A2A Gateway (Agent-to-Agent Protocol de Google)**
+- [ ] **Cliente A2A** — Bee-Movil envía tareas a agentes externos:
+  - [ ] Registro de agentes remotos (URL + Agent Card)
+  - [ ] Enviar Task a agente externo (OpenClaw, BEE-Dashboard, etc.)
+  - [ ] Recibir resultados y mostrarlos en el chat
+- [ ] **Servidor A2A** — Bee-Movil recibe tareas de agentes externos:
+  - [ ] Mini HTTP server (WiFi local o tunnel)
+  - [ ] Agent Card publicando capacidades (35 skills)
+  - [ ] POST /tasks → recibir tareas
+  - [ ] GET /tasks/:id → estado de tarea
+  - [ ] SSE streaming de progreso
+- [ ] UI en Settings para configurar agentes remotos
+- [ ] Skill `call_remote_agent` para usar desde el chat
 
 ---
 
@@ -257,13 +302,15 @@
 | Métrica | Actual | Target v2.0 |
 |---------|--------|-------------|
 | Versión | v4.2.5 | v5.0 |
-| Skills | 35 | 58 |
-| Pantallas | 15 | ~20 |
+| Skills | 35 | 58 (+delegate_to_agent, call_remote_agent) |
+| Pantallas | 15 | ~18 (+WorkflowScreen, +A2A Settings) |
 | Providers LLM | 3 (OpenRouter + Ollama Cloud + Local) | 4 (+Deepgram) |
 | Modelos de visión | 7 | 10 |
 | Automations | 0 | 20 |
-| Bugs conocidos | 0 | 0 |
+| Bugs conocidos | pendiente sweep 2 | 0 |
 | Tiers de precio | — | 3 ($25/$40/$100) |
 | Fases completadas | 18 de 28 | 28 |
 | APK tamaño | ~135 MB | Optimizar con R8 |
-| Hito actual | AGENTE COMPLETO + LLM LOCAL + ENCRIPTADO |  |
+| Multi-agente | ❌ Agentes aislados | ✅ Orquestación + A2A |
+| Hito actual | **PRÓXIMO: Fase 18B** (Bug Sweep 2 + Multi-Agente + A2A) | |
+
