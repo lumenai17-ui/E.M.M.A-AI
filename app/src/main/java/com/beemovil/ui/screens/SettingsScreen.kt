@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -204,13 +205,13 @@ fun SettingsScreen(
                         val prefKey = if (selectedProvider == "openrouter") "openrouter_api_key" else "ollama_api_key"
                         securePrefs.edit().putString(prefKey, key).apply()
                         viewModel.updateApiKey(selectedProvider, key)
-                        Toast.makeText(context, "✅ Key guardada", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Key guardada", Toast.LENGTH_SHORT).show()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = BeeGray.copy(alpha = 0.5f)),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("💾 Guardar Key", color = BeeWhite, fontSize = 13.sp)
+                    Text("Guardar Key", color = BeeWhite, fontSize = 13.sp)
                 }
             }
 
@@ -231,7 +232,7 @@ fun SettingsScreen(
                 if (selectedProvider == "local") {
                     // Local model info
                     Text(
-                        "📱 Modelos que corren EN TU TELÉFONO sin internet.",
+                        "Modelos que corren EN TU TELEFONO sin internet.",
                         fontSize = 12.sp, color = BeeGray
                     )
                     Spacer(modifier = Modifier.height(4.dp))
@@ -240,7 +241,7 @@ fun SettingsScreen(
                         try { com.beemovil.llm.local.LocalModelManager.getAvailableStorageGB() } catch (_: Exception) { 0.0 }
                     }
                     Text(
-                        "💾 Espacio disponible: ${String.format("%.1f", availableGB)} GB",
+                        "Espacio disponible: ${String.format("%.1f", availableGB)} GB",
                         fontSize = 11.sp, color = if (availableGB > 2.0) Color(0xFF4CAF50) else Color(0xFFF44336)
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -249,7 +250,7 @@ fun SettingsScreen(
                     OutlinedTextField(
                         value = hfToken,
                         onValueChange = { hfToken = it },
-                        label = { Text("🤗 HuggingFace Token") },
+                        label = { Text("HuggingFace Token") },
                         placeholder = { Text("hf_...", color = BeeGray) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
@@ -273,7 +274,7 @@ fun SettingsScreen(
                         Button(
                             onClick = {
                                 securePrefs.edit().putString("huggingface_token", hfToken.trim()).apply()
-                                Toast.makeText(context, "✅ HuggingFace token guardado", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "HuggingFace token guardado", Toast.LENGTH_SHORT).show()
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = BeeGray.copy(alpha = 0.5f)),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
@@ -304,12 +305,18 @@ fun SettingsScreen(
                         ) {
                             Text(
                                 when {
-                                    selectedProvider == "local" && isDownloaded -> "✅"
-                                    selectedProvider == "local" -> "⬇️"
-                                    model.free -> "🆓"
-                                    else -> "💎"
+                                    selectedProvider == "local" && isDownloaded -> "OK"
+                                    selectedProvider == "local" -> "DL"
+                                    model.free -> "Free"
+                                    else -> "Pro"
                                 },
-                                fontSize = 16.sp
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = when {
+                                    selectedProvider == "local" && isDownloaded -> Color(0xFF4CAF50)
+                                    model.free -> BeeYellow
+                                    else -> Color(0xFFBF5AF2)
+                                }
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Column(modifier = Modifier.weight(1f)) {
@@ -325,7 +332,7 @@ fun SettingsScreen(
                                 }
                             }
                             if (isSelected && (selectedProvider != "local" || isDownloaded)) {
-                                Text("✓", color = BeeYellow, fontWeight = FontWeight.Bold)
+                                Icon(Icons.Filled.CheckCircle, "Selected", tint = BeeYellow, modifier = Modifier.size(18.dp))
                             }
                         }
                     }
@@ -367,7 +374,7 @@ fun SettingsScreen(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(10.dp)
                         ) {
-                            Text("⬇️ Descargar ${modelToDownload.name}", color = BeeWhite, fontSize = 13.sp)
+                            Text("Descargar ${modelToDownload.name}", color = BeeWhite, fontSize = 13.sp)
                         }
 
                         if (downloadProgress in 0f..0.99f) {
@@ -404,7 +411,7 @@ fun SettingsScreen(
                 colors = ButtonDefaults.buttonColors(containerColor = BeeYellow, contentColor = BeeBlack),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Text("✅ Aplicar y Volver", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text("Aplicar y Volver", fontWeight = FontWeight.Bold, fontSize = 16.sp)
             }
 
             // ═══════════════════════════════════════
@@ -432,10 +439,16 @@ fun SettingsScreen(
                         ) {
                             Text(
                                 when (botStatus) {
-                                    "online" -> "🟢"
-                                    "connecting" -> "🟡"
-                                    else -> "🔴"
-                                }, fontSize = 16.sp
+                                    "online" -> "ON"
+                                    "connecting" -> "..."
+                                    else -> "ERR"
+                                }, fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = when (botStatus) {
+                                    "online" -> Color(0xFF4CAF50)
+                                    "connecting" -> BeeYellow
+                                    else -> Color(0xFFF44336)
+                                }
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Column {
@@ -497,9 +510,9 @@ fun SettingsScreen(
                         shape = RoundedCornerShape(10.dp)
                     ) {
                         Text(when (botStatus) {
-                            "online" -> "✅ Conectado"
-                            "connecting" -> "⏳..."
-                            else -> "▶️ Conectar"
+                            "online" -> "Conectado"
+                            "connecting" -> "Espera..."
+                            else -> "Conectar"
                         }, fontSize = 13.sp)
                     }
 
@@ -516,7 +529,7 @@ fun SettingsScreen(
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(10.dp)
                         ) {
-                            Text("⏹️ Detener", color = BeeWhite, fontSize = 13.sp)
+                            Text("Detener", color = BeeWhite, fontSize = 13.sp)
                         }
                     }
                 }
@@ -546,13 +559,13 @@ fun SettingsScreen(
                 Button(
                     onClick = {
                         securePrefs.edit().putString("telegram_owner_username", telegramUsername.trim()).apply()
-                        Toast.makeText(context, "✅ Username guardado", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Username guardado", Toast.LENGTH_SHORT).show()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = BeeGray.copy(alpha = 0.5f)),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("💾 Guardar Username", color = BeeWhite, fontSize = 13.sp)
+                    Text("Guardar Username", color = BeeWhite, fontSize = 13.sp)
                 }
 
                 if (allowedChatsStr.isNotBlank()) {
@@ -563,7 +576,7 @@ fun SettingsScreen(
                             modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("👤", fontSize = 14.sp)
+                            Icon(Icons.Filled.Person, "User", tint = BeeGray, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Chat ID: $id", fontSize = 13.sp, color = Color(0xFFE0E0E0),
                                 modifier = Modifier.weight(1f))
@@ -679,7 +692,7 @@ fun SettingsScreen(
                                 val preset = com.beemovil.email.EmailService.PRESETS[name]!!
                                 if (name == "Dominio propio") {
                                     showServerFields = true
-                                    emailTestResult = "⚠️ Configura los servidores IMAP/SMTP de tu dominio"
+                                    emailTestResult = "Configura los servidores IMAP/SMTP de tu dominio"
                                 } else {
                                     emailImapHost = preset.imapHost
                                     emailImapPort = preset.imapPort.toString()
@@ -740,7 +753,7 @@ fun SettingsScreen(
                 // Gmail App Password hint
                 if (emailImapHost.contains("gmail")) {
                     Text(
-                        "💡 Gmail requiere App Password (no tu contraseña normal).\nVe a myaccount.google.com → Seguridad → Contraseñas de apps",
+                        "Gmail requiere App Password (no tu contrasena normal).\nVe a myaccount.google.com > Seguridad > Contrasenas de apps",
                         fontSize = 10.sp, color = BeeYellow.copy(alpha = 0.7f),
                         modifier = Modifier.padding(top = 4.dp)
                     )
@@ -773,7 +786,7 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("🔧", fontSize = 14.sp)
+                        Icon(Icons.Outlined.Settings, "Server", tint = BeeGray, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Servidores", fontSize = 13.sp, color = Color(0xFFE0E0E0))
@@ -840,17 +853,17 @@ fun SettingsScreen(
                                 .putString("email_smtp_host", emailSmtpHost)
                                 .putInt("email_smtp_port", emailSmtpPort.toIntOrNull() ?: 587)
                                 .apply()
-                            Toast.makeText(context, "✅ Email configurado", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Email configurado", Toast.LENGTH_SHORT).show()
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = BeeGray.copy(alpha = 0.5f)),
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("💾 Guardar", color = BeeWhite, fontSize = 13.sp)
+                        Text("Guardar", color = BeeWhite, fontSize = 13.sp)
                     }
                     Button(
                         onClick = {
-                            emailTestResult = "⏳ Conectando a $emailImapHost..."
+                            emailTestResult = "Conectando a $emailImapHost..."
                             // Also save before testing
                             securePrefs.edit()
                                 .putString("email_address", emailAddr.trim())
@@ -870,17 +883,17 @@ fun SettingsScreen(
                                     )
                                     val result = com.beemovil.email.EmailService(context)
                                         .testConnection(emailAddr.trim(), emailPasswd, config)
-                                    emailTestResult = "✅ Conectado · $result"
+                                    emailTestResult = "OK Conectado - $result"
                                 } catch (e: Exception) {
                                     val msg = e.message ?: "Error desconocido"
                                     emailTestResult = when {
                                         msg.contains("Authentication", true) || msg.contains("AUTHENTICATE", true) ->
-                                            "❌ Credenciales incorrectas. Gmail necesita App Password, no tu contraseña normal"
+                                            "Error: Credenciales incorrectas. Gmail necesita App Password"
                                         msg.contains("connect", true) || msg.contains("timeout", true) ->
-                                            "❌ No pudo conectar a $emailImapHost. Verifica el servidor"
+                                            "Error: No pudo conectar a $emailImapHost. Verifica el servidor"
                                         msg.contains("SSL", true) || msg.contains("TLS", true) ->
-                                            "❌ Error SSL. Prueba otro puerto (993 para IMAP)"
-                                        else -> "❌ ${msg.take(80)}"
+                                            "Error: SSL. Prueba otro puerto (993 para IMAP)"
+                                        else -> "Error: ${msg.take(80)}"
                                     }
                                 }
                             }.start()
@@ -890,7 +903,7 @@ fun SettingsScreen(
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("🔍 Probar", color = BeeWhite, fontSize = 13.sp)
+                        Text("Probar", color = BeeWhite, fontSize = 13.sp)
                     }
                 }
 
@@ -898,8 +911,8 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(emailTestResult, fontSize = 12.sp,
                         color = when {
-                            emailTestResult.startsWith("✅") -> Color(0xFF4CAF50)
-                            emailTestResult.startsWith("❌") -> Color(0xFFF44336)
+                            emailTestResult.startsWith("OK") -> Color(0xFF4CAF50)
+                            emailTestResult.startsWith("Error") -> Color(0xFFF44336)
                             else -> BeeGray
                         }
                     )
@@ -912,9 +925,9 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(10.dp)) {
-                        Text("⚠️ Gmail requiere App Password", fontWeight = FontWeight.Bold,
+                        Text("Gmail requiere App Password", fontWeight = FontWeight.Bold,
                             fontSize = 12.sp, color = Color(0xFFFFC107))
-                        Text("1. Ve a myaccount.google.com\n2. Seguridad → Verificación en 2 pasos (activar)\n3. App Passwords → genera una y pégala aquí\n\nOutlook/Hotmail: usa tu contraseña normal",
+                        Text("1. Ve a myaccount.google.com\n2. Seguridad > Verificación en 2 pasos (activar)\n3. App Passwords > genera una y pégala aquí\n\nOutlook/Hotmail: usa tu contraseña normal",
                             fontSize = 10.sp, color = BeeGray)
                     }
                 }
@@ -930,9 +943,9 @@ fun SettingsScreen(
                 val msgCount = viewModel.chatHistoryDB?.getTotalMessageCount() ?: 0
                 val memCount = viewModel.memoryDB?.getMemoryCount() ?: 0
 
-                DataRow("💬", "Mensajes", "$msgCount")
-                DataRow("🧠", "Memorias RAG", "$memCount")
-                DataRow("🤖", "Agentes", "${viewModel.availableAgents.size}")
+                DataRow("Mensajes", "$msgCount")
+                DataRow("Memorias RAG", "$memCount")
+                DataRow("Agentes", "${viewModel.availableAgents.size}")
 
                 Spacer(modifier = Modifier.height(10.dp))
 
@@ -940,23 +953,23 @@ fun SettingsScreen(
                     OutlinedButton(
                         onClick = {
                             viewModel.chatHistoryDB?.clearAll()
-                            Toast.makeText(context, "🗑️ Historial limpiado", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Historial limpiado", Toast.LENGTH_SHORT).show()
                         },
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFF44336)),
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("🗑️ Limpiar chats", fontSize = 12.sp)
+                        Text("Limpiar chats", fontSize = 12.sp)
                     }
                     OutlinedButton(
                         onClick = {
-                            Toast.makeText(context, "📦 Exportación próximamente", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Exportacion proximamente", Toast.LENGTH_SHORT).show()
                         },
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = BeeYellow),
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("📦 Exportar", fontSize = 12.sp)
+                        Text("Exportar", fontSize = 12.sp)
                     }
                 }
             }
@@ -969,13 +982,13 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(6.dp))
 
                 val skillGroups = listOf(
-                    "Core" to listOf("📱 device_info", "📋 clipboard", "🔔 notify", "🔊 tts", "🌐 browser", "📤 share", "📁 file"),
-                    "Inteligencia" to listOf("🧠 memory", "🧮 calculator", "📅 datetime"),
-                    "Multimedia" to listOf("📸 camera", "🎨 image_gen"),
-                    "Sistema" to listOf("🔦 flashlight", "🔉 volume", "⏰ alarm", "📱 app_launcher", "📞 contacts", "📡 connectivity"),
-                    "Productividad" to listOf("📅 calendar", "📧 email", "🎵 music", "🌤️ weather", "🔍 search", "🔆 brightness", "🔋 battery", "📱 qr_gen"),
-                    "Documentos" to listOf("🌐 web_fetch", "📄 generate_pdf", "🌐 generate_html", "📊 spreadsheet", "📖 read_document"),
-                    "Agent Core" to listOf("⚡ run_code", "📂 file_manager", "🔀 git", "🌐 browser_agent")
+                    "Core" to listOf("device_info", "clipboard", "notify", "tts", "browser", "share", "file"),
+                    "Inteligencia" to listOf("memory", "calculator", "datetime"),
+                    "Multimedia" to listOf("camera", "image_gen"),
+                    "Sistema" to listOf("flashlight", "volume", "alarm", "app_launcher", "contacts", "connectivity"),
+                    "Productividad" to listOf("calendar", "email", "music", "weather", "search", "brightness", "battery", "qr_gen"),
+                    "Documentos" to listOf("web_fetch", "generate_pdf", "generate_html", "spreadsheet", "read_document"),
+                    "Agent Core" to listOf("run_code", "file_manager", "git", "browser_agent")
                 )
 
                 skillGroups.forEach { (group, skills) ->
@@ -1026,13 +1039,11 @@ private fun SectionTitle(text: String) {
 }
 
 @Composable
-private fun DataRow(icon: String, label: String, value: String) {
+private fun DataRow(label: String, value: String) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(icon, fontSize = 14.sp)
-        Spacer(modifier = Modifier.width(8.dp))
         Text(label, fontSize = 14.sp, color = Color(0xFFE0E0E0), modifier = Modifier.weight(1f))
         Text(value, fontSize = 14.sp, color = BeeYellow, fontWeight = FontWeight.Bold)
     }

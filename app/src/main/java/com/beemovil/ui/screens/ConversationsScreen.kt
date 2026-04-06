@@ -174,7 +174,7 @@ fun ConversationsScreen(
                         modifier = Modifier.fillMaxWidth().padding(24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text("➕", fontSize = 32.sp)
+                        Icon(Icons.Filled.Add, "Add", tint = BeeYellow, modifier = Modifier.size(32.dp))
                         Spacer(modifier = Modifier.height(8.dp))
                         Text("Crear agente personalizado", color = BeeYellow,
                             fontWeight = FontWeight.Medium, fontSize = 14.sp)
@@ -189,7 +189,7 @@ fun ConversationsScreen(
         item {
             Spacer(modifier = Modifier.height(16.dp))
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Text("Bee-Movil v4.2.7 · Kotlin nativo", fontSize = 11.sp, color = BeeGray)
+                Text("Bee-Movil v4.3.3", fontSize = 11.sp, color = BeeGray)
             }
         }
     }
@@ -211,7 +211,7 @@ private fun FeaturedAgentCard(
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Image(
-                    painter = painterResource(id = R.drawable.bee_logo),
+                    painter = painterResource(id = R.drawable.bee_agent_avatar),
                     contentDescription = null,
                     modifier = Modifier.size(52.dp).clip(CircleShape),
                     contentScale = ContentScale.Crop
@@ -226,7 +226,8 @@ private fun FeaturedAgentCard(
                         color = Color(0xFF4CAF50).copy(alpha = 0.15f),
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Text("🟢 TG", fontSize = 11.sp, color = Color(0xFF4CAF50),
+                        Text("TG", fontSize = 11.sp, color = Color(0xFF4CAF50),
+                            fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
                     }
                 }
@@ -293,7 +294,7 @@ private fun AgentCard(
                 modifier = Modifier.size(46.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Text(agent.icon, fontSize = 24.sp)
+                    Icon(Icons.Filled.SmartToy, agent.name, tint = HoneyGold, modifier = Modifier.size(24.dp))
                 }
             }
 
