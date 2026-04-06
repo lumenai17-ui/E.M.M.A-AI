@@ -94,6 +94,9 @@ fun LiveVisionScreen(
     // Voice manager for narration
     val dgVoice = viewModel.deepgramVoiceManager
 
+    // Live context: web search for real-time info
+    val liveContext = remember { LiveContextProvider() }
+
     // Tourist guide: destination coords (resolved by AI)
     var touristBearing by remember { mutableStateOf(0f) }
     var touristDistance by remember { mutableStateOf(0f) }
@@ -167,14 +170,33 @@ fun LiveVisionScreen(
                                         return@Thread
                                     }
 
-                                    // Build prompt with GPS context if enabled
+                                    // Build prompt with GPS + live web context
                                     val fullPrompt = buildString {
                                         if ((visionState.gpsOverlay || visionState.dashcamMode) && gpsData.latitude != 0.0) {
                                             appendLine(gpsData.toPromptContext())
                                         }
+                                        // Fetch live context from web (news, traffic, tips)
+                                        val contextMode = when {
+                                            visionState.touristGuide -> LiveContextProvider.ContextMode.TOURIST
+                                            visionState.dashcamMode -> LiveContextProvider.ContextMode.DASHCAM
+                                            visionState.gpsOverlay -> LiveContextProvider.ContextMode.GPS
+                                            else -> null
+                                        }
+                                        if (contextMode != null && gpsData.latitude != 0.0) {
+                                            val webContext = liveContext.fetchContext(
+                                                gpsData.address, gpsData.coordsShort, contextMode
+                                            )
+                                            if (webContext.isNotBlank()) {
+                                                appendLine(webContext)
+                                                appendLine()
+                                            }
+                                        }
                                         append(customPrompt)
                                         if (visionState.dashcamMode) {
                                             append(" Incluye observaciones de transito, senales y condiciones del camino.")
+                                        }
+                                        if (visionState.touristGuide) {
+                                            append(" Menciona lugares interesantes, tips turisticos o datos curiosos de la zona si los conoces.")
                                         }
                                     }
 
