@@ -221,39 +221,61 @@ class LocalGemmaProvider(
     private fun buildPrompt(messages: List<ChatMessage>, tools: List<ToolDefinition>): String {
         val sb = StringBuilder()
 
-        // LOCAL MODELS: Skip tool definitions entirely.
-        // E2B has 4096 token context — 37 tool schemas alone use ~3000 tokens.
-        // Local models are for simple chat, not full agentic tool-calling.
-        // Tool calling still works via cloud providers (Ollama, OpenRouter).
+        // LOCAL MODELS: Compact tool list (names + short description only).
+        // E2B = 4096 tokens, E4B = 8192 tokens. Full schemas (~3000 tokens) don't fit.
+        // Instead of removing tools, we give the model a compact summary.
+        if (tools.isNotEmpty()) {
+            sb.appendLine("You have these tools available (call them using <tool_call>{\"name\":\"NAME\",\"arguments\":{...}}</tool_call>):")
+            // Only list name + short desc, NO parameter schemas
+            tools.forEach { tool ->
+                val shortDesc = tool.description.take(60).substringBefore('\n')
+                sb.appendLine("- ${tool.name}: $shortDesc")
+            }
+            sb.appendLine()
+        }
 
         // Add conversation messages in Gemma chat format
-        // Compact system prompt for local (skip long agent instructions)
         messages.forEach { msg ->
             when (msg.role) {
                 "system" -> {
-                    // Replace the massive system prompt with a compact one
+                    // Compact system prompt — keep personality but remove verbose tool listings
+                    val compact = (msg.content ?: "")
+                        .substringBefore("## Tus 3") // Cut before the huge tool list
+                        .take(300) // Max 300 chars
+                        .trim()
                     sb.appendLine("<start_of_turn>user")
-                    sb.appendLine("[System] Eres Bee-Movil, un asistente AI amigable. Responde en español, conciso y útil.")
+                    sb.appendLine("[System] $compact")
                     sb.appendLine("<end_of_turn>")
                 }
                 "user" -> {
                     sb.appendLine("<start_of_turn>user")
-                    sb.appendLine(msg.content)
+                    sb.appendLine(msg.content ?: "")
                     sb.appendLine("<end_of_turn>")
                 }
                 "assistant" -> {
                     sb.appendLine("<start_of_turn>model")
-                    sb.appendLine(msg.content)
+                    sb.appendLine(msg.content ?: "")
                     sb.appendLine("<end_of_turn>")
                 }
                 "tool" -> {
-                    // Skip tool results for local (shouldn't reach here)
+                    sb.appendLine("<start_of_turn>user")
+                    sb.appendLine("[Tool Result] ${msg.content?.take(500) ?: ""}")
+                    sb.appendLine("<end_of_turn>")
                 }
             }
         }
 
         sb.appendLine("<start_of_turn>model")
-        return sb.toString()
+
+        // Safety check: if prompt is still too long, truncate middle messages
+        val prompt = sb.toString()
+        if (prompt.length > 12000) { // ~3000 tokens at 4 chars/token
+            Log.w(TAG, "Prompt too long (${prompt.length} chars), truncating")
+            // Keep first 4000 + last 4000 chars
+            return prompt.take(4000) + "\n...[contexto truncado]...\n" + prompt.takeLast(4000)
+        }
+
+        return prompt
     }
 
     private fun parseToolCalls(text: String): List<ToolCall> {
