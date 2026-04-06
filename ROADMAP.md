@@ -1,5 +1,5 @@
 # 🐝 Bee-Movil Native — Roadmap & Checklist
-### Última actualización: 6 de Abril 2026 · v4.2.6
+### Ultima actualizacion: 6 de Abril 2026 · v4.4.0
 
 ---
 
@@ -207,22 +207,23 @@
 
 ---
 
-### 🎨 FASE 19 — UI Premium (Estudio de Diseño)
-> *Rediseño visual completo — percepción de producto premium*
+### FASE 19 — UI Premium (Completada v4.4.0)
+> *Rediseno visual completo — percepcion de producto premium*
 
-> **Nota:** Cuando lleguemos, hacer estudio comparativo de apps referencia (Instagram, WhatsApp, FinFlow)
-
-- [ ] Reemplazar emojis restantes por Material Icons / SVG custom
-- [ ] Google Font (Inter/Outfit) con 4 pesos tipográficos
-- [ ] Paleta de colores expandida (4-5 colores armónicos)
-- [ ] Sombras y elevation en Cards (profundidad visual)
-- [ ] Animated AI Blob (Lottie) en VoiceChat y ChatScreen
-- [ ] Suggestion Chips (LazyRow con pills scrolleables)
-- [ ] Transiciones animadas entre pantallas
-- [ ] Grid de iconos con fondos gradiente en Dashboard
-- [ ] SelectionContainer para copiar texto de burbujas
-- [ ] Micro-animaciones (ripple, fade, slide)
-- [ ] Tema claro/oscuro toggle
+- [x] Reemplazar emojis restantes por Material Icons (40+ archivos, 0 emojis)
+- [x] Google Font Inter con 4 pesos tipograficos (Regular, Medium, SemiBold, Bold)
+- [x] Paleta de colores expandida (10 accents + brand + light/dark)
+- [x] Sombras y elevation en Cards (profundidad visual)
+- [x] Suggestion Chips (LazyRow con 8 pills scrolleables en ChatScreen)
+- [x] Transiciones animadas entre pantallas (AnimatedContent fade+slide)
+- [x] Grid de iconos con fondos gradiente en Dashboard (radialGradient)
+- [x] SelectionContainer para copiar texto de burbujas
+- [x] Micro-animaciones (heartbeat, pulse, slide transitions)
+- [x] Tema claro/oscuro toggle (Dark/Light/System en Settings, persistente)
+- [x] Dashboard rewrite IG-style (hero greeting, AI insight, stories agents)
+- [x] Chat Premium (gestures, context menu, file cards, markdown)
+- [x] PremiumBottomNav (animated gold indicator, Material Icons)
+- [x] Zero-emoji policy completa (40+ archivos, skills, agents, LLM providers)
 
 ---
 
@@ -319,18 +320,18 @@
 
 ## 📊 Métricas
 
-| Métrica | Actual | Target v2.0 |
+| Metrica | Actual | Target v2.0 |
 |---------|--------|-------------|
-| Versión | v4.2.5 | v5.0 |
-| Skills | 35 | 58 (+delegate_to_agent, call_remote_agent) |
-| Pantallas | 15 | ~18 (+WorkflowScreen, +A2A Settings) |
+| Version | v4.4.0 | v5.0 |
+| Skills | 37 (+delegate, +call_remote) | 58 |
+| Pantallas | 16 (+WorkflowScreen) | ~18 |
 | Providers LLM | 3 (OpenRouter + Ollama Cloud + Local) | 4 (+Deepgram) |
-| Modelos de visión | 7 | 10 |
-| Automations | 0 | 20 |
-| Bugs conocidos | pendiente sweep 2 | 0 |
-| Tiers de precio | — | 3 ($25/$40/$100) |
-| Fases completadas | 18 de 28 | 28 |
-| APK tamaño | ~135 MB | Optimizar con R8 |
-| Multi-agente | ❌ Agentes aislados | ✅ Orquestación + A2A |
-| Hito actual | **PRÓXIMO: Fase 18B** (Bug Sweep 2 + Multi-Agente + A2A) | |
+| Modelos de vision | 7 | 10 |
+| Automations | 6 templates | 20 |
+| Bugs conocidos | 0 | 0 |
+| Tiers de precio | -- | 3 ($25/$40/$100) |
+| Fases completadas | 19 de 28 | 28 |
+| APK tamano | ~78 MB | Optimizar con R8 |
+| Multi-agente | Orquestacion + A2A | Orquestacion + A2A |
+| Hito actual | **PROXIMO: Fase 20** (Deepgram STT/TTS) | |
 
