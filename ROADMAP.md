@@ -158,26 +158,38 @@
 - [x] FEATURE-7: Archivos organizados (PDFs/, HTML/, Excel/)
 - [x] Fix: Download crash (timeout, thread safety, storage) — anterior commit
 
-**18B-2 — 🤖 delegate_to_agent (Multi-Agente desde el Chat)**
-- [ ] Nuevo skill `delegate_to_agent` — el agente principal puede llamar a otros agentes como tools
-- [ ] Delegación por petición del usuario: "pásale esto al agente de ventas"
-- [ ] Delegación autónoma: el agente decide solo cuándo delegar
-- [ ] UI inline en el chat: burbuja visual mostrando qué agente fue llamado y su respuesta
-- [ ] El agente principal recibe el resultado y continúa la conversación
+**18B-1.5 — ✅ Provider Audit + ModelRegistry (v4.2.7)**
+- [x] ModelRegistry.kt — fuente única de verdad para 50+ modelos
+- [x] Ollama Cloud: 26 modelos (GLM-5, Kimi K2.5, MiniMax, Nemotron, Qwen3.5)
+- [x] OpenRouter: 12 modelos (7 free + 5 premium)
+- [x] HuggingFace Token en Settings para descarga local
+- [x] Modelos agrupados por categoría (Chat/Code/Vision/Reasoning/Agent)
+- [x] Fix: Local provider no requiere API key (crash fix)
 
-**18B-3 — 🔄 Workflow Engine + WorkflowScreen (estilo n8n)**
-- [ ] `Workflow` data class: lista de pasos, cada paso = agente + prompt + input/output mapping
-- [ ] `WorkflowRunner` — ejecuta pasos secuencialmente con estado visible
-- [ ] **WorkflowScreen** — nueva pantalla visual tipo n8n:
-  - [ ] Nodos conectados representando agentes/skills
-  - [ ] Estado en vivo por nodo: ⏳ esperando → 🔄 ejecutando → ✅ listo
-  - [ ] Output fluyendo visualmente entre nodos
-- [ ] Templates pre-construidos:
-  - [ ] Research → Redacción → PDF → Email
-  - [ ] URL → Análisis → Landing Page
-  - [ ] Foto → Descripción → Post IG
-- [ ] Guardar/cargar workflows personalizados
-- [ ] Pantalla 16: WorkflowScreen en Dashboard
+**18B-2 — ✅ delegate_to_agent (Multi-Agente desde el Chat)**
+- [x] Nuevo skill `delegate_to_agent` — el agente principal llama a otros agentes como tools
+- [x] Delegación por petición del usuario: "pásale esto al agente de ventas"
+- [x] Delegación autónoma: el agente decide solo cuándo delegar
+- [x] UI inline en el chat: burbuja visual mostrando delegación
+- [x] El agente principal recibe el resultado y continúa la conversación
+- [x] Error handling: agente no encontrado, timeout, modelo no disponible
+
+**18B-3 — ✅ Workflow Engine + WorkflowScreen (estilo n8n)**
+- [x] `Workflow` data class: lista de pasos, cada paso = agente + prompt + input/output mapping
+- [x] `WorkflowRunner` — ejecuta pasos secuencialmente con estado visible
+- [x] **WorkflowScreen** — nueva pantalla visual tipo n8n:
+  - [x] Nodos conectados representando agentes/skills
+  - [x] Estado en vivo por nodo: ⏳ esperando → 🔄 ejecutando → ✅ listo
+  - [x] Output fluyendo visualmente entre nodos
+- [x] 6 Templates pre-construidos:
+  - [x] Research → Redacción → PDF
+  - [x] Morning Brief (agenda + clima + device)
+  - [x] Content Creator (imagen → post → HTML)
+  - [x] Quote + Email (ventas → PDF → email)
+  - [x] URL → Landing Page
+  - [x] Daily Digest (noticias + agenda → PDF)
+- [ ] Guardar/cargar workflows personalizados (pendiente)
+- [x] Pantalla 16: WorkflowScreen en Dashboard
 
 **18B-4 — 🌐 A2A Gateway (Agent-to-Agent Protocol de Google)**
 - [ ] **Cliente A2A** — Bee-Movil envía tareas a agentes externos:
