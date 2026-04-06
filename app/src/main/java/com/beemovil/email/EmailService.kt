@@ -10,7 +10,7 @@ import javax.mail.search.FlagTerm
 
 /**
  * EmailService — IMAP/SMTP email client with attachment support.
- * Works with Gmail, Outlook, Yahoo, and any standard IMAP/SMTP server.
+ * Works with Gmail (App Password), Outlook, and custom SMTP domains.
  */
 class EmailService(private val context: Context) {
 
@@ -19,7 +19,7 @@ class EmailService(private val context: Context) {
         val PRESETS = mapOf(
             "Gmail" to EmailConfig("imap.gmail.com", 993, "smtp.gmail.com", 587),
             "Outlook" to EmailConfig("outlook.office365.com", 993, "smtp.office365.com", 587),
-            "Yahoo" to EmailConfig("imap.mail.yahoo.com", 993, "smtp.mail.yahoo.com", 587)
+            "Dominio propio" to EmailConfig("mail.example.com", 993, "mail.example.com", 587)
         )
     }
 

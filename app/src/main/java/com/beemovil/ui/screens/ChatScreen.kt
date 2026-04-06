@@ -56,6 +56,15 @@ fun ChatScreen(viewModel: ChatViewModel, onSettingsClick: () -> Unit = {}, onBac
     var showAttachOptions by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
+    // Pick up prefilled prompts from Dashboard tools
+    val pending = viewModel.pendingPrompt.value
+    LaunchedEffect(pending) {
+        if (pending.isNotBlank()) {
+            inputText = pending
+            viewModel.pendingPrompt.value = ""
+        }
+    }
+
     // File picker — handles PDF, DOCX, XLSX, TXT, CSV, etc.
     val filePickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()

@@ -43,7 +43,7 @@ fun ConversationsScreen(
     onAgentClick: (String) -> Unit,
     onCreateAgent: () -> Unit,
     onEditAgent: (String) -> Unit,
-    skillCount: Int = 25
+    skillCount: Int = 35
 ) {
     val previews = remember { mutableStateListOf<ChatHistoryDB.ConversationPreview>() }
     val agents = viewModel.availableAgents
@@ -129,7 +129,7 @@ fun ConversationsScreen(
                         preview = preview,
                         isCustom = false,
                         onClick = { onAgentClick(agent.id) },
-                        onEdit = null
+                        onEdit = { onEditAgent(agent.id) }
                     )
                 }
             }
@@ -189,7 +189,7 @@ fun ConversationsScreen(
         item {
             Spacer(modifier = Modifier.height(16.dp))
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Text("Bee-Movil v3.0 · Kotlin nativo", fontSize = 11.sp, color = BeeGray)
+                Text("Bee-Movil v4.2.5 · Kotlin nativo", fontSize = 11.sp, color = BeeGray)
             }
         }
     }
@@ -258,7 +258,7 @@ private fun FeaturedAgentCard(
                     }
                     Spacer(modifier = Modifier.width(6.dp))
                     Surface(color = Color(0xFF2196F3).copy(alpha = 0.15f), shape = RoundedCornerShape(6.dp)) {
-                        Text("25 skills", fontSize = 10.sp, color = Color(0xFF2196F3),
+                        Text("35 skills", fontSize = 10.sp, color = Color(0xFF2196F3),
                             fontWeight = FontWeight.Medium,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
                     }

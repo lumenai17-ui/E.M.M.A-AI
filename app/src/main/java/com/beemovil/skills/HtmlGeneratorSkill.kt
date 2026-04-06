@@ -41,8 +41,13 @@ class HtmlGeneratorSkill(private val context: Context) : BeeSkill {
         if (html.isBlank()) return JSONObject().put("error", "HTML content is required")
 
         return try {
-            val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), "BeeMovil")
-            dir.mkdirs()
+            val dir = try {
+                val d = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), "BeeMovil/HTML")
+                d.mkdirs()
+                if (d.canWrite()) d else File(context.getExternalFilesDir(null), "HTML").also { it.mkdirs() }
+            } catch (_: Exception) {
+                File(context.getExternalFilesDir(null), "HTML").also { it.mkdirs() }
+            }
             val file = File(dir, "${filename}.html")
             file.writeText(html)
 

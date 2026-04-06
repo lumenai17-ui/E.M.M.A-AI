@@ -71,8 +71,13 @@ class SpreadsheetSkill(private val context: Context) : BeeSkill {
                 rowCount++
             }
 
-            val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), "BeeMovil")
-            dir.mkdirs()
+            val dir = try {
+                val d = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), "BeeMovil/Excel")
+                d.mkdirs()
+                if (d.canWrite()) d else File(context.getExternalFilesDir(null), "Excel").also { it.mkdirs() }
+            } catch (_: Exception) {
+                File(context.getExternalFilesDir(null), "Excel").also { it.mkdirs() }
+            }
             val file = File(dir, "${filename}.${ext}")
             file.writeText(sb.toString())
 

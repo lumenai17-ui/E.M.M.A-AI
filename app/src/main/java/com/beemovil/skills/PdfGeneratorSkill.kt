@@ -52,8 +52,13 @@ class PdfGeneratorSkill(private val context: Context) : BeeSkill {
         val footer = params.optString("footer", "Generado por Bee-Movil")
 
         return try {
-            val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), "BeeMovil")
-            dir.mkdirs()
+            val dir = try {
+                val d = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), "BeeMovil/PDFs")
+                d.mkdirs()
+                if (d.canWrite()) d else File(context.getExternalFilesDir(null), "PDFs").also { it.mkdirs() }
+            } catch (_: Exception) {
+                File(context.getExternalFilesDir(null), "PDFs").also { it.mkdirs() }
+            }
             val file = File(dir, "${filename}.pdf")
 
             val document = PdfDocument()

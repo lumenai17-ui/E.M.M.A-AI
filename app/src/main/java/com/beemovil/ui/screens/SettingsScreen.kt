@@ -590,16 +590,25 @@ fun SettingsScreen(
                 // Presets – auto-fill servers
                 Text("PROVEEDOR", fontSize = 10.sp, color = BeeGray, letterSpacing = 1.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("Gmail", "Outlook", "Yahoo").forEach { name ->
+                    listOf("Gmail", "Outlook", "Dominio propio").forEach { name ->
                         FilterChip(
-                            selected = emailImapHost.contains(name.lowercase()),
+                            selected = when (name) {
+                                "Gmail" -> emailImapHost.contains("gmail")
+                                "Outlook" -> emailImapHost.contains("office365") || emailImapHost.contains("outlook")
+                                else -> !emailImapHost.contains("gmail") && !emailImapHost.contains("office365") && !emailImapHost.contains("outlook")
+                            },
                             onClick = {
                                 val preset = com.beemovil.email.EmailService.PRESETS[name]!!
-                                emailImapHost = preset.imapHost
-                                emailImapPort = preset.imapPort.toString()
-                                emailSmtpHost = preset.smtpHost
-                                emailSmtpPort = preset.smtpPort.toString()
-                                emailTestResult = ""
+                                if (name == "Dominio propio") {
+                                    showServerFields = true
+                                    emailTestResult = "⚠️ Configura los servidores IMAP/SMTP de tu dominio"
+                                } else {
+                                    emailImapHost = preset.imapHost
+                                    emailImapPort = preset.imapPort.toString()
+                                    emailSmtpHost = preset.smtpHost
+                                    emailSmtpPort = preset.smtpPort.toString()
+                                    emailTestResult = ""
+                                }
                             },
                             label = { Text(name, fontSize = 12.sp) },
                             colors = FilterChipDefaults.filterChipColors(
@@ -625,16 +634,21 @@ fun SettingsScreen(
                                 val p = com.beemovil.email.EmailService.PRESETS["Gmail"]!!
                                 emailImapHost = p.imapHost; emailSmtpHost = p.smtpHost
                                 emailImapPort = p.imapPort.toString(); emailSmtpPort = p.smtpPort.toString()
+                                showServerFields = false
                             }
                             lower.contains("@outlook") || lower.contains("@hotmail") || lower.contains("@live") -> {
                                 val p = com.beemovil.email.EmailService.PRESETS["Outlook"]!!
                                 emailImapHost = p.imapHost; emailSmtpHost = p.smtpHost
                                 emailImapPort = p.imapPort.toString(); emailSmtpPort = p.smtpPort.toString()
+                                showServerFields = false
                             }
-                            lower.contains("@yahoo") -> {
-                                val p = com.beemovil.email.EmailService.PRESETS["Yahoo"]!!
-                                emailImapHost = p.imapHost; emailSmtpHost = p.smtpHost
-                                emailImapPort = p.imapPort.toString(); emailSmtpPort = p.smtpPort.toString()
+                            lower.contains("@") && lower.substringAfter("@").contains(".") -> {
+                                // Custom domain — auto-try mail.domain.com
+                                val domain = lower.substringAfter("@")
+                                emailImapHost = "mail.$domain"
+                                emailSmtpHost = "mail.$domain"
+                                emailImapPort = "993"; emailSmtpPort = "587"
+                                showServerFields = true
                             }
                         }
                     },
@@ -644,6 +658,15 @@ fun SettingsScreen(
                     singleLine = true,
                     colors = fieldColors()
                 )
+
+                // Gmail App Password hint
+                if (emailImapHost.contains("gmail")) {
+                    Text(
+                        "💡 Gmail requiere App Password (no tu contraseña normal).\nVe a myaccount.google.com → Seguridad → Contraseñas de apps",
+                        fontSize = 10.sp, color = BeeYellow.copy(alpha = 0.7f),
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(6.dp))
 

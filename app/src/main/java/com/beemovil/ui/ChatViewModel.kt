@@ -118,6 +118,7 @@ class ChatViewModel : ViewModel() {
     fun getProviderDisplayName(): String = when (currentProvider.value) {
         "openrouter" -> "OpenRouter"
         "ollama" -> "Ollama Cloud"
+        "local" -> "📱 Local (Gemma 4)"
         else -> currentProvider.value
     }
 
@@ -185,6 +186,18 @@ class ChatViewModel : ViewModel() {
      */
     fun navigateToConversations() {
         currentScreen.value = "conversations"
+    }
+
+    // Pending prompt text — prefilled in the chat input but NOT auto-sent.
+    val pendingPrompt = mutableStateOf("")
+
+    /**
+     * Open a chat and PREFILL the prompt in the text field (editable, NOT auto-sent).
+     * The user can review/modify and tap Send themselves.
+     */
+    fun prefillAgentChat(agentId: String, prompt: String) {
+        openAgentChat(agentId)
+        pendingPrompt.value = prompt
     }
 
     /**

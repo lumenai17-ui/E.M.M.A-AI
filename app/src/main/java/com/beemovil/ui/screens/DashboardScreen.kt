@@ -239,24 +239,24 @@ fun DashboardScreen(
             Column(modifier = Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     ToolCard(Icons.Outlined.Email, "Correo", AccentBlue, Modifier.weight(1f)) { viewModel.currentScreen.value = "email_inbox" }
-                    ToolCard(Icons.Outlined.Search, "Investigar", AccentOrange, Modifier.weight(1f)) { viewModel.openAgentChatWithPrompt("main", "Busca las últimas noticias de tecnología") }
-                    ToolCard(Icons.Outlined.PictureAsPdf, "PDF", AccentPink, Modifier.weight(1f)) { viewModel.openAgentChatWithPrompt("main", "Hazme un PDF resumen ejecutivo sobre inteligencia artificial") }
+                    ToolCard(Icons.Outlined.Search, "Investigar", AccentOrange, Modifier.weight(1f)) { viewModel.prefillAgentChat("main", "Investiga sobre: ") }
+                    ToolCard(Icons.Outlined.PictureAsPdf, "PDF", AccentPink, Modifier.weight(1f)) { viewModel.prefillAgentChat("main", "Hazme un PDF sobre: ") }
                 }
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    ToolCard(Icons.Outlined.CalendarMonth, "Agenda", AccentPurple, Modifier.weight(1f)) { viewModel.openAgentChatWithPrompt("agenda", "¿Qué tengo programado hoy?") }
-                    ToolCard(Icons.Outlined.Language, "Landing", AccentTeal, Modifier.weight(1f)) { viewModel.openAgentChatWithPrompt("main", "Crea una landing page moderna para un café artesanal") }
-                    ToolCard(Icons.Outlined.TableChart, "Excel", AccentGreen, Modifier.weight(1f)) { viewModel.openAgentChatWithPrompt("main", "Hazme un spreadsheet comparativo de precios") }
+                    ToolCard(Icons.Outlined.CalendarMonth, "Agenda", AccentPurple, Modifier.weight(1f)) { viewModel.prefillAgentChat("main", "¿Qué tengo programado hoy?") }
+                    ToolCard(Icons.Outlined.Language, "Landing", AccentTeal, Modifier.weight(1f)) { viewModel.prefillAgentChat("main", "Crea una landing page para: ") }
+                    ToolCard(Icons.Outlined.TableChart, "Excel", AccentGreen, Modifier.weight(1f)) { viewModel.prefillAgentChat("main", "Hazme un spreadsheet de: ") }
                 }
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     ToolCard(Icons.Outlined.Storage, "Git", Color(0xFFFF7043), Modifier.weight(1f)) { viewModel.currentScreen.value = "git_repos" }
-                    ToolCard(Icons.Outlined.Code, "Code", Color(0xFFCE93D8), Modifier.weight(1f)) { viewModel.openAgentChatWithPrompt("main", "Ayúdame a escribir código") }
-                    ToolCard(Icons.Outlined.Architecture, "Deploy", Color(0xFF4DD0E1), Modifier.weight(1f)) { viewModel.openAgentChatWithPrompt("main", "Quiero publicar un proyecto web") }
+                    ToolCard(Icons.Outlined.Code, "Code", Color(0xFFCE93D8), Modifier.weight(1f)) { viewModel.prefillAgentChat("main", "Ayúdame a escribir código en: ") }
+                    ToolCard(Icons.Outlined.Architecture, "Deploy", Color(0xFF4DD0E1), Modifier.weight(1f)) { viewModel.prefillAgentChat("main", "Quiero publicar: ") }
                 }
             }
             Spacer(modifier = Modifier.height(28.dp))
         }
 
-        // ─── SYSTEM ─────────────────────────────
+        // ─── SISTEMA + PROVIDER SELECTOR ─────────
         item {
             Section("Sistema")
             Spacer(modifier = Modifier.height(12.dp))
@@ -287,8 +287,58 @@ fun DashboardScreen(
                     Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(
                         Brush.horizontalGradient(listOf(Color.Transparent, Border, Color.Transparent))
                     ))
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
+                    // Provider quick selector
+                    Text("PROVEEDOR AI", fontSize = 10.sp, color = TextTertiary,
+                        fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    val currentProv = viewModel.currentProvider.value
+                    val providers = listOf(
+                        Triple("openrouter", "OpenRouter", AccentBlue),
+                        Triple("ollama", "Ollama", AccentPurple),
+                        Triple("local", "📱 Local", AccentGreen)
+                    )
+
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        providers.forEach { (provId, provName, color) ->
+                            val isSelected = currentProv == provId
+                            Surface(
+                                onClick = {
+                                    val models = when (provId) {
+                                        "openrouter" -> com.beemovil.llm.LlmFactory.OPENROUTER.models
+                                        "ollama" -> com.beemovil.llm.LlmFactory.OLLAMA_CLOUD.models
+                                        "local" -> com.beemovil.llm.LlmFactory.LOCAL.models
+                                        else -> emptyList()
+                                    }
+                                    val firstModel = models.firstOrNull()?.id ?: ""
+                                    viewModel.switchProvider(provId, firstModel)
+                                },
+                                color = if (isSelected) color.copy(alpha = 0.2f) else Color.Transparent,
+                                shape = RoundedCornerShape(10.dp),
+                                border = if (isSelected) BorderStroke(1.dp, color) else BorderStroke(1.dp, Border),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(vertical = 10.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(provName, fontSize = 11.sp,
+                                        color = if (isSelected) color else TextSecondary,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
+                                    if (isSelected) {
+                                        Text(
+                                            viewModel.currentModel.value.substringAfterLast("/").take(16),
+                                            fontSize = 9.sp, color = TextTertiary, maxLines = 1
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Outlined.Memory, "AI", tint = Honey, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(10.dp))
@@ -348,7 +398,7 @@ fun DashboardScreen(
                     modifier = Modifier.size(12.dp).clip(CircleShape), contentScale = ContentScale.Crop
                 )
                 Spacer(modifier = Modifier.width(5.dp))
-                Text("Bee-Movil v3.7", fontSize = 10.sp, color = TextTertiary.copy(alpha = 0.5f))
+                Text("Bee-Movil v4.2.5", fontSize = 10.sp, color = TextTertiary.copy(alpha = 0.5f))
             }
         }
     }

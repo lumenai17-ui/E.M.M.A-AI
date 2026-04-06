@@ -160,38 +160,47 @@ fun AgentCreatorScreen(
 
             if (!useGlobalModel) {
                 Spacer(modifier = Modifier.height(4.dp))
-                Text("Modelos disponibles:", fontSize = 11.sp, color = BeeGray)
-                Spacer(modifier = Modifier.height(4.dp))
+                Text("Selecciona un modelo de cualquier proveedor:", fontSize = 11.sp, color = BeeGray)
+                Spacer(modifier = Modifier.height(8.dp))
 
-                val models = when (viewModel.currentProvider.value) {
-                    "openrouter" -> com.beemovil.llm.LlmFactory.OPENROUTER.models
-                    "ollama" -> com.beemovil.llm.LlmFactory.OLLAMA_CLOUD.models
-                    "local" -> com.beemovil.llm.LlmFactory.LOCAL.models
-                    else -> com.beemovil.llm.LlmFactory.OPENROUTER.models
-                }
+                // Show ALL providers grouped
+                val allProviders = listOf(
+                    Triple("OpenRouter", "openrouter", com.beemovil.llm.LlmFactory.OPENROUTER.models),
+                    Triple("Ollama Cloud", "ollama", com.beemovil.llm.LlmFactory.OLLAMA_CLOUD.models),
+                    Triple("📱 Local", "local", com.beemovil.llm.LlmFactory.LOCAL.models)
+                )
 
-                models.forEach { model ->
-                    val isSelected = customModel == model.id
-                    Surface(
-                        onClick = { customModel = model.id },
-                        color = if (isSelected) BeeYellow.copy(alpha = 0.15f) else Color(0xFF1A1A2E),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                allProviders.forEach { (providerName, _, models) ->
+                    Text(
+                        providerName.uppercase(),
+                        fontSize = 10.sp, color = BeeYellow.copy(alpha = 0.7f),
+                        fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+                    models.forEach { model ->
+                        val isSelected = customModel == model.id
+                        Surface(
+                            onClick = { customModel = model.id },
+                            color = if (isSelected) BeeYellow.copy(alpha = 0.15f) else Color(0xFF1A1A2E),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
                         ) {
-                            Text(if (model.free) "🆓" else "🤖", fontSize = 14.sp)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(model.name, fontSize = 13.sp,
-                                    color = if (isSelected) BeeYellow else Color(0xFFE0E0E0))
-                                Text(model.id, fontSize = 10.sp, color = BeeGray)
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(if (model.free) "🆓" else "🤖", fontSize = 14.sp)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(model.name, fontSize = 13.sp,
+                                        color = if (isSelected) BeeYellow else Color(0xFFE0E0E0))
+                                    Text(model.id, fontSize = 10.sp, color = BeeGray)
+                                }
+                                if (isSelected) Text("✓", color = BeeYellow, fontWeight = FontWeight.Bold)
                             }
-                            if (isSelected) Text("✓", color = BeeYellow, fontWeight = FontWeight.Bold)
                         }
                     }
+                    Spacer(modifier = Modifier.height(4.dp))
                 }
             }
 
@@ -232,7 +241,7 @@ fun AgentCreatorScreen(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    if (useAllSkills) "Todos los skills (25)" else "Skills limitados",
+                    if (useAllSkills) "Todos los skills (35)" else "Skills limitados",
                     color = BeeWhite, fontSize = 14.sp
                 )
             }
