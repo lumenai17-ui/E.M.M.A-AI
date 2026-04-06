@@ -50,6 +50,11 @@ class ChatViewModel : ViewModel() {
     // Navigation state
     val currentScreen = mutableStateOf("conversations") // "conversations" | "chat" | "settings"
 
+    // Email navigation state
+    val selectedEmailUid = mutableStateOf(0L)
+    val replyTo = mutableStateOf<String?>(null)
+    val replySubject = mutableStateOf<String?>(null)
+
     private var agents = mutableMapOf<String, BeeAgent>()
     private var skills = mapOf<String, BeeSkill>()
     private var apiKeys = mutableMapOf<String, String>()

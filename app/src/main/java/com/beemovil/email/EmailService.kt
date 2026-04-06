@@ -83,28 +83,31 @@ class EmailService(private val context: Context) {
         store.connect(config.imapHost, config.imapPort, email, password)
 
         val inbox = store.getFolder("INBOX")
-        inbox.open(Folder.READ_ONLY)
+        try {
+            inbox.open(Folder.READ_ONLY)
 
-        val messages = if (unreadOnly) {
-            inbox.search(FlagTerm(Flags(Flags.Flag.SEEN), false))
-        } else {
-            val total = inbox.messageCount
-            val start = maxOf(1, total - limit + 1)
-            inbox.getMessages(start, total)
-        }
-
-        val result = messages.mapNotNull { msg ->
-            try {
-                parseMessage(msg, inbox)
-            } catch (e: Exception) {
-                Log.e(TAG, "Parse error: ${e.message}")
-                null
+            val messages = if (unreadOnly) {
+                inbox.search(FlagTerm(Flags(Flags.Flag.SEEN), false))
+            } else {
+                val total = inbox.messageCount
+                val start = maxOf(1, total - limit + 1)
+                inbox.getMessages(start, total)
             }
-        }.sortedByDescending { it.date }
 
-        inbox.close(false)
-        store.close()
-        return result.take(limit)
+            val result = messages.mapNotNull { msg ->
+                try {
+                    parseMessage(msg, inbox)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Parse error: ${e.message}")
+                    null
+                }
+            }.sortedByDescending { it.date }
+
+            return result.take(limit)
+        } finally {
+            try { inbox.close(false) } catch (_: Exception) {}
+            try { store.close() } catch (_: Exception) {}
+        }
     }
 
     /**

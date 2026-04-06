@@ -749,7 +749,7 @@ fun SettingsScreen(
             // SKILLS
             // ═══════════════════════════════════════
             SectionCard {
-                SectionTitle("SKILLS NATIVOS (25)")
+                SectionTitle("SKILLS NATIVOS (35)")
                 Spacer(modifier = Modifier.height(6.dp))
 
                 val skillGroups = listOf(
@@ -757,7 +757,9 @@ fun SettingsScreen(
                     "Inteligencia" to listOf("🧠 memory", "🧮 calculator", "📅 datetime"),
                     "Multimedia" to listOf("📸 camera", "🎨 image_gen"),
                     "Sistema" to listOf("🔦 flashlight", "🔉 volume", "⏰ alarm", "📱 app_launcher", "📞 contacts", "📡 connectivity"),
-                    "Productividad" to listOf("📅 calendar", "📧 email", "🎵 music", "🌤️ weather", "🔍 search", "🔆 brightness", "🔋 battery", "📱 qr_gen")
+                    "Productividad" to listOf("📅 calendar", "📧 email", "🎵 music", "🌤️ weather", "🔍 search", "🔆 brightness", "🔋 battery", "📱 qr_gen"),
+                    "Documentos" to listOf("🌐 web_fetch", "📄 generate_pdf", "🌐 generate_html", "📊 spreadsheet", "📖 read_document"),
+                    "Agent Core" to listOf("⚡ run_code", "📂 file_manager", "🔀 git", "🌐 browser_agent")
                 )
 
                 skillGroups.forEach { (group, skills) ->
@@ -773,8 +775,8 @@ fun SettingsScreen(
             SectionCard {
                 SectionTitle("ACERCA DE")
                 Spacer(modifier = Modifier.height(6.dp))
-                Text("Bee-Movil v3.1", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = BeeWhite)
-                Text("25 skills · Kotlin nativo · Edge AI", fontSize = 12.sp, color = BeeGray)
+                Text("Bee-Movil v4.2.1", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = BeeWhite)
+                Text("35 skills · 15 screens · Kotlin nativo · Edge AI", fontSize = 12.sp, color = BeeGray)
                 Spacer(modifier = Modifier.height(4.dp))
                 Text("Asistente AI que vive en tu teléfono.\nSin servidores. Sin tracking. 100% tuyo.",
                     fontSize = 12.sp, color = Color(0xFFB0B0B0))

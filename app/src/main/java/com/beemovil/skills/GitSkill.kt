@@ -83,13 +83,13 @@ class GitSkill(private val context: Context) : BeeSkill {
         return try {
             when (action) {
                 "clone" -> cloneRepo(params)
-                "status" -> repoStatus(params)
-                "add" -> addFiles(params)
-                "commit" -> commitChanges(params)
-                "push" -> pushChanges(params)
-                "pull" -> pullChanges(params)
-                "log" -> commitLog(params)
-                "diff" -> showDiff(params)
+                "status" -> withRepo(params) { git -> repoStatus(git) }
+                "add" -> withRepo(params) { git -> addFiles(git, params) }
+                "commit" -> withRepo(params) { git -> commitChanges(git, params) }
+                "push" -> withRepo(params) { git -> pushChanges(git, params) }
+                "pull" -> withRepo(params) { git -> pullChanges(git, params) }
+                "log" -> withRepo(params) { git -> commitLog(git, params) }
+                "diff" -> withRepo(params) { git -> showDiff(git) }
                 "list_repos" -> listRepos()
                 else -> JSONObject().put("error", "Unknown action: $action")
             }
@@ -99,6 +99,18 @@ class GitSkill(private val context: Context) : BeeSkill {
         } catch (e: Exception) {
             Log.e(TAG, "Error: ${e.message}", e)
             JSONObject().put("error", "${e.message}")
+        }
+    }
+
+    /** Safely opens and closes a Git repo for an operation. */
+    private fun withRepo(params: JSONObject, block: (Git) -> JSONObject): JSONObject {
+        val repoDir = getRepoDir(params.optString("repo", ""))
+        if (!repoDir.exists()) return JSONObject().put("error", "Repo not found")
+        val git = Git.open(repoDir)
+        return try {
+            block(git)
+        } finally {
+            git.close()
         }
     }
 
@@ -137,11 +149,7 @@ class GitSkill(private val context: Context) : BeeSkill {
             .put("message", "Repo clonado: $repoName en ${repoDir.absolutePath}")
     }
 
-    private fun repoStatus(params: JSONObject): JSONObject {
-        val repoDir = getRepoDir(params.optString("repo", ""))
-        if (!repoDir.exists()) return JSONObject().put("error", "Repo not found")
-
-        val git = Git.open(repoDir)
+    private fun repoStatus(git: Git): JSONObject {
         val status = git.status().call()
 
         val result = JSONObject()
@@ -153,19 +161,13 @@ class GitSkill(private val context: Context) : BeeSkill {
             .put("untracked", JSONArray(status.untracked))
             .put("changed", JSONArray(status.changed))
 
-        git.close()
-
         val totalChanges = status.added.size + status.modified.size + status.removed.size + status.untracked.size
         result.put("message", if (status.isClean) "Repo limpio, sin cambios" else "$totalChanges archivo(s) con cambios")
 
         return result
     }
 
-    private fun addFiles(params: JSONObject): JSONObject {
-        val repoDir = getRepoDir(params.optString("repo", ""))
-        if (!repoDir.exists()) return JSONObject().put("error", "Repo not found")
-
-        val git = Git.open(repoDir)
+    private fun addFiles(git: Git, params: JSONObject): JSONObject {
         val files = params.optString("files", "all")
 
         if (files == "all" || files.isBlank()) {
@@ -176,18 +178,13 @@ class GitSkill(private val context: Context) : BeeSkill {
             addCmd.call()
         }
 
-        git.close()
         return JSONObject()
             .put("success", true)
             .put("message", "Archivos agregados al staging")
     }
 
-    private fun commitChanges(params: JSONObject): JSONObject {
-        val repoDir = getRepoDir(params.optString("repo", ""))
-        if (!repoDir.exists()) return JSONObject().put("error", "Repo not found")
-
+    private fun commitChanges(git: Git, params: JSONObject): JSONObject {
         val message = params.optString("message", "Update from Bee-Movil")
-        val git = Git.open(repoDir)
 
         // Auto-add all changes
         git.add().addFilepattern(".").call()
@@ -197,8 +194,6 @@ class GitSkill(private val context: Context) : BeeSkill {
             .setAuthor(PersonIdent("Bee-Movil", "bee@beemovil.app"))
             .call()
 
-        git.close()
-
         return JSONObject()
             .put("success", true)
             .put("commit_id", commit.name.take(7))
@@ -206,46 +201,32 @@ class GitSkill(private val context: Context) : BeeSkill {
             .put("message", "Commit: ${commit.name.take(7)} - $message")
     }
 
-    private fun pushChanges(params: JSONObject): JSONObject {
-        val repoDir = getRepoDir(params.optString("repo", ""))
-        if (!repoDir.exists()) return JSONObject().put("error", "Repo not found")
-
-        val git = Git.open(repoDir)
+    private fun pushChanges(git: Git, params: JSONObject): JSONObject {
         val pushCmd = git.push()
 
         getCredentials(params)?.let { pushCmd.setCredentialsProvider(it) }
             ?: return JSONObject().put("error", "Token required for push. Provide 'token' or save in Settings.")
 
-        val results = pushCmd.call()
-        git.close()
+        pushCmd.call()
 
         return JSONObject()
             .put("success", true)
             .put("message", "Push completado exitosamente")
     }
 
-    private fun pullChanges(params: JSONObject): JSONObject {
-        val repoDir = getRepoDir(params.optString("repo", ""))
-        if (!repoDir.exists()) return JSONObject().put("error", "Repo not found")
-
-        val git = Git.open(repoDir)
+    private fun pullChanges(git: Git, params: JSONObject): JSONObject {
         val pullCmd = git.pull()
         getCredentials(params)?.let { pullCmd.setCredentialsProvider(it) }
 
         val result = pullCmd.call()
-        git.close()
 
         return JSONObject()
             .put("success", result.isSuccessful)
             .put("message", if (result.isSuccessful) "Pull completado" else "Pull fallido: ${result.mergeResult?.mergeStatus}")
     }
 
-    private fun commitLog(params: JSONObject): JSONObject {
-        val repoDir = getRepoDir(params.optString("repo", ""))
-        if (!repoDir.exists()) return JSONObject().put("error", "Repo not found")
-
+    private fun commitLog(git: Git, params: JSONObject): JSONObject {
         val count = params.optInt("count", 10)
-        val git = Git.open(repoDir)
         val log = git.log().setMaxCount(count).call()
 
         val commits = JSONArray()
@@ -258,19 +239,13 @@ class GitSkill(private val context: Context) : BeeSkill {
             )
         }
 
-        git.close()
-
         return JSONObject()
             .put("commits", commits)
             .put("count", commits.length())
             .put("message", "${commits.length()} commits")
     }
 
-    private fun showDiff(params: JSONObject): JSONObject {
-        val repoDir = getRepoDir(params.optString("repo", ""))
-        if (!repoDir.exists()) return JSONObject().put("error", "Repo not found")
-
-        val git = Git.open(repoDir)
+    private fun showDiff(git: Git): JSONObject {
         val status = git.status().call()
 
         val sb = StringBuilder()

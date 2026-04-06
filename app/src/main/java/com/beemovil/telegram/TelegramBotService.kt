@@ -20,6 +20,8 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.Executors
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -56,6 +58,9 @@ class TelegramBotService : Service() {
     private var allowedChatIds = mutableSetOf<Long>()
     private var allowAll = false
     private var ownerSet = false
+    private val messageExecutor: ExecutorService = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "TelegramMsgHandler").apply { isDaemon = true }
+    }
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(35, TimeUnit.SECONDS)
@@ -196,6 +201,7 @@ class TelegramBotService : Service() {
         isRunning.set(false)
         pollingThread?.interrupt()
         pollingThread = null
+        messageExecutor.shutdownNow()
         reportStatus("offline", "", 0)
         try { stopForeground(STOP_FOREGROUND_REMOVE) } catch (_: Exception) {}
         stopSelf()
@@ -289,7 +295,7 @@ class TelegramBotService : Service() {
 
     private fun handleMessage(chatId: Long, text: String, fromUser: String) {
         sendChatAction(chatId, "typing")
-        Thread {
+        messageExecutor.submit {
             try {
                 val resp = agent?.chat(text)
                 val reply = resp?.text ?: "Lo siento, no pude procesar tu mensaje."
@@ -301,7 +307,7 @@ class TelegramBotService : Service() {
                 Log.e(TAG, "Handle error: ${e.message}", e)
                 sendMessage(chatId, "❌ Error: ${e.message?.take(200)}")
             }
-        }.start()
+        }
     }
 
     private fun sendMessage(chatId: Long, text: String) {

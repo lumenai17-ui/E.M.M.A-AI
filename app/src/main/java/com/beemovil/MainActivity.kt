@@ -267,12 +267,9 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                             "email_inbox" -> {
-                                val selectedEmailUid = remember { mutableStateOf(0L) }
-                                val replyTo = remember { mutableStateOf<String?>(null) }
-                                val replySubject = remember { mutableStateOf<String?>(null) }
                                 EmailInboxScreen(
                                     onEmailClick = { uid ->
-                                        selectedEmailUid.value = uid
+                                        viewModel.selectedEmailUid.value = uid
                                         viewModel.currentScreen.value = "email_detail"
                                     },
                                     onCompose = { viewModel.currentScreen.value = "email_compose" }
@@ -280,10 +277,12 @@ class MainActivity : ComponentActivity() {
                             }
                             "email_detail" -> {
                                 EmailDetailScreen(
-                                    uid = 0L, // will be passed via state
+                                    uid = viewModel.selectedEmailUid.value,
                                     viewModel = viewModel,
                                     onBack = { viewModel.currentScreen.value = "email_inbox" },
                                     onReply = { to, subject ->
+                                        viewModel.replyTo.value = to
+                                        viewModel.replySubject.value = subject
                                         viewModel.currentScreen.value = "email_compose"
                                     }
                                 )

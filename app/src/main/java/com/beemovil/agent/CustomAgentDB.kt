@@ -115,17 +115,17 @@ class CustomAgentDB(context: Context) : SQLiteOpenHelper(context, "bee_custom_ag
     }
 
     private fun cursorToAgent(cursor: android.database.Cursor): AgentConfig {
-        val toolsStr = cursor.getString(cursor.getColumnIndexOrThrow("enabled_tools"))
-        val tools = if (toolsStr == "*") setOf("*") else toolsStr.split(",").map { it.trim() }.toSet()
+        val toolsStr = cursor.getString(cursor.getColumnIndexOrThrow("enabled_tools")) ?: "*"
+        val tools = if (toolsStr == "*") setOf("*") else toolsStr.split(",").map { it.trim() }.filter { it.isNotBlank() }.toSet()
 
         return AgentConfig(
             id = cursor.getString(cursor.getColumnIndexOrThrow("id")),
-            name = cursor.getString(cursor.getColumnIndexOrThrow("name")),
-            icon = cursor.getString(cursor.getColumnIndexOrThrow("icon")),
-            description = cursor.getString(cursor.getColumnIndexOrThrow("description")),
-            systemPrompt = cursor.getString(cursor.getColumnIndexOrThrow("system_prompt")),
+            name = cursor.getString(cursor.getColumnIndexOrThrow("name")) ?: "Agent",
+            icon = cursor.getString(cursor.getColumnIndexOrThrow("icon")) ?: "🤖",
+            description = cursor.getString(cursor.getColumnIndexOrThrow("description")) ?: "",
+            systemPrompt = cursor.getString(cursor.getColumnIndexOrThrow("system_prompt")) ?: "",
             enabledTools = tools,
-            model = cursor.getString(cursor.getColumnIndexOrThrow("model")),
+            model = cursor.getString(cursor.getColumnIndexOrThrow("model")) ?: "",
             temperature = cursor.getFloat(cursor.getColumnIndexOrThrow("temperature"))
         )
     }

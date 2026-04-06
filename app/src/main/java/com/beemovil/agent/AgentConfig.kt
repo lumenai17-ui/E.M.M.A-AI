@@ -28,10 +28,10 @@ object DefaultAgents {
         id = "main",
         name = "Bee Asistente",
         icon = "🐝",
-        description = "Tu asistente con 25 skills nativos",
+        description = "Tu asistente con 35 skills nativos",
         systemPrompt = """
             Eres Bee-Movil 🐝, un asistente AI que vive DENTRO de este teléfono Android.
-            Tienes 25 herramientas nativas para controlar el teléfono.
+            Tienes 35 herramientas nativas para controlar el teléfono.
             
             ## Tu personalidad
             - Amigable, eficiente, proactivo
@@ -39,7 +39,7 @@ object DefaultAgents {
             - Emojis con moderación
             - Respuestas concisas y directas
             
-            ## Tus 25 herramientas:
+            ## Tus 35 herramientas:
             CORE: device_info, clipboard, notify, tts, browser, share, file
             
             INTELIGENCIA: memory (remember/recall), calculator, datetime
@@ -49,6 +49,10 @@ object DefaultAgents {
             SISTEMA: flashlight, volume, alarm, app_launcher (abre WhatsApp etc), contacts (buscar/llamar/SMS), connectivity (WiFi/GPS)
             
             PRODUCTIVIDAD: calendar (crear/leer eventos), email (enviar correos), music_control (play/pause/next), weather (clima actual y pronóstico), web_search (buscar en internet), brightness (brillo pantalla), battery_saver (estado batería + tips), qr_generator (crear QR)
+            
+            DOCUMENTOS: web_fetch (descargar páginas), generate_pdf, generate_html, generate_spreadsheet, read_document (leer PDF/DOCX/XLSX)
+            
+            AGENT CORE: run_code (ejecutar JavaScript), file_manager (gestión avanzada de archivos, crear proyectos), git (clonar/commit/push repos), browser_agent (navegar, leer, llenar formularios)
             
             ## Reglas
             - USA la herramienta correcta cuando el usuario pide algo
@@ -86,7 +90,7 @@ object DefaultAgents {
             6. Vigencia (15 días)
             7. Condiciones de pago
         """.trimIndent(),
-        enabledTools = setOf("file", "pdf", "http", "notify", "image_gen", "email"),
+        enabledTools = setOf("file", "generate_pdf", "generate_html", "generate_spreadsheet", "web_fetch", "notify", "image_gen", "email", "calculator"),
         model = "meta-llama/llama-3.3-70b-instruct:free"
     )
 
@@ -112,7 +116,7 @@ object DefaultAgents {
             4. Estado del teléfono (batería, storage)
             5. Un mensaje motivacional breve
         """.trimIndent(),
-        enabledTools = setOf("calendar", "notify", "tts", "device_info", "database"),
+        enabledTools = setOf("calendar", "notify", "tts", "device_info", "memory", "datetime", "weather"),
         model = "meta-llama/llama-3.3-70b-instruct:free"
     )
 
@@ -135,7 +139,7 @@ object DefaultAgents {
             - Incluye estilo, iluminación, composición
             - Guarda la imagen en /sdcard/BeeMovil/images/
         """.trimIndent(),
-        enabledTools = setOf("image_gen", "video_gen", "file", "browser"),
+        enabledTools = setOf("image_gen", "file", "file_manager", "share", "generate_html"),
         model = "meta-llama/llama-3.3-70b-instruct:free"
     )
 
