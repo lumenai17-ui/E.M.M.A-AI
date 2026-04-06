@@ -11,6 +11,8 @@ class BeeMovilApp : Application() {
         com.beemovil.llm.local.LocalGemmaProvider.appContext = applicationContext
         // Set context for model download manager (storage access)
         com.beemovil.llm.local.LocalModelManager.appContext = applicationContext
+        // Init remote agent registry (A2A Protocol)
+        com.beemovil.a2a.RemoteAgentRegistry.init(applicationContext)
 
         // Global crash handler — catch ANY unhandled exception
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()

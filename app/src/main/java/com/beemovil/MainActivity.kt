@@ -101,6 +101,13 @@ class MainActivity : ComponentActivity() {
             )
         } catch (e: Throwable) { Log.e("BeeMovil", "DelegateSkill: ${e.message}") }
 
+        // Phase 18B-4: A2A Remote Agent Communication
+        try {
+            skills["call_remote_agent"] = RemoteAgentSkill(
+                getRegisteredAgents = { com.beemovil.a2a.RemoteAgentRegistry.getRegisteredAgents() }
+            )
+        } catch (e: Throwable) { Log.e("BeeMovil", "RemoteAgentSkill: ${e.message}") }
+
         // Load saved preferences
         val prefs = getSharedPreferences("beemovil", Context.MODE_PRIVATE)
         val orKey = prefs.getString("openrouter_api_key", "") ?: ""
