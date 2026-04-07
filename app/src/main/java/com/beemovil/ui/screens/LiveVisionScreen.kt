@@ -1801,20 +1801,20 @@ private fun triggerSmartCapture(
                                 val response = provider.complete(msgs, emptyList())
                                 response.text ?: ""
                             } catch (primaryErr: Exception) {
-                                // Fallback: if cloud failed, try local; if local failed, try cloud
-                                val fallbackType = if (currentProviderType == "local") "openrouter" else "local"
-                                try {
-                                    val fallbackKey = if (fallbackType == "openrouter") {
-                                        com.beemovil.security.SecurePrefs.get(context).getString("openrouter_api_key", "") ?: ""
-                                    } else ""
-                                    val fallbackModel = if (fallbackType == "local") {
-                                        com.beemovil.llm.local.LocalModelManager.getDownloadedModels().firstOrNull()?.id ?: throw primaryErr
-                                    } else model
-                                    val fallbackProvider = LlmFactory.createProvider(fallbackType, fallbackKey, fallbackModel)
-                                    val fallbackResponse = fallbackProvider.complete(msgs, emptyList())
-                                    "[${if (fallbackType == "local") "OFFLINE" else "CLOUD"}] ${fallbackResponse.text ?: ""}"
-                                } catch (_: Exception) {
-                                    throw primaryErr // Both failed, throw original error
+                                // BUG-13: Do NOT silently fallback to local model if cloud fails. It freezes the app suddenly.
+                                // ONLY fallback to cloud if local model fails.
+                                if (currentProviderType == "local") {
+                                    try {
+                                        val fallbackKey = com.beemovil.security.SecurePrefs.get(context).getString("openrouter_api_key", "") ?: ""
+                                        val fallbackModel = model
+                                        val fallbackProvider = LlmFactory.createProvider("openrouter", fallbackKey, fallbackModel)
+                                        val fallbackResponse = fallbackProvider.complete(msgs, emptyList())
+                                        "[CLOUD FALLBACK] ${fallbackResponse.text ?: ""}"
+                                    } catch (_: Exception) {
+                                        throw primaryErr // Both failed
+                                    }
+                                } else {
+                                    throw primaryErr // Cloud failed. Don't secretly try local!
                                 }
                             }
 

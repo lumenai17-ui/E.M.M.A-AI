@@ -47,6 +47,9 @@ class LocalGemmaProvider(
             
         // Emit state for UI Loading Dialog
         val engineLoadingState = MutableStateFlow(false)
+        
+        // Prevent multiple C++ init threads simultaneously
+        private val isNativeInitRunning = java.util.concurrent.atomic.AtomicBoolean(false)
 
         // Store application context for initialization
         var appContext: Context? = null
@@ -97,10 +100,17 @@ class LocalGemmaProvider(
             // Run initialization on a separate thread with timeout
             val executor = Executors.newSingleThreadExecutor()
             val future: Future<Engine> = executor.submit(Callable {
-                val config = EngineConfig(modelPath = modelPath)
-                val engine = Engine(config)
-                engine.initialize()
-                engine
+                if (isNativeInitRunning.getAndSet(true)) {
+                    throw RuntimeException("Ya hay una sesión intentando cargar el modelo local. Espera un momento.")
+                }
+                try {
+                    val config = EngineConfig(modelPath = modelPath)
+                    val engine = Engine(config)
+                    engine.initialize()
+                    engine
+                } finally {
+                    isNativeInitRunning.set(false)
+                }
             })
 
             val engine = try {
