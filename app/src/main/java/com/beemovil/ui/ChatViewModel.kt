@@ -67,6 +67,7 @@ class ChatViewModel : ViewModel() {
     fun getSkills(): Map<String, BeeSkill> = skills
     private var apiKeys = mutableMapOf<String, String>()
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var appContext: Context? = null
 
     // Memory & History
     var memoryDB: BeeMemoryDB? = null
@@ -118,10 +119,12 @@ class ChatViewModel : ViewModel() {
     }
 
     fun initialize(skillMap: Map<String, BeeSkill>, openRouterKey: String, ollamaKey: String = "",
-                   memory: BeeMemoryDB? = null, chatHistory: ChatHistoryDB? = null) {
+                   memory: BeeMemoryDB? = null, chatHistory: ChatHistoryDB? = null,
+                   context: Context? = null) {
         this.skills = skillMap
         this.memoryDB = memory
         this.chatHistoryDB = chatHistory
+        this.appContext = context?.applicationContext
         if (openRouterKey.isNotBlank()) apiKeys["openrouter"] = openRouterKey
         if (ollamaKey.isNotBlank()) apiKeys["ollama"] = ollamaKey
     }
@@ -142,7 +145,8 @@ class ChatViewModel : ViewModel() {
 
     /**
      * Generate a contextual AI insight for the dashboard.
-     * Pulls from: time of day, recent memories, calendar, random context.
+     * ALWAYS uses LLM (cloud or local) — no hardcoded phrases.
+     * Includes: time, soul profile, memories, calendar, insight type rotation.
      */
     fun generateDashboardInsight() {
         if (dashboardInsightLoading.value) return
@@ -150,83 +154,86 @@ class ChatViewModel : ViewModel() {
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // Build context from available data
                 val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+                val dayOfWeek = java.text.SimpleDateFormat("EEEE", java.util.Locale("es")).format(java.util.Date())
                 val timeContext = when {
-                    hour < 6 -> "Es de madrugada"
-                    hour < 12 -> "Es por la manana"
-                    hour < 18 -> "Es por la tarde"
-                    else -> "Es de noche"
+                    hour < 6 -> "Es de madrugada ($dayOfWeek)"
+                    hour < 12 -> "Es la manana del $dayOfWeek"
+                    hour < 18 -> "Es la tarde del $dayOfWeek"
+                    else -> "Es la noche del $dayOfWeek"
                 }
 
-                // Get recent memories for context
-                val recentMemories = try {
-                    memoryDB?.getAllMemories()?.takeLast(3)?.joinToString("; ") { it.content.take(60) } ?: ""
+                // Soul profile for personalization
+                val soulContext = try {
+                    memoryDB?.getSoulSummary()?.take(200) ?: ""
                 } catch (_: Exception) { "" }
 
-                // Get today's calendar events if available
+                // Recent memories
+                val recentMemories = try {
+                    memoryDB?.getAllMemories()?.takeLast(5)?.joinToString("; ") { it.content.take(60) } ?: ""
+                } catch (_: Exception) { "" }
+
+                // Calendar
                 val calendarContext = try {
                     val calSkill = skills["read_calendar"]
                     if (calSkill != null) {
-                        val result = calSkill.execute(org.json.JSONObject().apply {
-                            put("days", 1)
-                        }).toString()
+                        val result = calSkill.execute(org.json.JSONObject().apply { put("days", 1) }).toString()
                         if (result.length < 200) result else result.take(200)
                     } else ""
                 } catch (_: Exception) { "" }
 
+                // Rotate insight type for variety
+                val insightTypes = listOf(
+                    "un dato curioso o interesante sobre tecnologia, ciencia o historia",
+                    "un tip de productividad practico",
+                    "una frase motivacional original (no cliche)",
+                    "un recordatorio util basado en el contexto del usuario",
+                    "una pregunta inteligente que haga pensar al usuario",
+                    "un saludo creativo y personalizado"
+                )
+                val insightType = insightTypes[hour % insightTypes.size]
+
                 val prompt = buildString {
-                    append("Eres Bee-Movil, un asistente AI. ")
+                    append("Eres Bee-Movil, un asistente AI personal e inteligente. ")
                     append("Genera UNA frase corta (max 15 palabras) para el dashboard. ")
                     append("$timeContext. ")
-                    if (recentMemories.isNotBlank()) append("Contexto del usuario: $recentMemories. ")
+                    if (soulContext.isNotBlank()) append("$soulContext ")
+                    if (recentMemories.isNotBlank()) append("Contexto reciente: $recentMemories. ")
                     if (calendarContext.isNotBlank()) append("Agenda hoy: $calendarContext. ")
-                    append("Puede ser: un dato curioso, un tip de productividad, algo motivacional, ")
-                    append("un recordatorio basado en el contexto, o un saludo creativo. ")
-                    append("Solo la frase, nada mas. Sin comillas.")
+                    append("Tipo de frase: $insightType. ")
+                    append("Solo la frase, nada mas. Sin comillas. En espanol.")
                 }
 
-                // Try to get AI response (quick, no tools)
+                // Always try LLM (cloud or local — both available)
                 val provider = currentProvider.value
                 val key = apiKeys[provider] ?: ""
-                if (key.isBlank() && provider != "local") {
-                    // Fallback: random tips
-                    val tips = listOf(
-                        "Tip: Puedes usar voz para dictar mensajes",
-                        "Preguntame lo que necesites, estoy listo",
-                        "Puedo crear PDFs, emails y landing pages",
-                        "Dime 'agenda' para revisar tu calendario",
-                        "Intenta: 'Investiga sobre tendencias de IA'",
-                        "Puedo analizar fotos con Vision AI",
-                        "Tu asistente inteligente, siempre disponible"
-                    )
-                    mainHandler.post { dashboardInsight.value = tips.random() }
-                    return@launch
-                }
 
-                val messages = listOf(
-                    com.beemovil.llm.ChatMessage("user", prompt)
+                val llmProvider = LlmFactory.createProvider(provider, key, currentModel.value)
+                val response = llmProvider.complete(
+                    listOf(ChatMessage("user", prompt)),
+                    emptyList()
                 )
-                val llmProvider = com.beemovil.llm.LlmFactory.createProvider(
-                    provider, key, currentModel.value
-                )
-                val response = llmProvider.complete(messages, emptyList())
                 val text = response.text?.trim()?.take(80) ?: ""
                 if (text.isNotBlank()) {
                     mainHandler.post { dashboardInsight.value = text }
+                } else {
+                    mainHandler.post { dashboardInsight.value = "Listo para lo que necesites" }
                 }
             } catch (e: Exception) {
-                android.util.Log.w(TAG, "Dashboard insight failed: ${e.message}")
-                val fallbacks = listOf(
-                    "Listo para ayudarte",
-                    "Que necesitas hoy?",
-                    "Tu asistente AI, siempre contigo"
-                )
-                mainHandler.post { dashboardInsight.value = fallbacks.random() }
+                Log.w(TAG, "Dashboard insight failed: ${e.message}")
+                // Only fallback if LLM truly unavailable (no model downloaded, etc.)
+                mainHandler.post { dashboardInsight.value = "Conectando inteligencia..." }
             } finally {
                 mainHandler.post { dashboardInsightLoading.value = false }
             }
         }
+    }
+
+    /** Force refresh the dashboard insight (tap-to-refresh). */
+    fun forceRefreshInsight() {
+        dashboardInsight.value = ""
+        dashboardInsightLoading.value = false
+        generateDashboardInsight()
     }
 
     fun updateApiKey(provider: String, key: String) {
@@ -371,7 +378,7 @@ class ChatViewModel : ViewModel() {
                     model = currentModel.value
                 )
                 Log.d(TAG, "Created agent: ${config.id} on ${currentProvider.value}/${currentModel.value}")
-                BeeAgent(config, provider, skills, memoryDB)
+                BeeAgent(config, provider, skills, memoryDB, appContext = appContext)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to create provider: ${e.message}")
                 // Throw with user-friendly message

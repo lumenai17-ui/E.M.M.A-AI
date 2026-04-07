@@ -330,4 +330,58 @@ class EmailService(private val context: Context) {
         put("mail.smtp.ssl.trust", "*")
         put("mail.smtp.timeout", "15000")
     }
+
+    /**
+     * Send email via Gmail SMTP using OAuth2 XOAUTH2 mechanism.
+     * Uses access token instead of password.
+     */
+    fun sendWithOAuth(fromEmail: String, accessToken: String, to: String, subject: String, body: String) {
+        val config = PRESETS["Gmail"]!!
+        val props = Properties().apply {
+            put("mail.smtp.host", config.smtpHost)
+            put("mail.smtp.port", config.smtpPort.toString())
+            put("mail.smtp.auth", "true")
+            put("mail.smtp.auth.mechanisms", "XOAUTH2")
+            put("mail.smtp.starttls.enable", "true")
+            put("mail.smtp.ssl.trust", "*")
+            put("mail.smtp.timeout", "15000")
+        }
+
+        val session = Session.getInstance(props, object : Authenticator() {
+            override fun getPasswordAuthentication() =
+                PasswordAuthentication(fromEmail, accessToken)
+        })
+
+        val message = MimeMessage(session).apply {
+            setFrom(InternetAddress(fromEmail))
+            setRecipients(Message.RecipientType.TO, InternetAddress.parse(to))
+            this.subject = subject
+            setText(body, "utf-8")
+            sentDate = Date()
+        }
+
+        Transport.send(message)
+        Log.i(TAG, "Email sent via OAuth to $to from $fromEmail")
+    }
+
+    /**
+     * Simplified sendEmail — auto-reads SMTP config from SecurePrefs.
+     * Used by EmailSkill for direct sending without passing credentials.
+     */
+    fun sendEmail(to: String, subject: String, body: String) {
+        val securePrefs = com.beemovil.security.SecurePrefs.get(context)
+        val prefs = context.getSharedPreferences("beemovil", Context.MODE_PRIVATE)
+
+        val email = securePrefs.getString("email_address", "") ?: ""
+        val password = securePrefs.getString("email_password", "") ?: ""
+        val provider = prefs.getString("email_provider", "Gmail") ?: "Gmail"
+
+        if (email.isBlank() || password.isBlank()) {
+            throw Exception("Email not configured — set email and password in Settings")
+        }
+
+        val config = PRESETS[provider] ?: PRESETS["Gmail"]!!
+        val success = sendEmail(email, password, config, to, subject, body)
+        if (!success) throw Exception("SMTP send failed")
+    }
 }

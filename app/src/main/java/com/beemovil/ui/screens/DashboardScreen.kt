@@ -211,7 +211,10 @@ fun DashboardScreen(
             val insight = viewModel.dashboardInsight.value
             if (insight.isNotBlank()) {
                 Spacer(modifier = Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.clickable { viewModel.forceRefreshInsight() }
+                ) {
                     Icon(Icons.Outlined.AutoAwesome, "AI", tint = Gold, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
@@ -220,15 +223,17 @@ fun DashboardScreen(
                         color = Gold.copy(alpha = 0.85f),
                         fontWeight = FontWeight.Normal,
                         maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
                     )
+                    Icon(Icons.Outlined.Refresh, "Refresh", tint = TxtMuted.copy(alpha = 0.4f), modifier = Modifier.size(14.dp))
                 }
             } else if (viewModel.dashboardInsightLoading.value) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Outlined.AutoAwesome, "AI", tint = TxtMuted, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("...", fontSize = 14.sp, color = TxtMuted)
+                    Text("Conectando inteligencia...", fontSize = 14.sp, color = TxtMuted)
                 }
             }
 
@@ -451,7 +456,7 @@ fun DashboardScreen(
                 ActionCard(Icons.Filled.Notifications, "Notif", Color(0xFFFF6B6B), Modifier.weight(1f)) { viewModel.currentScreen.value = "notification_dashboard" }
                 ActionCard(Icons.Filled.TaskAlt, "Tareas", Gold, Modifier.weight(1f)) { viewModel.currentScreen.value = "tasks" }
                 ActionCard(Icons.Filled.PhotoLibrary, "Media", Color(0xFFBF5AF2), Modifier.weight(1f)) { viewModel.currentScreen.value = "media_gallery" }
-                Spacer(modifier = Modifier.weight(1f))
+                ActionCard(Icons.Filled.Timeline, "Activity", Color(0xFF26C6DA), Modifier.weight(1f)) { viewModel.currentScreen.value = "action_log" }
             }
         }
 

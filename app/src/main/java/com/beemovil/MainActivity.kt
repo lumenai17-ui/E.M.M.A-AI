@@ -185,7 +185,7 @@ class MainActivity : ComponentActivity() {
         val chatHistoryDB = ChatHistoryDB(this)
         val taskDB = TaskDB(this)
 
-        viewModel.initialize(skills, orKey, olKey, memoryDB, chatHistoryDB)
+        viewModel.initialize(skills, orKey, olKey, memoryDB, chatHistoryDB, context = this)
         viewModel.currentProvider.value = savedProvider
         viewModel.currentModel.value = savedModel
 
@@ -399,6 +399,11 @@ class MainActivity : ComponentActivity() {
                                         viewModel.openAgentChat("main")
                                         viewModel.pendingPrompt.value = "Analiza o usa este archivo: $path"
                                     }
+                                )
+                            }
+                            "action_log" -> {
+                                ActionLogScreen(
+                                    onBack = { viewModel.currentScreen.value = "dashboard" }
                                 )
                             }
                             "settings" -> {

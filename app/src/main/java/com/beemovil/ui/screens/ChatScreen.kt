@@ -597,9 +597,64 @@ fun MessageBubble(message: ChatUiMessage) {
                             }
                         }
 
+                        // ── Think tag parsing (collapsible reasoning) ──
+                        val thinkRegex = Regex("<think>(.*?)</think>", RegexOption.DOT_MATCHES_ALL)
+                        val thinkContent = thinkRegex.find(message.text)?.groupValues?.get(1)?.trim()
+                        val displayText = thinkRegex.replace(message.text, "").trim()
+
+                        if (!isUser && thinkContent != null && thinkContent.isNotBlank()) {
+                            var thinkExpanded by remember { mutableStateOf(false) }
+                            Surface(
+                                color = Color(0xFF1A1A2E).copy(alpha = 0.7f),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 6.dp)
+                                    .clickable { thinkExpanded = !thinkExpanded }
+                            ) {
+                                Column(modifier = Modifier.padding(8.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            Icons.Outlined.Psychology,
+                                            "Think",
+                                            tint = Color(0xFF7B68EE),
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            "Razonamiento",
+                                            fontSize = 11.sp,
+                                            color = Color(0xFF7B68EE),
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        Spacer(modifier = Modifier.weight(1f))
+                                        Icon(
+                                            if (thinkExpanded) Icons.Outlined.ExpandLess
+                                            else Icons.Outlined.ExpandMore,
+                                            "Toggle",
+                                            tint = Color(0xFF7B68EE).copy(alpha = 0.5f),
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                    if (thinkExpanded) {
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            thinkContent,
+                                            fontSize = 12.sp,
+                                            color = Color.White.copy(alpha = 0.5f),
+                                            lineHeight = 16.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
                         // Message content — selectable
                         SelectionContainer {
-                            RenderMarkdown(message.text, isUser)
+                            RenderMarkdown(
+                                if (thinkContent != null) displayText else message.text,
+                                isUser
+                            )
                         }
 
                         // File attachments

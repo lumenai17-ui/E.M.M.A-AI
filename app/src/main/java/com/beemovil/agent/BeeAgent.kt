@@ -3,6 +3,7 @@ package com.beemovil.agent
 import android.util.Log
 import com.beemovil.llm.*
 import com.beemovil.memory.BeeMemoryDB
+import com.beemovil.memory.MemoryConsolidator
 import com.beemovil.skills.BeeSkill
 import org.json.JSONObject
 
@@ -22,13 +23,15 @@ class BeeAgent(
     private val llm: LlmProvider,
     private val skills: Map<String, BeeSkill>,
     private val memoryDB: BeeMemoryDB? = null,
-    private val sessionId: String = "session_${System.currentTimeMillis()}"
+    private val sessionId: String = "session_${System.currentTimeMillis()}",
+    private val appContext: android.content.Context? = null
 ) {
     companion object {
         private const val TAG = "BeeAgent"
     }
 
     private val messages = mutableListOf<ChatMessage>()
+    private var userTurnCount = 0
 
     init {
         messages.add(ChatMessage(role = "system", content = config.systemPrompt))
@@ -55,7 +58,6 @@ class BeeAgent(
         if (memoryDB != null) {
             val ragContext = memoryDB.buildRagContext(userMessage)
             if (ragContext.isNotBlank()) {
-                // Update system prompt with RAG context
                 val enhancedPrompt = config.systemPrompt + "\n\n" + ragContext
                 messages[0] = ChatMessage(role = "system", content = enhancedPrompt)
                 Log.d(TAG, "[${config.id}] RAG context injected (${ragContext.length} chars)")
@@ -63,10 +65,18 @@ class BeeAgent(
         }
 
         messages.add(ChatMessage(role = "user", content = userMessage))
-        trimHistory() // Prevent unbounded growth
+        userTurnCount++
+        trimHistory()
         Log.i(TAG, "[${config.id}] User: ${userMessage.take(80)}")
 
-        return processChat(userMessage)
+        val response = processChat(userMessage)
+
+        // ── Auto-consolidate after meaningful conversations ──
+        if (userTurnCount >= 3 && appContext != null) {
+            MemoryConsolidator.consolidateSession(appContext, sessionId)
+        }
+
+        return response
     }
 
     /**
@@ -75,7 +85,6 @@ class BeeAgent(
      */
     fun injectAttachmentContext(attachmentContext: String) {
         val currentSystem = messages.firstOrNull()?.content ?: config.systemPrompt
-        // Remove old attachment context if present, add new
         val base = currentSystem.substringBefore("\n## Archivos adjuntos en esta conversacion:")
         messages[0] = ChatMessage(role = "system", content = base + attachmentContext)
         Log.d(TAG, "[${config.id}] Attachment context injected (${attachmentContext.length} chars)")
@@ -85,7 +94,6 @@ class BeeAgent(
      * SYNCHRONOUS chat with image (vision). Image is base64 encoded.
      */
     fun chatWithImage(userMessage: String, imageBase64: String): AgentResponse {
-        // RAG still applies
         if (memoryDB != null) {
             val ragContext = memoryDB.buildRagContext(userMessage)
             if (ragContext.isNotBlank()) {
@@ -99,14 +107,13 @@ class BeeAgent(
             content = userMessage,
             images = listOf(imageBase64)
         ))
+        userTurnCount++
         Log.i(TAG, "[${config.id}] User (vision): ${userMessage.take(80)} + image")
 
         return processChat(userMessage)
     }
 
     private fun processChat(userMessage: String): AgentResponse {
-
-        // Save user message to DB
         memoryDB?.saveMessage(sessionId, "user", userMessage, config.id)
 
         val toolResults = mutableListOf<ToolExecution>()
@@ -124,19 +131,30 @@ class BeeAgent(
                     ))
                     for (toolCall in response.toolCalls) {
                         Log.i(TAG, "[${config.id}] Tool: ${toolCall.name}")
+                        val startTime = System.currentTimeMillis()
                         val result = executeSkill(toolCall.name, toolCall.params)
+                        val duration = System.currentTimeMillis() - startTime
+
                         toolResults.add(ToolExecution(toolCall.name, toolCall.params, result))
                         messages.add(ChatMessage(
                             role = "tool",
                             content = result.toString(),
                             toolCallId = toolCall.id
                         ))
+
+                        // Log action to action_log
+                        appContext?.let { ctx ->
+                            MemoryConsolidator.logAction(
+                                ctx, config.id, toolCall.name,
+                                toolCall.params.toString().take(200),
+                                result.toString().take(500),
+                                duration, sessionId
+                            )
+                        }
                     }
                 } else {
                     val text = response.text ?: "..."
                     messages.add(ChatMessage(role = "assistant", content = text))
-
-                    // Save assistant response to DB
                     memoryDB?.saveMessage(sessionId, "assistant", text, config.id)
 
                     Log.i(TAG, "[${config.id}] Response: ${text.take(80)}")

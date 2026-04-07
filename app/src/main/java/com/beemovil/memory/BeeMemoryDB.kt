@@ -1,4 +1,4 @@
-﻿package com.beemovil.memory
+package com.beemovil.memory
 
 import android.content.ContentValues
 import android.content.Context
@@ -28,7 +28,7 @@ class BeeMemoryDB(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, D
     companion object {
         private const val TAG = "BeeMemory"
         private const val DB_NAME = "beemovil_memory.db"
-        private const val DB_VERSION = 1
+        private const val DB_VERSION = 2
     }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -69,15 +69,45 @@ class BeeMemoryDB(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, D
             )
         """)
 
-        // Full-text search index for memories
+        // Action log: every skill execution
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS action_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_id TEXT NOT NULL,
+                skill_name TEXT NOT NULL,
+                params_summary TEXT,
+                result_summary TEXT,
+                duration_ms INTEGER DEFAULT 0,
+                session_id TEXT,
+                timestamp INTEGER NOT NULL
+            )
+        """)
+
+        // Indexes
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_memories_keywords ON memories(keywords)")
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_conversations_session ON conversations(session_id)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_action_log_time ON action_log(timestamp)")
 
-        Log.i(TAG, "Database created with 3 tables")
+        Log.i(TAG, "Database created with 4 tables")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, old: Int, new: Int) {
-        // Future migrations go here
+        if (old < 2) {
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS action_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    agent_id TEXT NOT NULL,
+                    skill_name TEXT NOT NULL,
+                    params_summary TEXT,
+                    result_summary TEXT,
+                    duration_ms INTEGER DEFAULT 0,
+                    session_id TEXT,
+                    timestamp INTEGER NOT NULL
+                )
+            """)
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_action_log_time ON action_log(timestamp)")
+            Log.i(TAG, "Migrated to v2: action_log table")
+        }
     }
 
     // ═══════════════════════════════════════════════════════
@@ -397,6 +427,138 @@ $chatLog"""
         }
 
         return sb.toString()
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // ACTION LOG
+    // ═══════════════════════════════════════════════════════
+
+    fun logAction(
+        agentId: String, skillName: String, paramsSummary: String,
+        resultSummary: String, durationMs: Long, sessionId: String
+    ) {
+        writableDatabase.insert("action_log", null, ContentValues().apply {
+            put("agent_id", agentId)
+            put("skill_name", skillName)
+            put("params_summary", paramsSummary.take(200))
+            put("result_summary", resultSummary.take(500))
+            put("duration_ms", durationMs)
+            put("session_id", sessionId)
+            put("timestamp", System.currentTimeMillis())
+        })
+    }
+
+    fun getRecentActions(limit: Int = 50): List<Map<String, String>> {
+        val results = mutableListOf<Map<String, String>>()
+        val cursor = readableDatabase.rawQuery(
+            "SELECT * FROM action_log ORDER BY timestamp DESC LIMIT ?",
+            arrayOf(limit.toString())
+        )
+        cursor.use {
+            while (it.moveToNext()) {
+                results.add(mapOf(
+                    "id" to it.getInt(0).toString(),
+                    "agent_id" to it.getString(1),
+                    "skill_name" to it.getString(2),
+                    "params" to (it.getString(3) ?: ""),
+                    "result" to (it.getString(4) ?: ""),
+                    "duration_ms" to it.getLong(5).toString(),
+                    "session_id" to (it.getString(6) ?: ""),
+                    "timestamp" to it.getLong(7).toString()
+                ))
+            }
+        }
+        return results
+    }
+
+    fun getActionCount(): Int {
+        val cursor = readableDatabase.rawQuery("SELECT COUNT(*) FROM action_log", null)
+        cursor.use {
+            return if (it.moveToFirst()) it.getInt(0) else 0
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // MEMORY MAINTENANCE
+    // ═══════════════════════════════════════════════════════
+
+    /**
+     * Prune old/low-importance memories to keep the DB lean.
+     * Keeps the most recent and highest-importance entries.
+     */
+    fun pruneOldMemories(maxCount: Int = 500) {
+        val count = getMemoryCount()
+        if (count <= maxCount) return
+
+        val toDelete = count - maxCount
+        writableDatabase.execSQL("""
+            DELETE FROM memories WHERE id IN (
+                SELECT id FROM memories
+                ORDER BY importance ASC, created_at ASC
+                LIMIT ?
+            )
+        """, arrayOf(toDelete.toString()))
+        Log.i(TAG, "Pruned $toDelete old/low-importance memories (kept $maxCount)")
+    }
+
+    /**
+     * Remove duplicate memories with similar content.
+     * Uses simple substring matching (efficient on mobile).
+     */
+    fun deduplicateMemories() {
+        try {
+            val all = getAllMemories()
+            val seenContent = mutableSetOf<String>()
+            val toDelete = mutableListOf<Int>()
+
+            for (mem in all.sortedByDescending { it.importance }) {
+                val normalized = mem.content.lowercase().trim()
+                // Check if we already have something very similar
+                val isDupe = seenContent.any { existing ->
+                    normalized.length > 10 && (
+                        existing.contains(normalized) ||
+                        normalized.contains(existing) ||
+                        levenshteinSimilarity(existing, normalized) > 0.85
+                    )
+                }
+                if (isDupe) {
+                    toDelete.add(mem.id)
+                } else {
+                    seenContent.add(normalized)
+                }
+            }
+
+            if (toDelete.isNotEmpty()) {
+                toDelete.forEach { deleteMemory(it) }
+                Log.i(TAG, "Deduplicated: removed ${toDelete.size} duplicate memories")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Deduplication failed: ${e.message}")
+        }
+    }
+
+    private fun levenshteinSimilarity(a: String, b: String): Double {
+        if (a.isEmpty() || b.isEmpty()) return 0.0
+        val shorter = if (a.length < b.length) a else b
+        val longer = if (a.length < b.length) b else a
+        if (longer.length > 200) return 0.0 // Skip very long strings
+
+        val costs = IntArray(shorter.length + 1) { it }
+        for (i in 1..longer.length) {
+            var lastValue = i
+            for (j in 1..shorter.length) {
+                val newValue = if (longer[i - 1] == shorter[j - 1]) {
+                    costs[j - 1]
+                } else {
+                    minOf(costs[j - 1], lastValue, costs[j]) + 1
+                }
+                costs[j - 1] = lastValue
+                lastValue = newValue
+            }
+            costs[shorter.length] = lastValue
+        }
+        val distance = costs[shorter.length]
+        return 1.0 - (distance.toDouble() / longer.length)
     }
 }
 
