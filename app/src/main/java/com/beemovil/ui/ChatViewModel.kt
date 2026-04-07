@@ -464,6 +464,18 @@ class ChatViewModel : ViewModel() {
                 toolFiles.addAll(extractFilePaths(responseText))
                 detectedFiles = toolFiles.toList()
 
+                // 25-B FIX: Process detected files so the LLM sees them in future turns
+                appContext?.let { ctx ->
+                    detectedFiles.forEach { path ->
+                        val file = java.io.File(path)
+                        if (file.exists() && conversationAttachments.none { it.filePath == path }) {
+                            com.beemovil.files.AttachmentManager.processFile(ctx, file)?.let { processed ->
+                                conversationAttachments.add(processed)
+                            }
+                        }
+                    }
+                }
+
             } catch (e: Throwable) {
                 Log.e(TAG, "Chat error: ${e.message}", e)
                 responseText = "Error: ${e.javaClass.simpleName}: ${e.message}"
@@ -595,6 +607,18 @@ class ChatViewModel : ViewModel() {
                     }
                     toolFiles.addAll(extractFilePaths(responseText))
                     detectedFiles = toolFiles.toList()
+
+                    // 25-B FIX: Process detected files so the LLM sees them in future turns
+                    appContext?.let { ctx ->
+                        detectedFiles.forEach { path ->
+                            val file = java.io.File(path)
+                            if (file.exists() && conversationAttachments.none { it.filePath == path }) {
+                                com.beemovil.files.AttachmentManager.processFile(ctx, file)?.let { processed ->
+                                    conversationAttachments.add(processed)
+                                }
+                            }
+                        }
+                    }
                 }
             } catch (e: Throwable) {
                 Log.e(TAG, "Chat+attachment error: ${e.message}", e)
