@@ -972,13 +972,59 @@ fun LiveVisionScreen(
         }
 
         // ═══════════════════════════════════════
-        // RESULT OVERLAY (bottom)
+        // RESULT OVERLAY (bottom) — 22-D + 22-H
         // ═══════════════════════════════════════
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
         ) {
+            // 22-H: Quick Actions Bar (Google Lens-style, always visible)
+            AnimatedVisibility(
+                visible = !isLiveActive && !isProcessing,
+                enter = fadeIn() + slideInVertically(initialOffsetY = { it / 2 }),
+                exit = fadeOut()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    data class QuickAction(val emoji: String, val label: String, val prompt: String)
+                    val actions = listOf(
+                        QuickAction("🍕", "Comida", "Identifica esta comida: nombre, ingredientes principales, calorías aproximadas. Si ves un platillo, sugiere cómo se prepara."),
+                        QuickAction("🌿", "Planta", "Identifica esta planta o flor: especie, nombre común, cuidados básicos, si es tóxica o comestible."),
+                        QuickAction("💰", "Precio", "Lee el precio visible en la imagen. Si hay varios productos, lista cada uno con su precio."),
+                        QuickAction("📝", "Texto", "Lee TODO el texto visible en esta imagen. Transcribe tal cual, incluyendo letreros, etiquetas, y señales."),
+                        QuickAction("🏢", "Lugar", "Identifica este edificio o lugar. Dime su nombre, historia breve, y datos interesantes.")
+                    )
+                    actions.forEach { action ->
+                        Surface(
+                            onClick = {
+                                conversation.addUserQuestion(action.prompt)
+                                triggerSmartCapture(
+                                    imageCapture, cameraExecutor, viewModel, context,
+                                    selectedModel, action.prompt, visionState, gpsData,
+                                    dgVoice, dashcamLogger, conversation, selectedPersonality,
+                                    onResult = { liveResult = it; frameCount++ },
+                                    onProcessing = { isProcessing = it }
+                                )
+                            },
+                            color = BeeBlack.copy(alpha = 0.7f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(action.emoji, fontSize = 20.sp)
+                                Text(action.label, fontSize = 9.sp, color = BeeGray)
+                            }
+                        }
+                    }
+                }
+            }
             // AR overlay mode: text on camera — PROMINENT
             if (visionState.arTextOverlay && liveResult.isNotBlank()) {
                 Card(
