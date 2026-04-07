@@ -208,6 +208,24 @@ class ChatViewModel : ViewModel() {
                 val provider = currentProvider.value
                 val key = apiKeys[provider] ?: ""
 
+                // BUG-L6 FIX: Don't load a 2.6GB model just for a 15-word dashboard phrase.
+                // If local provider is selected and engine isn't loaded yet, skip LLM call.
+                if (provider == "local" && !com.beemovil.llm.local.LocalGemmaProvider.isEngineBusy() 
+                    && com.beemovil.llm.local.LocalGemmaProvider.isInitializing) {
+                    mainHandler.post { dashboardInsight.value = "Modelo local cargándose..." }
+                    return@launch
+                }
+                if (provider == "local") {
+                    // Check if engine is already loaded (warm) — if not, use a generic phrase
+                    val hasEngine = try {
+                        com.beemovil.llm.local.LocalModelManager.getDownloadedModels().isNotEmpty()
+                    } catch (_: Exception) { false }
+                    if (!hasEngine) {
+                        mainHandler.post { dashboardInsight.value = "Descarga Gemma 4 en Settings para insights offline" }
+                        return@launch
+                    }
+                }
+
                 val llmProvider = LlmFactory.createProvider(provider, key, currentModel.value)
                 val response = llmProvider.complete(
                     listOf(ChatMessage("user", prompt)),

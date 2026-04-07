@@ -1,5 +1,5 @@
 # 🐝 Bee-Movil Native — Roadmap & Checklist
-### Ultima actualizacion: 7 de Abril 2026 · v5.7.1
+### Ultima actualizacion: 7 de Abril 2026 · v5.7.2
 
 ---
 
@@ -470,6 +470,20 @@
 
 ---
 
+### ✅ FASE 25B — Local LLM Bug Sweep (v5.7.2)
+> *6 bugs criticos en la infraestructura del modelo local (Gemma 4 E2B/E4B)*
+
+- [x] BUG-L1: Singleton provider cache — `LlmFactory.createProvider("local")` ya no crea instancia nueva cada llamada
+- [x] BUG-L2: `ReentrantLock.tryLock()` reemplaza `@Synchronized` — elimina deadlocks entre init e inference
+- [x] BUG-L2b: `AtomicBoolean isBusy` guard — inferencias concurrentes fallan rapido en vez de bloquear
+- [x] BUG-L3: System prompt agresivamente truncado (400 chars) para caber en ventana E2B (4096 tokens)
+- [x] BUG-L4: Tool list cap (max 12 tools) — agente MAIN con 37+ tools ya no explota el contexto
+- [x] BUG-L5: LiveVision `AtomicBoolean isProcessing` + provider cacheado por sesion de loop
+- [x] BUG-L5b: LiveVision skip tick si `isEngineBusy()` — previene acumulacion de threads bloqueados
+- [x] BUG-L6: Dashboard insight no carga modelo local innecesariamente
+
+---
+
 ### FASE 26 — Browser Agent Mode
 > *WebView + chat panel + JS bridge = Puppeteer movil*
 
@@ -565,13 +579,13 @@
 
 | Metrica | Actual | Target v6.0 |
 |---------|--------|-------------|
-| Version | v5.6.1 | v6.0 |
+| Version | v5.7.2 | v6.0 |
 | Skills | 40 | 65+ |
 | Pantallas | 19 | ~24 |
 | Providers LLM | 3 + 2 media | 4 + 3 media |
-| Fases completadas | 27 de 34 | 32 (pre-launch) |
+| Fases completadas | 28 de 34 | 32 (pre-launch) |
 | APK tamano | ~85 MB | Optimizar R8 |
 | Google Workspace | ✅ Configurado (Web Client ID activo) |
-| Hito actual | **PROXIMO: Fase 25** (Browser Agent Mode) |
+| Hito actual | **PROXIMO: Fase 26** (Browser Agent Mode) |
 
 ---

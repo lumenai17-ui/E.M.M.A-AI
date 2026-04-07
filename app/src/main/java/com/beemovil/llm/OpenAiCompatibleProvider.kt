@@ -1,4 +1,4 @@
-﻿package com.beemovil.llm
+package com.beemovil.llm
 
 import android.util.Log
 import com.beemovil.network.BeeHttpClient
@@ -176,7 +176,8 @@ object LlmFactory {
             "local" -> {
                 val modelPath = com.beemovil.llm.local.LocalModelManager.getModelPath(model)
                     ?: throw IllegalStateException("Modelo local '$model' no descargado. Ve a Settings → Modelo Local para descargarlo.")
-                com.beemovil.llm.local.LocalGemmaProvider(
+                // BUG-L1 FIX: Use singleton cache — don't create new instance per call
+                com.beemovil.llm.local.LocalGemmaProvider.getOrCreate(
                     modelPath = modelPath,
                     modelName = LOCAL.models.find { it.id == model }?.name ?: model
                 )

@@ -56,9 +56,11 @@ import com.beemovil.ui.theme.*
 import com.beemovil.vision.*
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.beemovil.llm.local.LocalGemmaProvider
+import com.beemovil.llm.LlmProvider
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -78,7 +80,8 @@ fun LiveVisionScreen(
     }
     var isLiveActive by remember { mutableStateOf(false) }
     var liveResult by remember { mutableStateOf("") }
-    var isProcessing by remember { mutableStateOf(false) }
+    // BUG-L5 FIX: AtomicBoolean for cross-thread visibility (var was not safely visible between capture threads)
+    val isProcessing = remember { AtomicBoolean(false) }
     var frameCount by remember { mutableStateOf(0) }
     var selectedModel by remember {
         mutableStateOf(prefs.getString("vision_model", "gemma4:31b-cloud") ?: "gemma4:31b-cloud")
@@ -198,15 +201,51 @@ fun LiveVisionScreen(
         
         val localSessionId = currentLiveSessionId
 
+        // BUG-L5 FIX: Cache the provider once at loop start — don't create per-frame
+        val loopProviderType: String
+        val loopApiKey: String
+        val loopModel: String
+        val loopProvider: LlmProvider?
+        try {
+            val modelEntry = com.beemovil.llm.ModelRegistry.findModel(selectedModel)
+            val isLocalModel = modelEntry?.provider == "local"
+            val cm = context.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+            val hasNetwork = cm?.activeNetwork != null
+            loopProviderType = when {
+                isLocalModel -> "local"
+                !hasNetwork -> if (com.beemovil.llm.local.LocalModelManager.getDownloadedModels().isNotEmpty()) "local" else viewModel.currentProvider.value
+                else -> viewModel.currentProvider.value
+            }
+            loopModel = if (!isLocalModel && loopProviderType == "local") {
+                com.beemovil.llm.local.LocalModelManager.getDownloadedModels().firstOrNull()?.id ?: selectedModel
+            } else selectedModel
+            loopApiKey = when (loopProviderType) {
+                "openrouter" -> com.beemovil.security.SecurePrefs.get(context).getString("openrouter_api_key", "") ?: ""
+                "ollama" -> com.beemovil.security.SecurePrefs.get(context).getString("ollama_api_key", "") ?: ""
+                else -> ""
+            }
+            if (loopApiKey.isBlank() && loopProviderType != "local") {
+                liveResult = "[WARN] Configura API key de $loopProviderType"
+                return@LaunchedEffect
+            }
+            loopProvider = LlmFactory.createProvider(loopProviderType, loopApiKey, loopModel)
+        } catch (e: Exception) {
+            liveResult = "[ERR] ${e.message?.take(80)}"
+            return@LaunchedEffect
+        }
+
         while (isLiveActive && currentLiveSessionId == localSessionId) {
             kotlinx.coroutines.delay(intervalSeconds * 1000L)
-            if (!isLiveActive || currentLiveSessionId != localSessionId || isProcessing) continue
+            if (!isLiveActive || currentLiveSessionId != localSessionId || isProcessing.get()) continue
 
-            // BUG-14: Variable Cycle - If TTS is speaking, skip this tick avoiding voice overlap and overload.
+            // BUG-14: Variable Cycle - If TTS is speaking, skip this tick
             if (dgVoice?.isSpeaking == true) continue
 
+            // BUG-L2 FIX: If local engine is busy with inference, skip this tick instead of blocking
+            if (loopProviderType == "local" && LocalGemmaProvider.isEngineBusy()) continue
+
             val capture = imageCapture ?: continue
-            isProcessing = true
+            isProcessing.set(true)
 
             capture.takePicture(
                 cameraExecutor,
@@ -214,7 +253,7 @@ fun LiveVisionScreen(
                     override fun onCaptureSuccess(imageProxy: ImageProxy) {
                         try {
                             if (!isLiveActive || currentLiveSessionId != localSessionId) {
-                                isProcessing = false
+                                isProcessing.set(false)
                                 imageProxy.close()
                                 return
                             }
@@ -234,45 +273,11 @@ fun LiveVisionScreen(
                                 val threadSessionId = currentLiveSessionId
                                 try {
                                     if (!isLiveActive || currentLiveSessionId != threadSessionId) {
-                                        isProcessing = false
+                                        isProcessing.set(false)
                                         return@Thread
                                     }
-                                    // 22-G: Smart provider routing — detect local vs cloud
-                                    val modelEntry = com.beemovil.llm.ModelRegistry.findModel(selectedModel)
-                                    val isLocalModel = modelEntry?.provider == "local"
-                                    
-                                    // Detect network availability for auto-fallback
-                                    val cm = context.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
-                                    val hasNetwork = cm?.activeNetwork != null
-                                    
-                                    val currentProviderType = when {
-                                        isLocalModel -> "local"
-                                        !hasNetwork -> {
-                                            val localModel = com.beemovil.llm.local.LocalModelManager.getDownloadedModels().firstOrNull()
-                                            if (localModel != null) "local" else viewModel.currentProvider.value
-                                        }
-                                        else -> viewModel.currentProvider.value
-                                    }
-                                    
-                                    val effectiveModel = if (!isLocalModel && currentProviderType == "local") {
-                                        com.beemovil.llm.local.LocalModelManager.getDownloadedModels().firstOrNull()?.id ?: selectedModel
-                                    } else selectedModel
-
-                                    val apiKey = when (currentProviderType) {
-                                        "openrouter" -> com.beemovil.security.SecurePrefs.get(context).getString("openrouter_api_key", "") ?: ""
-                                        "ollama" -> com.beemovil.security.SecurePrefs.get(context).getString("ollama_api_key", "") ?: ""
-                                        else -> ""
-                                    }
-                                    if (apiKey.isBlank() && currentProviderType != "local") {
-                                        if (!hasNetwork || com.beemovil.llm.local.LocalModelManager.getDownloadedModels().isEmpty()) {
-                                            liveResult = "[WARN] Sin red y sin modelo local. Descarga Gemma 4 en Settings."
-                                            isProcessing = false
-                                            return@Thread
-                                        }
-                                        liveResult = "[WARN] Configura API key de ${currentProviderType}"
-                                        isProcessing = false
-                                        return@Thread
-                                    }
+                                    // BUG-L5 FIX: Use cached provider from loop start
+                                    // Provider routing now done at loop start (cached)
 
                                     // 22-A: Smart prompt with conversation context
                                     val visionMode = when {
@@ -317,16 +322,11 @@ fun LiveVisionScreen(
                                         }
                                     }
 
-                                    val provider = LlmFactory.createProvider(
-                                        providerType = currentProviderType,
-                                        apiKey = apiKey,
-                                        model = effectiveModel
-                                    )
                                     val msgs = listOf(
                                         ChatMessage(role = "system", content = systemPrompt),
                                         ChatMessage(role = "user", content = userPrompt, images = listOf(b64))
                                     )
-                                    val response = provider.complete(msgs, emptyList())
+                                    val response = loopProvider.complete(msgs, emptyList())
                                     liveResult = response.text ?: ""
                                     frameCount++
 
@@ -368,18 +368,18 @@ fun LiveVisionScreen(
                                 } catch (e: Exception) {
                                     liveResult = "[ERR] ${e.message?.take(80)}"
                                 }
-                                isProcessing = false
+                                isProcessing.set(false)
                             }.start()
                         } catch (e: Exception) {
                             liveResult = "[ERR] Frame: ${e.message}"
-                            isProcessing = false
+                            isProcessing.set(false)
                         }
                         imageProxy.close()
                     }
 
                     override fun onError(exception: ImageCaptureException) {
                         liveResult = "[ERR] Capture: ${exception.message}"
-                        isProcessing = false
+                        isProcessing.set(false)
                     }
                 }
             )
@@ -751,7 +751,7 @@ fun LiveVisionScreen(
                                 selectedModel, question, visionState, gpsData,
                                 dgVoice, dashcamLogger, conversation, selectedPersonality, detectedFaces,
                                 onResult = { liveResult = it; frameCount++ },
-                                onProcessing = { isProcessing = it }
+                                onProcessing = { isProcessing.set(it) }
                             )
                         },
                         color = Color(0xFF8BC34A).copy(alpha = 0.85f),
@@ -1278,7 +1278,7 @@ fun LiveVisionScreen(
                                 fontWeight = FontWeight.Bold, letterSpacing = 1.sp
                             )
                             Spacer(modifier = Modifier.weight(1f))
-                            if (isProcessing) {
+                            if (isProcessing.get()) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(14.dp),
                                     color = accentColor, strokeWidth = 2.dp
@@ -1319,7 +1319,7 @@ fun LiveVisionScreen(
                         onClick = { triggerSingleCapture(imageCapture, cameraExecutor, viewModel, context,
                             selectedModel, customPrompt, visionState, gpsData, dgVoice, dashcamLogger, detectedFaces,
                             onResult = { liveResult = it; frameCount++ },
-                            onProcessing = { isProcessing = it }) },
+                            onProcessing = { isProcessing.set(it) }) },
                         modifier = Modifier.size(52.dp),
                         shape = CircleShape,
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF333355)),
@@ -1339,7 +1339,7 @@ fun LiveVisionScreen(
                                 nativeSpeech.stopListening()
                                 isVoiceListening = false
                                 partialSpeech = ""
-                            } else if (!isProcessing) {
+                            } else if (!isProcessing.get()) {
                                 // BUG-03: Stop TTS first so mic doesn't hear its own output
                                 dgVoice?.stopSpeaking()
                                 isVoiceListening = true
@@ -1348,14 +1348,14 @@ fun LiveVisionScreen(
                                     onResult = { text ->
                                         isVoiceListening = false
                                         partialSpeech = ""
-                                        if (text.isNotBlank() && !isProcessing) {
+                                        if (text.isNotBlank() && !isProcessing.get()) {
                                             conversation.addUserQuestion(text)
                                             triggerSmartCapture(
                                                 imageCapture, cameraExecutor, viewModel, context,
                                                 selectedModel, text, visionState, gpsData,
                                                 dgVoice, dashcamLogger, conversation, selectedPersonality, detectedFaces,
                                                 onResult = { liveResult = it; frameCount++ },
-                                                onProcessing = { isProcessing = it }
+                                                onProcessing = { isProcessing.set(it) }
                                             )
                                         }
                                     },
@@ -1402,7 +1402,7 @@ fun LiveVisionScreen(
                                 currentLiveSessionId = System.currentTimeMillis() // Start new clean tracking session
                             } else {
                                 dgVoice?.stopSpeaking()
-                                isProcessing = false
+                                isProcessing.set(false)
                             }
                         },
                         modifier = Modifier.size(72.dp),
