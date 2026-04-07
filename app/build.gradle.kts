@@ -11,8 +11,8 @@ android {
         applicationId = "com.beemovil"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "4.2.7"
+        versionCode = 2
+        versionName = "5.7.0"
     }
 
     buildTypes {
