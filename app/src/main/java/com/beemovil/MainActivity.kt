@@ -124,6 +124,9 @@ class MainActivity : ComponentActivity() {
         val workflowHistoryDB = WorkflowHistoryDB(this)
         val customWorkflowDB = CustomWorkflowDB(this)
 
+        // Phase 21: AI Workflow Generator
+        try { skills["generate_workflow"] = GenerateWorkflowSkill(customWorkflowDB) } catch (e: Throwable) { Log.e("BeeMovil", "GenWorkflowSkill: ${e.message}") }
+
         // Load saved preferences
         val prefs = getSharedPreferences("beemovil", Context.MODE_PRIVATE)
         val orKey = prefs.getString("openrouter_api_key", "") ?: ""
