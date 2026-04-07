@@ -497,6 +497,13 @@
 - [x] Auto-capture loop espera hasta 120s que engine este warm
 - [x] Catch Throwable para capturar native crashes del SDK C++
 
+> [!WARNING]
+> **BLOQUEADOR CONOCIDO — Modelo local + LiveVision**
+> El modelo local (Gemma 4 E2B/E4B) funciona bien en **Chat agents** pero crashea
+> en **LiveVision** cuando la camara esta activa. Causa: conflicto GPU/NPU entre
+> CameraX y LiteRT-LM SDK. **POSPUESTO** — Investigar implementaciones RPi y
+> alternativas CPU-only. Cloud funciona perfecto en LiveVision.
+
 ---
 
 ### FASE 26 — Browser Agent Mode
