@@ -69,7 +69,9 @@ class MainActivity : ComponentActivity() {
         try { skills["camera"] = CameraSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "CameraSkill: ${e.message}") }
         try { skills["image_gen"] = ImageGenSkill(
             getApiKey = { viewModel.getApiKey(viewModel.currentProvider.value) },
-            getProvider = { viewModel.currentProvider.value }
+            getProvider = { viewModel.currentProvider.value },
+            getFalKey = { com.beemovil.security.SecurePrefs.get(this).getString("fal_api_key", "") ?: "" },
+            getTogetherKey = { com.beemovil.security.SecurePrefs.get(this).getString("together_api_key", "") ?: "" }
         ) } catch (e: Throwable) { Log.e("BeeMovil", "ImageGenSkill: ${e.message}") }
         try { skills["volume"] = VolumeSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "VolumeSkill: ${e.message}") }
         try { skills["alarm"] = AlarmSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "AlarmSkill: ${e.message}") }

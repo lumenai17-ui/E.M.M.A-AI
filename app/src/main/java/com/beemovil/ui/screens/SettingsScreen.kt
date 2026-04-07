@@ -803,6 +803,129 @@ fun SettingsScreen(
                     )
                 }
             }
+            // ═══════════════════════════════════════
+            // MEDIA GENERATION (Phase 23)
+            // ═══════════════════════════════════════
+            SectionCard {
+                SectionTitle("GENERACION DE IMAGENES")
+                Text("Configura providers para generar imagenes desde cualquier chat", fontSize = 12.sp, color = BeeGray)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                var falKey by remember { mutableStateOf(securePrefs.getString("fal_api_key", "") ?: "") }
+                var showFalKey by remember { mutableStateOf(false) }
+                var togetherKey by remember { mutableStateOf(securePrefs.getString("together_api_key", "") ?: "") }
+                var showTogetherKey by remember { mutableStateOf(false) }
+
+                // Status
+                val hasAnyProvider = falKey.isNotBlank() || togetherKey.isNotBlank() ||
+                    (openRouterKey.isNotBlank() && selectedProvider == "openrouter")
+                Surface(
+                    color = if (hasAnyProvider) Color(0xFF4CAF50).copy(alpha = 0.12f) else Color(0xFFF44336).copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            if (hasAnyProvider) Icons.Filled.Palette else Icons.Filled.Warning,
+                            "Status",
+                            tint = if (hasAnyProvider) Color(0xFF4CAF50) else Color(0xFFF44336),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                if (hasAnyProvider) "Listo para generar" else "Sin provider configurado",
+                                fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                                color = Color(0xFFE0E0E0)
+                            )
+                            Text(
+                                buildString {
+                                    val providers = mutableListOf<String>()
+                                    if (falKey.isNotBlank()) providers.add("fal.ai (Flux)")
+                                    if (togetherKey.isNotBlank()) providers.add("Together (Flux)")
+                                    if (openRouterKey.isNotBlank()) providers.add("OpenRouter (DALL-E)")
+                                    append(if (providers.isNotEmpty()) providers.joinToString(" · ") else "Configura al menos un provider")
+                                },
+                                fontSize = 11.sp, color = BeeGray
+                            )
+                            // Show image count
+                            val imgDir = java.io.File(
+                                android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOCUMENTS),
+                                "BeeMovil/images"
+                            )
+                            val imgCount = if (imgDir.exists()) imgDir.listFiles()?.size ?: 0 else 0
+                            if (imgCount > 0) {
+                                Text("$imgCount imagenes generadas", fontSize = 10.sp, color = BeeYellow)
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // fal.ai key
+                OutlinedTextField(
+                    value = falKey,
+                    onValueChange = { falKey = it },
+                    label = { Text("fal.ai API Key") },
+                    placeholder = { Text("fal_xxxxxxxxxxxx", color = BeeGray) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    visualTransformation = if (showFalKey) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { showFalKey = !showFalKey }) {
+                            Icon(if (showFalKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Toggle", tint = BeeGrayLight)
+                        }
+                    },
+                    colors = fieldColors()
+                )
+                Text("Flux Schnell/Pro — el mas rapido. fal.ai/dashboard", fontSize = 10.sp, color = BeeGray.copy(alpha = 0.7f))
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Together AI key
+                OutlinedTextField(
+                    value = togetherKey,
+                    onValueChange = { togetherKey = it },
+                    label = { Text("Together AI API Key") },
+                    placeholder = { Text("tok_xxxxxxxxxxxx", color = BeeGray) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    visualTransformation = if (showTogetherKey) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { showTogetherKey = !showTogetherKey }) {
+                            Icon(if (showTogetherKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Toggle", tint = BeeGrayLight)
+                        }
+                    },
+                    colors = fieldColors()
+                )
+                Text("Flux.1 Schnell — creditos iniciales gratis. together.ai", fontSize = 10.sp, color = BeeGray.copy(alpha = 0.7f))
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Button(
+                    onClick = {
+                        securePrefs.edit()
+                            .putString("fal_api_key", falKey.trim())
+                            .putString("together_api_key", togetherKey.trim())
+                            .apply()
+                        Toast.makeText(context, "Media generation configurado", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFAB47BC), contentColor = BeeWhite),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(Icons.Filled.Palette, "Save", modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Guardar Media Keys", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "Prioridad: fal.ai → Together AI → OpenRouter (DALL-E)\nDi 'genera una imagen de...' en cualquier chat",
+                    fontSize = 11.sp, color = BeeGray
+                )
+            }
 
             // ═══════════════════════════════════════
             // DEVELOPER / GIT / BROWSER

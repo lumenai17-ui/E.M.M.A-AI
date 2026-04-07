@@ -447,7 +447,7 @@ class ChatViewModel : ViewModel() {
                 response.toolExecutions.forEach { exec ->
                     val result = exec.result
                     // Check common keys where skills return file paths
-                    arrayOf("path", "file_path", "filepath", "filePath", "output_path").forEach { key ->
+                    arrayOf("path", "file_path", "filepath", "filePath", "output_path", "local_path", "image_path").forEach { key ->
                         if (result.has(key)) {
                             toolFiles.add(result.getString(key))
                         }
@@ -582,7 +582,7 @@ class ChatViewModel : ViewModel() {
 
                     val toolFiles = mutableSetOf<String>()
                     response.toolExecutions.forEach { exec ->
-                        arrayOf("path", "file_path", "filepath", "filePath", "output_path").forEach { key ->
+                        arrayOf("path", "file_path", "filepath", "filePath", "output_path", "local_path", "image_path").forEach { key ->
                             if (exec.result.has(key)) toolFiles.add(exec.result.getString(key))
                         }
                     }
