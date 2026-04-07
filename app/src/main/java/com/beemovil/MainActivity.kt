@@ -387,6 +387,15 @@ class MainActivity : ComponentActivity() {
                                     onBack = { viewModel.currentScreen.value = "notification_dashboard" }
                                 )
                             }
+                            "media_gallery" -> {
+                                MediaGalleryScreen(
+                                    onBack = { viewModel.currentScreen.value = "dashboard" },
+                                    onAttachToChat = { path ->
+                                        viewModel.openAgentChat("main")
+                                        viewModel.pendingPrompt.value = "Analiza o usa este archivo: $path"
+                                    }
+                                )
+                            }
                             "settings" -> {
                                 SettingsScreen(
                                     viewModel = viewModel,

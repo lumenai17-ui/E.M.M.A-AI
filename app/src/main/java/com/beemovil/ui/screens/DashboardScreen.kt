@@ -450,7 +450,7 @@ fun DashboardScreen(
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ActionCard(Icons.Filled.Notifications, "Notif", Color(0xFFFF6B6B), Modifier.weight(1f)) { viewModel.currentScreen.value = "notification_dashboard" }
                 ActionCard(Icons.Filled.TaskAlt, "Tareas", Gold, Modifier.weight(1f)) { viewModel.currentScreen.value = "tasks" }
-                Spacer(modifier = Modifier.weight(1f))
+                ActionCard(Icons.Filled.PhotoLibrary, "Media", Color(0xFFBF5AF2), Modifier.weight(1f)) { viewModel.currentScreen.value = "media_gallery" }
                 Spacer(modifier = Modifier.weight(1f))
             }
         }
