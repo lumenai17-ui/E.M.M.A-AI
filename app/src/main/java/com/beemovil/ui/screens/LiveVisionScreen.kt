@@ -12,6 +12,7 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -136,6 +137,9 @@ fun LiveVisionScreen(
 
     // Live context: web search for real-time info
     val liveContext = remember { LiveContextProvider() }
+    
+    // Live Session Tracker (BUG-12: Prevent stale threads from speaking after restart)
+    var currentLiveSessionId by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
     // Tourist guide: destination coords (resolved by AI)
     var touristBearing by remember { mutableStateOf(0f) }
@@ -184,17 +188,19 @@ fun LiveVisionScreen(
     }
 
     // Auto-capture loop
-    // BUG-01/09: Proper lifecycle — use coroutine scope, check isLiveActive, guard concurrency
+    // BUG-01/09/12: Proper lifecycle — use session track to kill stale threads
     LaunchedEffect(isLiveActive, intervalSeconds) {
         if (!isLiveActive) {
-            // BUG-02: Stop TTS when user presses Stop
+            // Stop TTS on exit
             dgVoice?.stopSpeaking()
             return@LaunchedEffect
         }
+        
+        val localSessionId = currentLiveSessionId
 
-        while (isLiveActive) {
+        while (isLiveActive && currentLiveSessionId == localSessionId) {
             kotlinx.coroutines.delay(intervalSeconds * 1000L)
-            if (!isLiveActive || isProcessing) continue
+            if (!isLiveActive || currentLiveSessionId != localSessionId || isProcessing) continue
 
             val capture = imageCapture ?: continue
             isProcessing = true
@@ -204,8 +210,7 @@ fun LiveVisionScreen(
                 object : ImageCapture.OnImageCapturedCallback() {
                     override fun onCaptureSuccess(imageProxy: ImageProxy) {
                         try {
-                            // BUG-01: Re-check before heavy work
-                            if (!isLiveActive) {
+                            if (!isLiveActive || currentLiveSessionId != localSessionId) {
                                 isProcessing = false
                                 imageProxy.close()
                                 return
@@ -223,9 +228,9 @@ fun LiveVisionScreen(
                             val b64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
 
                             Thread {
+                                val threadSessionId = currentLiveSessionId
                                 try {
-                                    // BUG-01: Check again inside thread
-                                    if (!isLiveActive) {
+                                    if (!isLiveActive || currentLiveSessionId != threadSessionId) {
                                         isProcessing = false
                                         return@Thread
                                     }
@@ -335,8 +340,8 @@ fun LiveVisionScreen(
                                         )
                                     }
 
-                                    // Voice narration — BUG-01: check isLiveActive before TTS
-                                    if (isLiveActive && visionState.voiceNarration && liveResult.isNotBlank()) {
+                                    // Voice narration — BUG-12: check session ID before TTS
+                                    if (isLiveActive && currentLiveSessionId == threadSessionId && visionState.voiceNarration && liveResult.isNotBlank()) {
                                         dgVoice?.speak(text = liveResult)
                                     }
 
@@ -1388,7 +1393,15 @@ fun LiveVisionScreen(
                 // Live toggle (BIGGEST button)
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Button(
-                        onClick = { isLiveActive = !isLiveActive },
+                        onClick = { 
+                            isLiveActive = !isLiveActive
+                            if (isLiveActive) {
+                                currentLiveSessionId = System.currentTimeMillis() // Start new clean tracking session
+                            } else {
+                                dgVoice?.stopSpeaking()
+                                isProcessing = false
+                            }
+                        },
                         modifier = Modifier.size(72.dp),
                         shape = CircleShape,
                         colors = ButtonDefaults.buttonColors(
