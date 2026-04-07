@@ -8,7 +8,11 @@ import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.Conversation
 import com.google.ai.edge.litertlm.Message
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.util.Base64
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.util.concurrent.*
 
 /**
@@ -124,9 +128,8 @@ class LocalGemmaProvider(
     }
 
     override fun complete(messages: List<ChatMessage>, tools: List<ToolDefinition>): LlmResponse {
-        // Build the prompt with tool definitions injected as text
-        val prompt = buildPrompt(messages, tools)
-        Log.d(TAG, "Prompt length: ${prompt.length} chars")
+        // Check if any message contains images (vision mode)
+        val hasImages = messages.any { !it.images.isNullOrEmpty() }
 
         val responseText = try {
             val engine = getEngine()
@@ -136,8 +139,68 @@ class LocalGemmaProvider(
             val future = executor.submit(Callable {
                 val conversation = engine.createConversation()
                 try {
-                    val response: Message = conversation.sendMessage(prompt)
-                    extractText(response)
+                    if (hasImages) {
+                        // 22-G: MULTIMODAL — try multiple approaches for image+text
+                        val lastImageMsg = messages.lastOrNull { !it.images.isNullOrEmpty() }
+                        val textPrompt = buildPrompt(messages, tools)
+
+                        // Attempt 1: Save image to temp file and try addImage/sendMessage
+                        val tempFile = lastImageMsg?.images?.lastOrNull()?.let { b64 ->
+                            try {
+                                val decoded = Base64.decode(b64, Base64.DEFAULT)
+                                val bmp = BitmapFactory.decodeByteArray(decoded, 0, decoded.size)
+                                if (bmp != null) {
+                                    val maxDim = 512
+                                    val resized = if (bmp.width > maxDim || bmp.height > maxDim) {
+                                        val s = minOf(maxDim.toFloat() / bmp.width, maxDim.toFloat() / bmp.height)
+                                        Bitmap.createScaledBitmap(bmp, (bmp.width * s).toInt(), (bmp.height * s).toInt(), true)
+                                    } else bmp
+                                    // Save to temp file for LiteRT-LM
+                                    val f = java.io.File.createTempFile("vision_", ".jpg", appContext?.cacheDir)
+                                    java.io.FileOutputStream(f).use { fos ->
+                                        resized.compress(Bitmap.CompressFormat.JPEG, 85, fos)
+                                    }
+                                    Log.i(TAG, "Temp image: ${f.absolutePath} (${f.length()} bytes)")
+                                    f
+                                } else null
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Image prep failed: ${e.message}")
+                                null
+                            }
+                        }
+
+                        // Try multimodal via addImage + sendMessage
+                        val response: Message = try {
+                            if (tempFile != null) {
+                                // Try the addImage approach (some LiteRT-LM versions)
+                                val addImageMethod = conversation.javaClass.methods.firstOrNull {
+                                    it.name == "addImage" || it.name == "addImageFile"
+                                }
+                                if (addImageMethod != null) {
+                                    addImageMethod.invoke(conversation, tempFile.absolutePath)
+                                    conversation.sendMessage(textPrompt)
+                                } else {
+                                    // Fallback: include image path in prompt context
+                                    Log.w(TAG, "No addImage method found, text-only mode")
+                                    conversation.sendMessage(textPrompt + "\n[Image provided but local model API doesn't support multimodal in this version]")
+                                }
+                            } else {
+                                conversation.sendMessage(textPrompt)
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Multimodal failed, text-only: ${e.message}")
+                            conversation.sendMessage(textPrompt)
+                        } finally {
+                            tempFile?.delete()
+                        }
+                        extractText(response)
+                    } else {
+                        // Text-only mode (original)
+                        val prompt = buildPrompt(messages, tools)
+                        Log.d(TAG, "Text prompt length: ${prompt.length} chars")
+                        val response: Message = conversation.sendMessage(prompt)
+                        extractText(response)
+                    }
                 } finally {
                     try { conversation.close() } catch (_: Exception) {}
                 }
@@ -167,7 +230,8 @@ class LocalGemmaProvider(
                 val engine = getEngine()
                 val conversation = engine.createConversation()
                 try {
-                    val response = conversation.sendMessage(prompt)
+                    val retryPrompt = buildPrompt(messages, tools)
+                    val response = conversation.sendMessage(retryPrompt)
                     extractText(response)
                 } finally {
                     try { conversation.close() } catch (_: Exception) {}
@@ -216,6 +280,73 @@ class LocalGemmaProvider(
             Log.e(TAG, "Text extraction error: ${e.message}")
             message.toString()
         }
+    }
+
+    /**
+     * 22-G: Build multimodal content (text + image) for vision inference.
+     * Decodes base64 images from ChatMessage.images and creates Content objects.
+     */
+    private fun buildMultimodalContent(
+        messages: List<ChatMessage>,
+        tools: List<ToolDefinition>
+    ): List<Content> {
+        val contents = mutableListOf<Content>()
+
+        // System prompt (as text)
+        val systemMsg = messages.firstOrNull { it.role == "system" }
+        if (systemMsg != null) {
+            val compact = (systemMsg.content ?: "")
+                .substringBefore("## Tus 3")
+                .take(600)
+                .trim()
+            contents.add(Content.Text("[System] $compact"))
+        }
+
+        // Process messages for images and text
+        messages.filter { it.role != "system" }.forEach { msg ->
+            // Add text content
+            val text = msg.content ?: ""
+            if (text.isNotBlank()) {
+                contents.add(Content.Text(text))
+            }
+
+            // Add images (decode from base64 → resize → Content.ImageBytes)
+            msg.images?.forEach { b64 ->
+                try {
+                    val bytes = Base64.decode(b64, Base64.DEFAULT)
+                    val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    if (bitmap != null) {
+                        // Resize if too large (max 512px for edge models)
+                        val maxDim = 512
+                        val resized = if (bitmap.width > maxDim || bitmap.height > maxDim) {
+                            val scale = minOf(maxDim.toFloat() / bitmap.width, maxDim.toFloat() / bitmap.height)
+                            Bitmap.createScaledBitmap(
+                                bitmap,
+                                (bitmap.width * scale).toInt(),
+                                (bitmap.height * scale).toInt(),
+                                true
+                            )
+                        } else bitmap
+
+                        // Convert resized bitmap to JPEG bytes for LiteRT-LM
+                        val baos = ByteArrayOutputStream()
+                        resized.compress(Bitmap.CompressFormat.JPEG, 85, baos)
+                        val imageBytes = baos.toByteArray()
+
+                        contents.add(Content.ImageBytes(imageBytes))
+                        Log.i(TAG, "Added image: ${resized.width}x${resized.height} (${imageBytes.size} bytes)")
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to decode image: ${e.message}")
+                }
+            }
+        }
+
+        if (contents.isEmpty()) {
+            contents.add(Content.Text("Describe what you see."))
+        }
+
+        return contents
     }
 
     private fun buildPrompt(messages: List<ChatMessage>, tools: List<ToolDefinition>): String {

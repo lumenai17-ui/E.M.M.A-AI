@@ -1665,13 +1665,34 @@ private fun triggerSmartCapture(
                                 userQuestion = userQuestion
                             )
 
-                            val provider = LlmFactory.createProvider(currentProviderType, apiKey, model)
                             val msgs = listOf(
                                 ChatMessage(role = "system", content = systemPrompt),
                                 ChatMessage(role = "user", content = userQuestion, images = listOf(b64))
                             )
-                            val response = provider.complete(msgs, emptyList())
-                            val result = response.text ?: ""
+
+                            // 22-G: Try primary provider, fallback to alternate
+                            val result = try {
+                                val provider = LlmFactory.createProvider(currentProviderType, apiKey, model)
+                                val response = provider.complete(msgs, emptyList())
+                                response.text ?: ""
+                            } catch (primaryErr: Exception) {
+                                // Fallback: if cloud failed, try local; if local failed, try cloud
+                                val fallbackType = if (currentProviderType == "local") "openrouter" else "local"
+                                try {
+                                    val fallbackKey = if (fallbackType == "openrouter") {
+                                        com.beemovil.security.SecurePrefs.get(context).getString("openrouter_api_key", "") ?: ""
+                                    } else ""
+                                    val fallbackModel = if (fallbackType == "local") {
+                                        com.beemovil.llm.local.LocalModelManager.getDownloadedModels().firstOrNull()?.id ?: throw primaryErr
+                                    } else model
+                                    val fallbackProvider = LlmFactory.createProvider(fallbackType, fallbackKey, fallbackModel)
+                                    val fallbackResponse = fallbackProvider.complete(msgs, emptyList())
+                                    "[${if (fallbackType == "local") "OFFLINE" else "CLOUD"}] ${fallbackResponse.text ?: ""}"
+                                } catch (_: Exception) {
+                                    throw primaryErr // Both failed, throw original error
+                                }
+                            }
+
                             conversation.addFrame(result)
                             onResult(result)
 
