@@ -896,15 +896,18 @@ fun SettingsScreen(
                                 else -> !emailImapHost.contains("gmail") && !emailImapHost.contains("office365") && !emailImapHost.contains("outlook")
                             },
                             onClick = {
-                                val preset = com.beemovil.email.EmailService.PRESETS[name]!!
                                 if (name == "Dominio propio") {
                                     showServerFields = true
+                                    emailImapHost = ""
+                                    emailSmtpHost = ""
                                     emailTestResult = "Configura los servidores IMAP/SMTP de tu dominio"
                                 } else {
+                                    val preset = com.beemovil.email.EmailService.PRESETS[name] ?: return@FilterChip
                                     emailImapHost = preset.imapHost
                                     emailImapPort = preset.imapPort.toString()
                                     emailSmtpHost = preset.smtpHost
                                     emailSmtpPort = preset.smtpPort.toString()
+                                    showServerFields = false
                                     emailTestResult = ""
                                 }
                             },

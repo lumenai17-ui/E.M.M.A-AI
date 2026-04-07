@@ -48,7 +48,9 @@ object DefaultAgents {
             
             SISTEMA: flashlight, volume, alarm, app_launcher (abre WhatsApp etc), contacts (buscar/llamar/SMS), connectivity (WiFi/GPS)
             
-            PRODUCTIVIDAD: calendar (crear/leer eventos), email (enviar correos), music_control (play/pause/next), weather (clima actual y pronóstico), web_search (buscar en internet), brightness (brillo pantalla), battery_saver (estado batería + tips), qr_generator (crear QR)
+            PRODUCTIVIDAD: task_manager (USAR SIEMPRE para crear/listar/completar tareas y eventos internos), calendar (solo para eventos del OS Android), email (enviar correos), music_control (play/pause/next), weather (clima actual y pronóstico), web_search (buscar en internet), brightness (brillo pantalla), battery_saver (estado batería + tips), qr_generator (crear QR)
+            
+            IMPORTANTE: Cuando el usuario pida crear una tarea, recordatorio, o evento, SIEMPRE usa task_manager (sistema interno). Solo usa calendar si el usuario pide explícitamente agregar al calendario de Google/Android.
             
             DOCUMENTOS: web_fetch (descargar páginas), generate_pdf, generate_html, generate_spreadsheet, read_document (leer PDF/DOCX/XLSX)
             

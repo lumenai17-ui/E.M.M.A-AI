@@ -125,20 +125,55 @@ fun ChatScreen(viewModel: ChatViewModel, onSettingsClick: () -> Unit = {}, onBac
         }
     }
 
-    // Image picker (multi-select)
+    // Image picker (multi-select) — SAFE: sequential + OOM protected
     val imagePickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetMultipleContents()
     ) { uris: List<Uri> ->
-        uris.forEach { uri ->
-            try {
-                val inputStream = context.contentResolver.openInputStream(uri)
-                val tempFile = File(context.cacheDir, "attached_image_${System.currentTimeMillis()}.jpg")
-                inputStream?.use { input -> tempFile.outputStream().use { output -> input.copyTo(output) } }
-                viewModel.analyzeImageInChat(context, tempFile.absolutePath)
-            } catch (e: Exception) {
-                viewModel.sendMessage("[Error cargando imagen: ${e.message}]")
-            }
+        val safeUris = uris.take(5) // Max 5 images to prevent OOM
+        if (uris.size > 5) {
+            viewModel.sendMessage("[AVISO] Solo se procesaran las primeras 5 imagenes de ${uris.size} seleccionadas.")
         }
+        // Process sequentially on background thread to avoid UI freeze + OOM
+        Thread {
+            safeUris.forEachIndexed { index, uri ->
+                try {
+                    val inputStream = context.contentResolver.openInputStream(uri)
+                    val tempFile = File(context.cacheDir, "attached_image_${System.currentTimeMillis()}_$index.jpg")
+                    inputStream?.use { input -> tempFile.outputStream().use { output -> input.copyTo(output) } }
+
+                    // Scale down before passing to viewModel to prevent OOM
+                    val opts = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    android.graphics.BitmapFactory.decodeFile(tempFile.absolutePath, opts)
+                    val scale = maxOf(1, maxOf(opts.outWidth, opts.outHeight) / 1024)
+                    val scaleOpts = android.graphics.BitmapFactory.Options().apply { inSampleSize = scale }
+                    val bitmap = android.graphics.BitmapFactory.decodeFile(tempFile.absolutePath, scaleOpts)
+                    if (bitmap != null) {
+                        val baos = java.io.ByteArrayOutputStream()
+                        bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, baos)
+                        val scaledFile = File(context.cacheDir, "scaled_image_${System.currentTimeMillis()}_$index.jpg")
+                        scaledFile.writeBytes(baos.toByteArray())
+                        bitmap.recycle()
+                        baos.close()
+                        tempFile.delete()
+
+                        // Analyze on main thread sequentially
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            viewModel.analyzeImageInChat(context, scaledFile.absolutePath)
+                        }
+                        // Small delay between images to let GC work
+                        if (index < safeUris.size - 1) Thread.sleep(500)
+                    }
+                } catch (e: OutOfMemoryError) {
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        viewModel.sendMessage("[Error] Imagen ${index + 1} muy grande, no se pudo procesar (memoria insuficiente)")
+                    }
+                } catch (e: Exception) {
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        viewModel.sendMessage("[Error cargando imagen ${index + 1}: ${e.message}]")
+                    }
+                }
+            }
+        }.start()
     }
 
     // Auto-scroll on new messages

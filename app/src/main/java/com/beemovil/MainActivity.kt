@@ -79,6 +79,7 @@ class MainActivity : ComponentActivity() {
 
         // Phase 6 skills (Production Ready — high value)
         try { skills["calendar"] = CalendarSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "CalendarSkill: ${e.message}") }
+        try { skills["task_manager"] = TaskSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "TaskSkill: ${e.message}") }
         try { skills["email"] = EmailSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "EmailSkill: ${e.message}") }
         try { skills["music_control"] = MusicControlSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "MusicControlSkill: ${e.message}") }
         try { skills["weather"] = WeatherSkill() } catch (e: Throwable) { Log.e("BeeMovil", "WeatherSkill: ${e.message}") }

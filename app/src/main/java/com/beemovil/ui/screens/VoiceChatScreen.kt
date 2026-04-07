@@ -3,6 +3,8 @@ package com.beemovil.ui.screens
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -39,6 +41,18 @@ fun VoiceChatScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+
+    // Mic permission
+    var hasMicPermission by remember {
+        mutableStateOf(
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                context, android.Manifest.permission.RECORD_AUDIO
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val micPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> hasMicPermission = granted }
 
     // Voice state
     var voiceState by remember { mutableStateOf(VoiceState.IDLE) }
@@ -88,6 +102,12 @@ fun VoiceChatScreen(
     )
 
     fun startListening() {
+        // Check mic permission first
+        if (!hasMicPermission) {
+            micPermLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+            errorText = "Se necesita permiso de microfono"
+            return
+        }
         if (usingDeepgram) {
             // Use Deepgram STT
             voiceState = VoiceState.LISTENING
