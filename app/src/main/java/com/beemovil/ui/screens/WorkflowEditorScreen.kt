@@ -142,7 +142,14 @@ fun WorkflowEditorScreen(
                             customDB.saveWorkflow(workflow, schedule)
                         }
 
-                        Toast.makeText(context, "Workflow guardado", Toast.LENGTH_SHORT).show()
+                        // Activate/cancel scheduler
+                        if (schedule != null) {
+                            WorkflowScheduler.schedule(context, workflow.id, schedule)
+                            Toast.makeText(context, "Workflow guardado y programado", Toast.LENGTH_SHORT).show()
+                        } else {
+                            WorkflowScheduler.cancel(context, workflow.id)
+                            Toast.makeText(context, "Workflow guardado", Toast.LENGTH_SHORT).show()
+                        }
                         onSave(workflow.id)
                     },
                     enabled = name.isNotBlank() && steps.isNotEmpty()

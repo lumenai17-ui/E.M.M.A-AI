@@ -24,6 +24,7 @@ import com.beemovil.memory.NotificationLogDB
 import com.beemovil.memory.TaskDB
 import com.beemovil.workflow.WorkflowHistoryDB
 import com.beemovil.workflow.CustomWorkflowDB
+import com.beemovil.workflow.WorkflowScheduler
 import com.beemovil.skills.*
 import com.beemovil.ui.ChatUiMessage
 import com.beemovil.ui.ChatViewModel
@@ -126,6 +127,9 @@ class MainActivity : ComponentActivity() {
 
         // Phase 21: AI Workflow Generator
         try { skills["generate_workflow"] = GenerateWorkflowSkill(customWorkflowDB) } catch (e: Throwable) { Log.e("BeeMovil", "GenWorkflowSkill: ${e.message}") }
+
+        // Phase 21C: Reschedule all workflows on app start
+        try { WorkflowScheduler.rescheduleAll(this) } catch (e: Throwable) { Log.e("BeeMovil", "Reschedule: ${e.message}") }
 
         // Load saved preferences
         val prefs = getSharedPreferences("beemovil", Context.MODE_PRIVATE)
