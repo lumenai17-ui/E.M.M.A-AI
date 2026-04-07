@@ -13,6 +13,7 @@ import androidx.camera.view.PreviewView
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -144,9 +145,10 @@ fun LiveVisionScreen(
         )
     }
 
-    // GPS lifecycle
-    LaunchedEffect(visionState.gpsOverlay || visionState.dashcamMode || visionState.touristGuide) {
-        if (visionState.gpsOverlay || visionState.dashcamMode || visionState.touristGuide) {
+    // BUG-11: GPS lifecycle — use individual keys so any toggle change re-triggers
+    LaunchedEffect(visionState.gpsOverlay, visionState.dashcamMode, visionState.touristGuide) {
+        val needsGps = visionState.gpsOverlay || visionState.dashcamMode || visionState.touristGuide
+        if (needsGps) {
             gpsModule.onLocationUpdate = { data ->
                 gpsData = data
                 // 22-B: Update navigator on every GPS tick
@@ -171,8 +173,13 @@ fun LiveVisionScreen(
     }
 
     // Auto-capture loop
+    // BUG-01/09: Proper lifecycle — use coroutine scope, check isLiveActive, guard concurrency
     LaunchedEffect(isLiveActive, intervalSeconds) {
-        if (!isLiveActive) return@LaunchedEffect
+        if (!isLiveActive) {
+            // BUG-02: Stop TTS when user presses Stop
+            dgVoice?.stopSpeaking()
+            return@LaunchedEffect
+        }
 
         while (isLiveActive) {
             kotlinx.coroutines.delay(intervalSeconds * 1000L)
@@ -186,6 +193,12 @@ fun LiveVisionScreen(
                 object : ImageCapture.OnImageCapturedCallback() {
                     override fun onCaptureSuccess(imageProxy: ImageProxy) {
                         try {
+                            // BUG-01: Re-check before heavy work
+                            if (!isLiveActive) {
+                                isProcessing = false
+                                imageProxy.close()
+                                return
+                            }
                             val bitmap = imageProxy.toBitmap()
                             val scale = minOf(512f / bitmap.width, 512f / bitmap.height, 1f)
                             val resized = Bitmap.createScaledBitmap(
@@ -200,6 +213,11 @@ fun LiveVisionScreen(
 
                             Thread {
                                 try {
+                                    // BUG-01: Check again inside thread
+                                    if (!isLiveActive) {
+                                        isProcessing = false
+                                        return@Thread
+                                    }
                                     // 22-G: Smart provider routing — detect local vs cloud
                                     val modelEntry = com.beemovil.llm.ModelRegistry.findModel(selectedModel)
                                     val isLocalModel = modelEntry?.provider == "local"
@@ -211,14 +229,12 @@ fun LiveVisionScreen(
                                     val currentProviderType = when {
                                         isLocalModel -> "local"
                                         !hasNetwork -> {
-                                            // Airplane mode: try local if downloaded
                                             val localModel = com.beemovil.llm.local.LocalModelManager.getDownloadedModels().firstOrNull()
                                             if (localModel != null) "local" else viewModel.currentProvider.value
                                         }
                                         else -> viewModel.currentProvider.value
                                     }
                                     
-                                    // If forced to local by airplane mode, use first downloaded model
                                     val effectiveModel = if (!isLocalModel && currentProviderType == "local") {
                                         com.beemovil.llm.local.LocalModelManager.getDownloadedModels().firstOrNull()?.id ?: selectedModel
                                     } else selectedModel
@@ -229,7 +245,6 @@ fun LiveVisionScreen(
                                         else -> ""
                                     }
                                     if (apiKey.isBlank() && currentProviderType != "local") {
-                                        // No API key AND no local model — can't do anything
                                         if (!hasNetwork || com.beemovil.llm.local.LocalModelManager.getDownloadedModels().isEmpty()) {
                                             liveResult = "[WARN] Sin red y sin modelo local. Descarga Gemma 4 en Settings."
                                             isProcessing = false
@@ -307,8 +322,8 @@ fun LiveVisionScreen(
                                         )
                                     }
 
-                                    // Voice narration
-                                    if (visionState.voiceNarration && liveResult.isNotBlank()) {
+                                    // Voice narration — BUG-01: check isLiveActive before TTS
+                                    if (isLiveActive && visionState.voiceNarration && liveResult.isNotBlank()) {
                                         dgVoice?.speak(text = liveResult)
                                     }
 
@@ -350,10 +365,11 @@ fun LiveVisionScreen(
         }
     }
 
-    // Cleanup
+    // BUG-02/08: Complete cleanup — stop TTS, speech, GPS, camera
     DisposableEffect(Unit) {
         onDispose {
             isLiveActive = false
+            dgVoice?.stopSpeaking()  // BUG-02: Stop TTS on exit
             gpsModule.stop()
             if (dashcamLogger.isActive) dashcamLogger.stopSession()
             cameraExecutor.shutdown()
@@ -493,52 +509,43 @@ fun LiveVisionScreen(
         }
 
         // ═══════════════════════════════════════
-        // GPS OVERLAY (full width, prominent)
+        // GPS OVERLAY — BUG-07: leave right side free for minimap
         // ═══════════════════════════════════════
         if (visionState.gpsOverlay && gpsData.latitude != 0.0) {
             Card(
                 modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .fillMaxWidth()
-                    .padding(top = 68.dp, start = 10.dp, end = 10.dp),
+                    .align(Alignment.TopStart)
+                    .fillMaxWidth(0.65f)
+                    .padding(top = 68.dp, start = 10.dp),
                 colors = CardDefaults.cardColors(containerColor = BeeBlack.copy(alpha = 0.75f)),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
+                Column(modifier = Modifier.padding(10.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Filled.LocationOn, "GPS", tint = Color(0xFF4CAF50), modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(Icons.Filled.LocationOn, "GPS", tint = Color(0xFF4CAF50), modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(gpsData.coordsShort, fontSize = 13.sp, color = Color(0xFF4CAF50), fontWeight = FontWeight.Bold)
+                            Text(gpsData.coordsShort, fontSize = 12.sp, color = Color(0xFF4CAF50), fontWeight = FontWeight.Bold)
                             if (gpsData.address.isNotBlank()) {
-                                Text(gpsData.address, fontSize = 12.sp, color = BeeWhite,
+                                Text(gpsData.address, fontSize = 11.sp, color = BeeWhite,
                                     maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
-                        if (gpsData.speed > 0.5f) {
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text("${"%,.0f".format(gpsData.speedKmh)}", fontSize = 22.sp,
-                                    color = BeeWhite, fontWeight = FontWeight.Bold)
-                                Text("km/h ${gpsData.bearingCardinal}", fontSize = 11.sp, color = BeeGray)
-                            }
-                        }
-                        if (gpsData.altitude > 0) {
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text("${"%,.0f".format(gpsData.altitude)}m", fontSize = 14.sp, color = BeeGray)
-                                Text("alt", fontSize = 9.sp, color = BeeGray)
-                            }
-                        }
+                    }
+                    if (gpsData.speed > 0.5f) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("${"%.0f".format(gpsData.speedKmh)} km/h ${gpsData.bearingCardinal}",
+                            fontSize = 13.sp, color = BeeWhite, fontWeight = FontWeight.Bold)
                     }
                 }
             }
         }
 
         // ═══════════════════════════════════════
-        // 22-B: MINI MAP PIP (top-right)
+        // MINI MAP PIP — BUG-07: top-right, NOT overlapping GPS
         // ═══════════════════════════════════════
         if ((visionState.gpsOverlay || visionState.touristGuide) && gpsData.latitude != 0.0) {
             MiniMapPIP(
@@ -546,7 +553,7 @@ fun LiveVisionScreen(
                 navigator = gpsNavigator,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(top = 72.dp, end = 8.dp)
+                    .padding(top = 68.dp, end = 8.dp)
             )
         }
 
@@ -581,7 +588,8 @@ fun LiveVisionScreen(
         // ═══════════════════════════════════════
         // TOURIST GUIDE OVERLAY (center)
         // ═══════════════════════════════════════
-        if (visionState.touristGuide && touristDestCoords != null && gpsData.latitude != 0.0) {
+        // BUG-13: Show tourist arrow ONLY when NavigationHUD is NOT active
+        if (visionState.touristGuide && !gpsNavigator.isNavigating && touristDestCoords != null && gpsData.latitude != 0.0) {
             // Calculate bearing and distance to destination
             val destLat = touristDestCoords!!.first
             val destLng = touristDestCoords!!.second
@@ -666,20 +674,28 @@ fun LiveVisionScreen(
         }
 
         // ═══════════════════════════════════════
-        // MODULES PANEL (slide-in right)
+        // MODULES PANEL — BUG-06: scrim + constrained height
         // ═══════════════════════════════════════
+        // Scrim behind modules panel
+        if (showModules) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.4f))
+                    .clickable { showModules = false }
+            )
+        }
         AnimatedVisibility(
             visible = showModules,
             enter = slideInHorizontally(initialOffsetX = { it }),
             exit = slideOutHorizontally(targetOffsetX = { it }),
-            modifier = Modifier.align(Alignment.CenterEnd)
+            modifier = Modifier.align(Alignment.TopEnd)
         ) {
             Card(
                 modifier = Modifier
-                    .width(260.dp)
-                    .fillMaxHeight()
-                    .padding(vertical = 56.dp),
-                colors = CardDefaults.cardColors(containerColor = BeeBlack.copy(alpha = 0.92f)),
+                    .width(240.dp)
+                    .padding(top = 60.dp, bottom = 120.dp, end = 4.dp), // BUG-06: Leave room for header + controls
+                colors = CardDefaults.cardColors(containerColor = BeeBlack.copy(alpha = 0.95f)),
                 shape = RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp)
             ) {
                 Column(
@@ -1158,9 +1174,9 @@ fun LiveVisionScreen(
                 )
             }
 
-            // 22-H: Quick Actions Bar (Google Lens-style, always visible)
+            // 22-H: Quick Actions — BUG-05: HIDE when result is showing
             AnimatedVisibility(
-                visible = !isLiveActive && !isProcessing,
+                visible = !isLiveActive && !isProcessing && liveResult.isBlank(),
                 enter = fadeIn() + slideInVertically(initialOffsetY = { it / 2 }),
                 exit = fadeOut()
             ) {
@@ -1204,65 +1220,60 @@ fun LiveVisionScreen(
                     }
                 }
             }
-            // AR overlay mode: text on camera — PROMINENT
-            if (visionState.arTextOverlay && liveResult.isNotBlank()) {
+
+            // Result overlay — BUG-04: constrained height + scroll + dismiss
+            if (liveResult.isNotBlank()) {
+                val accentColor = if (visionState.arTextOverlay) Color(0xFF00BCD4) else BeeYellow
                 Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (visionState.arTextOverlay)
+                            Color(0xFF00BCD4).copy(alpha = 0.15f)
+                        else BeeBlack.copy(alpha = 0.85f)
+                    ),
+                    shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF00BCD4).copy(alpha = 0.15f)),
-                    shape = RoundedCornerShape(14.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF00BCD4).copy(alpha = 0.5f))
+                        .heightIn(max = 180.dp) // BUG-04: Don't let it take over the screen
+                        .padding(horizontal = 10.dp),
+                    border = if (visionState.arTextOverlay)
+                        androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF00BCD4).copy(alpha = 0.5f))
+                    else null
                 ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
+                    Column(modifier = Modifier.padding(12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.Visibility, "AR", tint = Color(0xFF00BCD4), modifier = Modifier.size(16.dp))
+                            Icon(
+                                if (visionState.arTextOverlay) Icons.Filled.Visibility else Icons.Filled.SmartToy,
+                                "AI", tint = accentColor, modifier = Modifier.size(14.dp)
+                            )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("VISION AI", fontSize = 11.sp, color = Color(0xFF00BCD4),
-                                fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                            Text(
+                                if (visionState.arTextOverlay) "VISION AI" else "RECONOCIMIENTO",
+                                fontSize = 10.sp, color = accentColor,
+                                fontWeight = FontWeight.Bold, letterSpacing = 1.sp
+                            )
                             Spacer(modifier = Modifier.weight(1f))
                             if (isProcessing) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(14.dp),
-                                    color = BeeYellow, strokeWidth = 2.dp
+                                    color = accentColor, strokeWidth = 2.dp
                                 )
                             }
+                            // BUG-04: Dismiss button
+                            IconButton(
+                                onClick = { liveResult = "" },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(Icons.Filled.Close, "Cerrar", tint = BeeGray, modifier = Modifier.size(14.dp))
+                            }
                         }
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             liveResult,
-                            fontSize = 15.sp,
-                            color = Color.White,
-                            lineHeight = 22.sp,
-                            maxLines = 6,
-                            overflow = TextOverflow.Ellipsis
+                            fontSize = 13.sp,
+                            color = if (visionState.arTextOverlay) Color.White else Color(0xFFE0E0E0),
+                            lineHeight = 19.sp,
+                            modifier = Modifier.verticalScroll(rememberScrollState()) // BUG-04: scrollable
                         )
-                    }
-                }
-            } else if (!visionState.arTextOverlay && liveResult.isNotBlank()) {
-                // Classic card mode
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = BeeBlack.copy(alpha = 0.85f)),
-                    shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.SmartToy, "Bee", tint = BeeYellow, modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("RECONOCIMIENTO", fontSize = 10.sp, color = BeeYellow,
-                                fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                            Spacer(modifier = Modifier.weight(1f))
-                            if (isProcessing) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(14.dp),
-                                    color = BeeYellow, strokeWidth = 2.dp
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(liveResult, fontSize = 14.sp, color = Color(0xFFE0E0E0),
-                            lineHeight = 20.sp, maxLines = 6)
                     }
                 }
             }
@@ -1294,7 +1305,7 @@ fun LiveVisionScreen(
                     Text("Foto", fontSize = 10.sp, color = BeeGray)
                 }
 
-                // Mic — voice question (22-A: uses NativeSpeechInput, no API key needed)
+                // Mic — voice question (BUG-03 fix: stop TTS, guard concurrency)
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Button(
                         onClick = {
@@ -1302,42 +1313,31 @@ fun LiveVisionScreen(
                                 nativeSpeech.stopListening()
                                 isVoiceListening = false
                                 partialSpeech = ""
-                            } else {
+                            } else if (!isProcessing) {
+                                // BUG-03: Stop TTS first so mic doesn't hear its own output
+                                dgVoice?.stopSpeaking()
                                 isVoiceListening = true
                                 partialSpeech = ""
                                 nativeSpeech.startListening(
                                     onResult = { text ->
                                         isVoiceListening = false
                                         partialSpeech = ""
-                                        // Add to conversation context
-                                        conversation.addUserQuestion(text)
-                                        // Trigger single capture with the voice question
-                                        triggerSmartCapture(
-                                            imageCapture, cameraExecutor, viewModel, context,
-                                            selectedModel, text, visionState, gpsData,
-                                            dgVoice, dashcamLogger, conversation, selectedPersonality,
-                                            onResult = { liveResult = it; frameCount++ },
-                                            onProcessing = { isProcessing = it }
-                                        )
+                                        if (text.isNotBlank() && !isProcessing) {
+                                            conversation.addUserQuestion(text)
+                                            triggerSmartCapture(
+                                                imageCapture, cameraExecutor, viewModel, context,
+                                                selectedModel, text, visionState, gpsData,
+                                                dgVoice, dashcamLogger, conversation, selectedPersonality,
+                                                onResult = { liveResult = it; frameCount++ },
+                                                onProcessing = { isProcessing = it }
+                                            )
+                                        }
                                     },
                                     onPartial = { partialSpeech = it },
                                     onError = { err ->
                                         isVoiceListening = false
                                         partialSpeech = ""
-                                        // Fallback: try DeepgramVoiceManager
-                                        dgVoice?.startListening(
-                                            onResult = { text ->
-                                                conversation.addUserQuestion(text)
-                                                triggerSmartCapture(
-                                                    imageCapture, cameraExecutor, viewModel, context,
-                                                    selectedModel, text, visionState, gpsData,
-                                                    dgVoice, dashcamLogger, conversation, selectedPersonality,
-                                                    onResult = { liveResult = it; frameCount++ },
-                                                    onProcessing = { isProcessing = it }
-                                                )
-                                            },
-                                            onError = { Toast.makeText(context, "Mic: $err", Toast.LENGTH_SHORT).show() }
-                                        )
+                                        Toast.makeText(context, "Mic: $err", Toast.LENGTH_SHORT).show()
                                     }
                                 )
                             }
