@@ -202,6 +202,9 @@ fun LiveVisionScreen(
             kotlinx.coroutines.delay(intervalSeconds * 1000L)
             if (!isLiveActive || currentLiveSessionId != localSessionId || isProcessing) continue
 
+            // BUG-14: Variable Cycle - If TTS is speaking, skip this tick avoiding voice overlap and overload.
+            if (dgVoice?.isSpeaking == true) continue
+
             val capture = imageCapture ?: continue
             isProcessing = true
 
