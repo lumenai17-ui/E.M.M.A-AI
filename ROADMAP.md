@@ -1,5 +1,5 @@
 # 🐝 Bee-Movil Native — Roadmap & Checklist
-### Ultima actualizacion: 7 de Abril 2026 · v5.7.0
+### Ultima actualizacion: 7 de Abril 2026 · v5.7.1
 
 ---
 
@@ -337,18 +337,19 @@
 
 ---
 
-### ✅ FASE 22 — Vision Pro Audit (Completada v5.4.0)
-> *Auditoria completa del modo Vision Pro — 13 bugs resueltos*
+### ✅ FASE 22 — Vision Pro Audit & Face Intelligence (Completada v5.7.1)
+> *Auditoria completa del modo Vision Pro, fix del microfono y ML Kit Faces*
 
 - [x] Lifecycle management (DisposableEffect, stopSpeaking en onDispose)
 - [x] TTS leak fix (dgVoice.stopSpeaking en todos los exit paths)
 - [x] Local model routing (Gemma 4 con hasVision=true en ModelRegistry)
 - [x] Network-aware provider routing (offline → local, online → cloud)
-- [x] UI: GPS/minimap Z-order fix (offset + padding)
-- [x] UI: Quick actions panel constrained (maxHeight, scrim)
-- [x] UI: Result card constrained (maxHeight 200dp)
+- [x] UI: Eliminadas Quick Actions + POI limits logrando "Clean Vision Mode"
+- [x] Mic Fix: `RECORD_AUDIO` permission arreglado via `RequestMultiplePermissions`
+- [x] Face Tracking en vivo con ML Kit (FaceAnalyzer) + Canvas Drawing
+- [x] Face Metadata LLM injection ("1 rostros en vivo", con tracker id)
+- [x] Concurrency limits: System prompts ultra-concisos (1-2 oraciones)
 - [x] Microphone sync fix (TTS ↔ STT state machine)
-- [x] Modules panel overlay fix (constrained height + dismiss)
 
 ---
 

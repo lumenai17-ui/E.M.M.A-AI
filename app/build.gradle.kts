@@ -116,6 +116,9 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
     implementation("androidx.camera:camera-view:$cameraxVersion")
 
+    // ML Kit Face Detection
+    implementation("com.google.mlkit:face-detection:16.1.6")
+
     // Document Reader (PDF text extraction + DOCX/XLSX parsing)
     implementation("org.apache.poi:poi-ooxml:5.2.5") {
         // Exclude unused XML schema validation to reduce APK size

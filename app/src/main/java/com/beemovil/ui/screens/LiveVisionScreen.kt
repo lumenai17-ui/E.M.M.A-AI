@@ -43,6 +43,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.core.content.ContextCompat
 import com.beemovil.llm.ChatMessage
 import com.beemovil.llm.LlmFactory
@@ -65,9 +66,10 @@ fun LiveVisionScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val prefs = remember { context.getSharedPreferences("beemovil", 0) }
 
-    var hasCameraPermission by remember {
+    var hasPermissions by remember {
         mutableStateOf(
-            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         )
     }
     var isLiveActive by remember { mutableStateOf(false) }
@@ -118,6 +120,11 @@ fun LiveVisionScreen(
     // Dashcam logger
     val dashcamLogger = remember { DashcamLogger(context) }
 
+    // 22-I: Face Tracking UI State
+    var detectedFaces by remember { mutableStateOf<List<FaceResult>>(emptyList()) }
+    var imageWidth by remember { mutableStateOf(1) }
+    var imageHeight by remember { mutableStateOf(1) }
+
     // Voice manager for narration (TTS output)
     val dgVoice = viewModel.deepgramVoiceManager
 
@@ -130,19 +137,17 @@ fun LiveVisionScreen(
     var touristDestCoords by remember { mutableStateOf<Pair<Double, Double>?>(null) }
 
     val permLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        hasCameraPermission = granted
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { map ->
+        val cam = map[Manifest.permission.CAMERA] == true
+        val mic = map[Manifest.permission.RECORD_AUDIO] == true
+        hasPermissions = cam && mic
     }
-    var showCameraPermDialog by remember { mutableStateOf(false) }
+    var showPermDialog by remember { mutableStateOf(false) }
 
-    if (showCameraPermDialog && !hasCameraPermission) {
-        PermissionDialog(
-            permission = BeePermission.CAMERA,
-            onGranted = { hasCameraPermission = true; showCameraPermDialog = false },
-            onDenied = { showCameraPermDialog = false },
-            onDismiss = { showCameraPermDialog = false }
-        )
+    if (showPermDialog && !hasPermissions) {
+        permLauncher.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO))
+        showPermDialog = false
     }
 
     // BUG-11: GPS lifecycle — use individual keys so any toggle change re-triggers
@@ -271,7 +276,9 @@ fun LiveVisionScreen(
                                         personality = selectedPersonality,
                                         gpsContext = gpsCtx,
                                         userQuestion = userQ
-                                    )
+                                    ) + if (detectedFaces.isNotEmpty()) {
+                                        "\n[SISTEMA INTERNO: El sensor biométrico detecta ${detectedFaces.size} rostros en vivo.]"
+                                    } else ""
 
                                     // Build user prompt with web context
                                     val userPrompt = buildString {
@@ -377,24 +384,26 @@ fun LiveVisionScreen(
         }
     }
 
-    if (!hasCameraPermission) {
+    if (!hasPermissions) {
         Column(
             modifier = Modifier.fillMaxSize().background(BeeBlack),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Icon(Icons.Filled.CameraAlt, "Camera", tint = BeeGray, modifier = Modifier.size(64.dp))
+            Icon(Icons.Filled.CameraAlt, "Camera/Mic", tint = BeeGray, modifier = Modifier.size(64.dp))
             Spacer(modifier = Modifier.height(16.dp))
-            Text("Permiso de camara necesario", fontWeight = FontWeight.Bold,
+            Text("Permisos necesarios", fontWeight = FontWeight.Bold,
                 fontSize = 18.sp, color = BeeWhite)
             Spacer(modifier = Modifier.height(8.dp))
-            Text("Vision Pro necesita acceso a la camara", fontSize = 13.sp, color = BeeGray)
+            Text("Vision Pro necesita acceso a cámara y micrófono", fontSize = 13.sp, color = BeeGray)
             Spacer(modifier = Modifier.height(16.dp))
             Button(
-                onClick = { showCameraPermDialog = true },
+                onClick = {
+                    permLauncher.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO))
+                },
                 colors = ButtonDefaults.buttonColors(containerColor = BeeYellow, contentColor = BeeBlack)
             ) {
-                Text("Permitir camara", fontWeight = FontWeight.Bold)
+                Text("Otorgar permisos", fontWeight = FontWeight.Bold)
             }
         }
         return
@@ -417,13 +426,25 @@ fun LiveVisionScreen(
                         .build()
                     imageCapture = imgCapture
 
+                    val faceAnalyzer = ImageAnalysis.Builder()
+                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                        .build()
+                        .also { analysis ->
+                            analysis.setAnalyzer(cameraExecutor, FaceAnalyzer { faces, w, h ->
+                                detectedFaces = faces
+                                imageWidth = w
+                                imageHeight = h
+                            })
+                        }
+
                     try {
                         cameraProvider.unbindAll()
                         camera = cameraProvider.bindToLifecycle(
                             lifecycleOwner,
                             CameraSelector.DEFAULT_BACK_CAMERA,
                             preview,
-                            imgCapture
+                            imgCapture,
+                            faceAnalyzer
                         )
                     } catch (_: Exception) {}
                 }, ContextCompat.getMainExecutor(ctx))
@@ -455,6 +476,59 @@ fun LiveVisionScreen(
                     }
                 }
         )
+
+        // ═══════════════════════════════════════
+        // FACE TRACKING OVERLAY (Canvas)
+        // ═══════════════════════════════════════
+        if (detectedFaces.isNotEmpty()) {
+            androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+                // Adjust scale because camera preview likely doesn't match raw image dims exactly
+                val scaleX = size.width / imageHeight.toFloat() // Portrait Mode (Width/Height swap)
+                val scaleY = size.height / imageWidth.toFloat()
+                
+                detectedFaces.forEach { face ->
+                    // Map bounding box to screen coordinates (assuming device is in Portrait)
+                    val left = face.boundingBox.top * scaleX
+                    val top = (imageWidth - face.boundingBox.right) * scaleY
+                    val right = face.boundingBox.bottom * scaleX
+                    val bottom = (imageWidth - face.boundingBox.left) * scaleY
+                    
+                    val rectWidth = right - left
+                    val rectHeight = bottom - top
+
+                    // Draw High-Tech Bracket Boxes
+                    drawRect(
+                        color = Color(0xFF00E5FF).copy(alpha = 0.3f), // Cyan fill
+                        topLeft = androidx.compose.ui.geometry.Offset(left, top),
+                        size = androidx.compose.ui.geometry.Size(rectWidth, rectHeight)
+                    )
+                    drawRect(
+                        color = Color(0xFF00E5FF), // Cyan stroke
+                        topLeft = androidx.compose.ui.geometry.Offset(left, top),
+                        size = androidx.compose.ui.geometry.Size(rectWidth, rectHeight),
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 4f)
+                    )
+                    
+                    // Draw Face ID & Emotion
+                    val label = buildString {
+                        append("FACE_ID[${face.trackingId ?: "?"}]")
+                        if ((face.smilingProbability ?: 0f) > 0.6f) append(" 😊")
+                    }
+                    
+                    val paint = android.graphics.Paint().apply {
+                        color = android.graphics.Color.CYAN
+                        textSize = 36f
+                        isFakeBoldText = true
+                    }
+                    drawContext.canvas.nativeCanvas.drawText(
+                        label,
+                        left,
+                        top - 10f,
+                        paint
+                    )
+                }
+            }
+        }
 
         // ═══════════════════════════════════════
         // TOP BAR
@@ -658,7 +732,7 @@ fun LiveVisionScreen(
                             triggerSmartCapture(
                                 imageCapture, cameraExecutor, viewModel, context,
                                 selectedModel, question, visionState, gpsData,
-                                dgVoice, dashcamLogger, conversation, selectedPersonality,
+                                dgVoice, dashcamLogger, conversation, selectedPersonality, detectedFaces,
                                 onResult = { liveResult = it; frameCount++ },
                                 onProcessing = { isProcessing = it }
                             )
@@ -1154,72 +1228,7 @@ fun LiveVisionScreen(
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
         ) {
-            // 22-B: Navigation HUD (when navigating)
-            if (gpsNavigator.isNavigating && navUpdate.phase != NavPhase.IDLE) {
-                NavigationHUD(
-                    navUpdate = navUpdate,
-                    destinationName = gpsNavigator.destination?.name ?: "",
-                    onPoiClick = { query ->
-                        // Use the query as a voice prompt for the AI
-                        conversation.addUserQuestion(query)
-                        triggerSmartCapture(
-                            imageCapture, cameraExecutor, viewModel, context,
-                            selectedModel, query, visionState, gpsData,
-                            dgVoice, dashcamLogger, conversation, selectedPersonality,
-                            onResult = { liveResult = it; frameCount++ },
-                            onProcessing = { isProcessing = it }
-                        )
-                    },
-                    poiSuggestions = poiSuggestions
-                )
-            }
 
-            // 22-H: Quick Actions — BUG-05: HIDE when result is showing
-            AnimatedVisibility(
-                visible = !isLiveActive && !isProcessing && liveResult.isBlank(),
-                enter = fadeIn() + slideInVertically(initialOffsetY = { it / 2 }),
-                exit = fadeOut()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    data class QuickAction(val emoji: String, val label: String, val prompt: String)
-                    val actions = listOf(
-                        QuickAction("🍕", "Comida", "Identifica esta comida: nombre, ingredientes principales, calorías aproximadas. Si ves un platillo, sugiere cómo se prepara."),
-                        QuickAction("🌿", "Planta", "Identifica esta planta o flor: especie, nombre común, cuidados básicos, si es tóxica o comestible."),
-                        QuickAction("💰", "Precio", "Lee el precio visible en la imagen. Si hay varios productos, lista cada uno con su precio."),
-                        QuickAction("📝", "Texto", "Lee TODO el texto visible en esta imagen. Transcribe tal cual, incluyendo letreros, etiquetas, y señales."),
-                        QuickAction("🏢", "Lugar", "Identifica este edificio o lugar. Dime su nombre, historia breve, y datos interesantes.")
-                    )
-                    actions.forEach { action ->
-                        Surface(
-                            onClick = {
-                                conversation.addUserQuestion(action.prompt)
-                                triggerSmartCapture(
-                                    imageCapture, cameraExecutor, viewModel, context,
-                                    selectedModel, action.prompt, visionState, gpsData,
-                                    dgVoice, dashcamLogger, conversation, selectedPersonality,
-                                    onResult = { liveResult = it; frameCount++ },
-                                    onProcessing = { isProcessing = it }
-                                )
-                            },
-                            color = BeeBlack.copy(alpha = 0.7f),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text(action.emoji, fontSize = 20.sp)
-                                Text(action.label, fontSize = 9.sp, color = BeeGray)
-                            }
-                        }
-                    }
-                }
-            }
 
             // Result overlay — BUG-04: constrained height + scroll + dismiss
             if (liveResult.isNotBlank()) {
@@ -1291,7 +1300,7 @@ fun LiveVisionScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Button(
                         onClick = { triggerSingleCapture(imageCapture, cameraExecutor, viewModel, context,
-                            selectedModel, customPrompt, visionState, gpsData, dgVoice, dashcamLogger,
+                            selectedModel, customPrompt, visionState, gpsData, dgVoice, dashcamLogger, detectedFaces,
                             onResult = { liveResult = it; frameCount++ },
                             onProcessing = { isProcessing = it }) },
                         modifier = Modifier.size(52.dp),
@@ -1327,7 +1336,7 @@ fun LiveVisionScreen(
                                             triggerSmartCapture(
                                                 imageCapture, cameraExecutor, viewModel, context,
                                                 selectedModel, text, visionState, gpsData,
-                                                dgVoice, dashcamLogger, conversation, selectedPersonality,
+                                                dgVoice, dashcamLogger, conversation, selectedPersonality, detectedFaces,
                                                 onResult = { liveResult = it; frameCount++ },
                                                 onProcessing = { isProcessing = it }
                                             )
@@ -1590,6 +1599,7 @@ private fun triggerSingleCapture(
     gpsData: GpsData,
     dgVoice: com.beemovil.voice.DeepgramVoiceManager?,
     logger: DashcamLogger,
+    detectedFaces: List<FaceResult>,
     onResult: (String) -> Unit,
     onProcessing: (Boolean) -> Unit
 ) {
@@ -1668,6 +1678,7 @@ private fun triggerSmartCapture(
     logger: DashcamLogger,
     conversation: VisionConversation,
     personality: NarratorPersonality?,
+    detectedFaces: List<FaceResult>,
     onResult: (String) -> Unit,
     onProcessing: (Boolean) -> Unit
 ) {
@@ -1710,7 +1721,9 @@ private fun triggerSmartCapture(
                                 personality = personality,
                                 gpsContext = gpsCtx,
                                 userQuestion = userQuestion
-                            )
+                            ) + if (detectedFaces.isNotEmpty()) {
+                                "\n[SISTEMA INTERNO: El sensor biométrico detecta ${detectedFaces.size} rostros en vivo.]"
+                            } else ""
 
                             val msgs = listOf(
                                 ChatMessage(role = "system", content = systemPrompt),
