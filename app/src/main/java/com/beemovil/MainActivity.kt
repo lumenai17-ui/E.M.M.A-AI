@@ -354,6 +354,10 @@ class MainActivity : ComponentActivity() {
                                         if (path.endsWith(".html") || path.endsWith(".htm")) {
                                             viewModel.currentScreen.value = "browser"
                                         }
+                                    },
+                                    onAttachToChat = { path ->
+                                        viewModel.openAgentChat("main")
+                                        viewModel.pendingPrompt.value = "Analiza o usa este archivo: $path"
                                     }
                                 )
                             }
