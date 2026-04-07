@@ -867,6 +867,7 @@ fun FileAttachmentCard(filePath: String) {
     val fileName = file.name
     val ext = fileName.substringAfterLast('.').lowercase()
     val isImage = ext in listOf("png", "jpg", "jpeg", "webp")
+    val isVideo = ext in listOf("mp4", "mov", "webm", "avi")
     val fileSize = if (exists) {
         val bytes = file.length()
         when {
@@ -882,6 +883,7 @@ fun FileAttachmentCard(filePath: String) {
         "csv", "tsv" -> Icons.Outlined.TableChart
         "txt" -> Icons.Outlined.Description
         "png", "jpg", "jpeg", "webp" -> Icons.Outlined.Image
+        "mp4", "mov", "webm", "avi" -> Icons.Outlined.Videocam
         else -> Icons.Outlined.InsertDriveFile
     }
 
@@ -890,6 +892,7 @@ fun FileAttachmentCard(filePath: String) {
         "html", "htm" -> Color(0xFF5AC8FA)
         "csv", "tsv" -> Color(0xFF34C759)
         "png", "jpg", "jpeg", "webp" -> Color(0xFFBF5AF2)
+        "mp4", "mov", "webm", "avi" -> Color(0xFFFF6B35)
         else -> Color(0xFFFF9500)
     }
 
@@ -916,6 +919,55 @@ fun FileAttachmentCard(filePath: String) {
                             .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)),
                         contentScale = ContentScale.FillWidth
                     )
+                }
+            }
+
+            // Video play button card
+            if (isVideo && exists) {
+                Surface(
+                    onClick = {
+                        try {
+                            val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                                setDataAndType(uri, "video/*")
+                                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            context.startActivity(intent)
+                        } catch (_: Exception) {}
+                    },
+                    color = Color(0xFF1A1020),
+                    shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
+                    modifier = Modifier.fillMaxWidth().height(120.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        // Gradient background
+                        Box(
+                            modifier = Modifier.fillMaxSize().background(
+                                Brush.radialGradient(
+                                    colors = listOf(Color(0xFFFF6B35).copy(alpha = 0.3f), Color.Transparent)
+                                )
+                            )
+                        )
+                        // Play icon
+                        Surface(
+                            color = Color(0xFFFF6B35).copy(alpha = 0.9f),
+                            shape = androidx.compose.foundation.shape.CircleShape,
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Filled.PlayArrow, "Play",
+                                    tint = Color.White, modifier = Modifier.size(28.dp)
+                                )
+                            }
+                        }
+                        // Duration label
+                        Text(
+                            "VIDEO · $fileSize",
+                            fontSize = 10.sp, color = Color.White.copy(alpha = 0.7f),
+                            modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)
+                        )
+                    }
                 }
             }
 
@@ -956,6 +1008,10 @@ fun FileAttachmentCard(filePath: String) {
                                     "png" -> "image/png"
                                     "jpg", "jpeg" -> "image/jpeg"
                                     "webp" -> "image/webp"
+                                    "mp4" -> "video/mp4"
+                                    "mov" -> "video/quicktime"
+                                    "webm" -> "video/webm"
+                                    "avi" -> "video/x-msvideo"
                                     else -> "*/*"
                                 }
                                 val intent = Intent(Intent.ACTION_VIEW).apply {

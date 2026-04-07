@@ -807,8 +807,8 @@ fun SettingsScreen(
             // MEDIA GENERATION (Phase 23)
             // ═══════════════════════════════════════
             SectionCard {
-                SectionTitle("GENERACION DE IMAGENES")
-                Text("Configura providers para generar imagenes desde cualquier chat", fontSize = 12.sp, color = BeeGray)
+                SectionTitle("MEDIA IA (Imagenes + Video)")
+                Text("Genera imagenes y videos con IA desde cualquier chat", fontSize = 12.sp, color = BeeGray)
                 Spacer(modifier = Modifier.height(8.dp))
 
                 var falKey by remember { mutableStateOf(securePrefs.getString("fal_api_key", "") ?: "") }
@@ -920,11 +920,27 @@ fun SettingsScreen(
                     Text("Guardar Media Keys", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
 
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    "Prioridad: fal.ai → Together AI → OpenRouter (DALL-E)\nDi 'genera una imagen de...' en cualquier chat",
-                    fontSize = 11.sp, color = BeeGray
-                )
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Cost warning
+                Surface(
+                    color = Color(0xFFFF9800).copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.Top) {
+                        Icon(Icons.Filled.Info, "Info", tint = Color(0xFFFF9800), modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "La generacion de imagenes y videos puede tener costo dependiendo del provider que uses. " +
+                            "fal.ai y Together AI ofrecen creditos iniciales gratis. " +
+                            "Revisa los precios en la pagina del provider que prefieras antes de usar.\n\n" +
+                            "Prioridad: fal.ai → Together AI → OpenRouter\n" +
+                            "Di 'genera una imagen de...' o 'genera un video de...' en cualquier chat.",
+                            fontSize = 11.sp, color = Color(0xFFE0E0E0), lineHeight = 16.sp
+                        )
+                    }
+                }
             }
 
             // ═══════════════════════════════════════
