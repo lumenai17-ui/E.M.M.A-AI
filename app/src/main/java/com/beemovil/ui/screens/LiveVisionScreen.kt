@@ -12,6 +12,8 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
@@ -90,6 +92,10 @@ fun LiveVisionScreen(
 
     // 22-A: Native speech input (works without Deepgram API key)
     val nativeSpeech = remember { NativeSpeechInput(context) }
+
+    // 22-F: Session recording and export
+    val sessionManager = remember { VisionSessionManager(context) }
+    var showSessionDialog by remember { mutableStateOf(false) }
 
     // Camera
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
@@ -248,6 +254,16 @@ fun LiveVisionScreen(
 
                                     // Track in conversation
                                     conversation.addFrame(liveResult)
+
+                                    // 22-F: Session logging
+                                    if (sessionManager.isRecording) {
+                                        sessionManager.logFrame(
+                                            result = liveResult,
+                                            gpsCoords = if (gpsData.latitude != 0.0) gpsData.coordsShort else null,
+                                            gpsAddress = gpsData.address.ifBlank { null },
+                                            gpsSpeed = if (gpsData.speed > 0) gpsData.speed else null
+                                        )
+                                    }
 
                                     // Voice narration
                                     if (visionState.voiceNarration && liveResult.isNotBlank()) {
@@ -1114,27 +1130,141 @@ fun LiveVisionScreen(
                         color = if (isLiveActive) Color(0xFFF44336) else BeeYellow)
                 }
 
-                // Copy result
+                // 22-F: Session / Copy
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Button(
-                        onClick = {
-                            if (liveResult.isNotBlank()) {
-                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("vision", liveResult))
-                                Toast.makeText(context, "Copiado", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        modifier = Modifier.size(52.dp),
+                    @OptIn(ExperimentalFoundationApi::class)
+                    Surface(
+                        modifier = Modifier
+                            .size(52.dp)
+                            .combinedClickable(
+                                onClick = {
+                                    if (sessionManager.isRecording) {
+                                        val summary = sessionManager.stopSession()
+                                        liveResult = summary
+                                        showSessionDialog = true
+                                    } else if (liveResult.isNotBlank()) {
+                                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("vision", liveResult))
+                                        Toast.makeText(context, "Copiado", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                onLongClick = {
+                                    if (!sessionManager.isRecording) {
+                                        sessionManager.startSession(
+                                            when {
+                                                visionState.dashcamMode -> VisionSessionManager.SessionType.DASHCAM
+                                                visionState.touristGuide -> VisionSessionManager.SessionType.TOURISM
+                                                else -> VisionSessionManager.SessionType.GENERAL
+                                            }
+                                        )
+                                        Toast.makeText(context, "📝 Sesión iniciada", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            ),
                         shape = CircleShape,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF333355)),
-                        contentPadding = PaddingValues(0.dp)
+                        color = if (sessionManager.isRecording) Color(0xFFE91E63) else Color(0xFF333355)
                     ) {
-                        Icon(Icons.Filled.ContentCopy, "Copy", tint = BeeWhite, modifier = Modifier.size(24.dp))
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                            Icon(
+                                if (sessionManager.isRecording) Icons.Filled.Stop else Icons.Filled.ContentCopy,
+                                "Session", tint = BeeWhite, modifier = Modifier.size(24.dp)
+                            )
+                        }
                     }
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text("Copiar", fontSize = 10.sp, color = BeeGray)
+                    Text(
+                        if (sessionManager.isRecording) "Sesión ●" else "Copiar",
+                        fontSize = 10.sp,
+                        color = if (sessionManager.isRecording) Color(0xFFE91E63) else BeeGray
+                    )
                 }
             }
+        }
+
+        // 22-F: Session export dialog
+        if (showSessionDialog) {
+            AlertDialog(
+                onDismissRequest = { showSessionDialog = false },
+                containerColor = BeeBlack.copy(alpha = 0.95f),
+                title = {
+                    Text("📝 Sesión Finalizada", color = BeeYellow, fontWeight = FontWeight.Bold)
+                },
+                text = {
+                    Column {
+                        Text(
+                            "${sessionManager.sessionType.emoji} ${sessionManager.sessionType.label}",
+                            color = BeeWhite, fontSize = 14.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "${sessionManager.entryCount} entradas",
+                            color = BeeGray, fontSize = 12.sp
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Action buttons
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    val file = sessionManager.saveToFile()
+                                    if (file != null) {
+                                        Toast.makeText(context, "Guardado: ${file.name}", Toast.LENGTH_SHORT).show()
+                                    }
+                                    showSessionDialog = false
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = BeeYellow),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, BeeYellow.copy(alpha = 0.5f))
+                            ) {
+                                Icon(Icons.Filled.Save, "Save", modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Guardar", fontSize = 11.sp)
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    sessionManager.shareSession()
+                                    showSessionDialog = false
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF4CAF50)),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF4CAF50).copy(alpha = 0.5f))
+                            ) {
+                                Icon(Icons.Filled.Share, "Share", modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Compartir", fontSize = 11.sp)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Copy full log
+                        OutlinedButton(
+                            onClick = {
+                                val log = sessionManager.generateFullLog()
+                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("session", log))
+                                Toast.makeText(context, "Log copiado", Toast.LENGTH_SHORT).show()
+                                showSessionDialog = false
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = BeeGray),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, BeeGray.copy(alpha = 0.3f))
+                        ) {
+                            Icon(Icons.Filled.ContentCopy, "Copy", modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Copiar log completo", fontSize = 11.sp)
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showSessionDialog = false }) {
+                        Text("Cerrar", color = BeeYellow)
+                    }
+                }
+            )
         }
     }
 }
