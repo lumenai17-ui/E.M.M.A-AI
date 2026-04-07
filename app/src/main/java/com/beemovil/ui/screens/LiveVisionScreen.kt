@@ -15,6 +15,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -77,9 +79,17 @@ fun LiveVisionScreen(
     var showModules by remember { mutableStateOf(false) }
     var customPrompt by remember { mutableStateOf("Describe lo que ves en esta imagen en espanol. Se conciso.") }
     var isVoiceListening by remember { mutableStateOf(false) }
+    var partialSpeech by remember { mutableStateOf("") }
 
     // Vision Pro state — 7 toggleable modules
     var visionState by remember { mutableStateOf(VisionProState()) }
+
+    // 22-A: Conversation engine (history, repetition detection, smart prompts)
+    val conversation = remember { VisionConversation() }
+    var selectedPersonality by remember { mutableStateOf<NarratorPersonality?>(null) }
+
+    // 22-A: Native speech input (works without Deepgram API key)
+    val nativeSpeech = remember { NativeSpeechInput(context) }
 
     // Camera
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
@@ -94,7 +104,7 @@ fun LiveVisionScreen(
     // Dashcam logger
     val dashcamLogger = remember { DashcamLogger(context) }
 
-    // Voice manager for narration
+    // Voice manager for narration (TTS output)
     val dgVoice = viewModel.deepgramVoiceManager
 
     // Live context: web search for real-time info
@@ -182,12 +192,26 @@ fun LiveVisionScreen(
                                         return@Thread
                                     }
 
-                                    // Build prompt with GPS + live web context
-                                    val fullPrompt = buildString {
-                                        if ((visionState.gpsOverlay || visionState.dashcamMode) && gpsData.latitude != 0.0) {
-                                            appendLine(gpsData.toPromptContext())
-                                        }
-                                        // Fetch live context from web (news, traffic, tips)
+                                    // 22-A: Smart prompt with conversation context
+                                    val visionMode = when {
+                                        visionState.dashcamMode -> VisionMode.DASHCAM
+                                        visionState.touristGuide -> VisionMode.TOURIST
+                                        visionState.backgroundAgent -> VisionMode.AGENT
+                                        else -> VisionMode.GENERAL
+                                    }
+                                    val gpsCtx = if ((visionState.gpsOverlay || visionState.dashcamMode) && gpsData.latitude != 0.0)
+                                        gpsData.toPromptContext() else ""
+
+                                    val userQ = conversation.consumeQuestion()
+                                    val systemPrompt = conversation.buildSystemPrompt(
+                                        mode = visionMode,
+                                        personality = selectedPersonality,
+                                        gpsContext = gpsCtx,
+                                        userQuestion = userQ
+                                    )
+
+                                    // Build user prompt with web context
+                                    val userPrompt = buildString {
                                         val contextMode = when {
                                             visionState.touristGuide -> LiveContextProvider.ContextMode.TOURIST
                                             visionState.dashcamMode -> LiveContextProvider.ContextMode.DASHCAM
@@ -200,15 +224,12 @@ fun LiveVisionScreen(
                                             )
                                             if (webContext.isNotBlank()) {
                                                 appendLine(webContext)
-                                                appendLine()
                                             }
                                         }
-                                        append(customPrompt)
-                                        if (visionState.dashcamMode) {
-                                            append(" Incluye observaciones de transito, senales y condiciones del camino.")
-                                        }
-                                        if (visionState.touristGuide) {
-                                            append(" Menciona lugares interesantes, tips turisticos o datos curiosos de la zona si los conoces.")
+                                        if (userQ != null) {
+                                            append(userQ)
+                                        } else {
+                                            append(customPrompt)
                                         }
                                     }
 
@@ -218,11 +239,15 @@ fun LiveVisionScreen(
                                         model = selectedModel
                                     )
                                     val msgs = listOf(
-                                        ChatMessage(role = "user", content = fullPrompt, images = listOf(b64))
+                                        ChatMessage(role = "system", content = systemPrompt),
+                                        ChatMessage(role = "user", content = userPrompt, images = listOf(b64))
                                     )
                                     val response = provider.complete(msgs, emptyList())
                                     liveResult = response.text ?: ""
                                     frameCount++
+
+                                    // Track in conversation
+                                    conversation.addFrame(liveResult)
 
                                     // Voice narration
                                     if (visionState.voiceNarration && liveResult.isNotBlank()) {
@@ -235,7 +260,7 @@ fun LiveVisionScreen(
                                             frameNumber = frameCount,
                                             gpsData = if (gpsData.latitude != 0.0) gpsData else null,
                                             analysisResult = liveResult,
-                                            prompt = fullPrompt
+                                            prompt = userPrompt
                                         )
                                     }
 
@@ -274,6 +299,7 @@ fun LiveVisionScreen(
             gpsModule.stop()
             if (dashcamLogger.isActive) dashcamLogger.stopSession()
             cameraExecutor.shutdown()
+            nativeSpeech.destroy()
         }
     }
 
@@ -388,6 +414,7 @@ fun LiveVisionScreen(
                     if (visionState.voiceNarration) ModuleChip("VOZ", Color(0xFF2196F3))
                     if (visionState.dashcamMode) ModuleChip("REC", Color(0xFFF44336))
                     if (visionState.backgroundAgent) ModuleChip("AGT", Color(0xFFFF9800))
+                    if (selectedPersonality != null) ModuleChip(selectedPersonality!!.emoji, Color(0xFFE040FB))
                 }
 
                 if (isLiveActive) {
@@ -595,6 +622,50 @@ fun LiveVisionScreen(
                         visionState.touristGuide, Color(0xFF8BC34A)) {
                         visionState = visionState.copy(touristGuide = it)
                         if (it) visionState = visionState.copy(gpsOverlay = true, voiceNarration = true)
+                    }
+
+                    // ── 22-E: NARRATOR PERSONALITY ──
+                    Spacer(modifier = Modifier.height(8.dp))
+                    HorizontalDivider(color = BeeGray.copy(alpha = 0.3f))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("PERSONALIDAD", fontSize = 10.sp, color = Color(0xFFE040FB),
+                        fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text("Cambia el estilo del narrador", fontSize = 9.sp, color = BeeGray)
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Personality chips in a wrap-style layout
+                    @OptIn(ExperimentalLayoutApi::class)
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        NARRATOR_PERSONALITIES.forEach { p ->
+                            val isSelected = selectedPersonality?.id == p.id ||
+                                (p.id == "default" && selectedPersonality == null)
+                            Surface(
+                                onClick = {
+                                    selectedPersonality = if (p.id == "default") null else p
+                                },
+                                color = if (isSelected) Color(0xFFE040FB).copy(alpha = 0.2f)
+                                    else Color.Transparent,
+                                shape = RoundedCornerShape(8.dp),
+                                border = if (isSelected)
+                                    androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE040FB))
+                                else null
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(p.emoji, fontSize = 14.sp)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(p.name, fontSize = 10.sp,
+                                        color = if (isSelected) Color(0xFFE040FB) else BeeGray)
+                                }
+                            }
+                        }
                     }
 
                     // Background agent prompt
@@ -947,27 +1018,51 @@ fun LiveVisionScreen(
                     Text("Foto", fontSize = 10.sp, color = BeeGray)
                 }
 
-                // Mic — voice question
+                // Mic — voice question (22-A: uses NativeSpeechInput, no API key needed)
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Button(
                         onClick = {
                             if (isVoiceListening) {
-                                dgVoice?.stopListening()
+                                nativeSpeech.stopListening()
                                 isVoiceListening = false
+                                partialSpeech = ""
                             } else {
                                 isVoiceListening = true
-                                dgVoice?.startListening(
+                                partialSpeech = ""
+                                nativeSpeech.startListening(
                                     onResult = { text ->
                                         isVoiceListening = false
-                                        // Use voice question as the custom prompt for next analysis
-                                        customPrompt = text
+                                        partialSpeech = ""
+                                        // Add to conversation context
+                                        conversation.addUserQuestion(text)
                                         // Trigger single capture with the voice question
-                                        triggerSingleCapture(imageCapture, cameraExecutor, viewModel, context,
-                                            selectedModel, text, visionState, gpsData, dgVoice, dashcamLogger,
+                                        triggerSmartCapture(
+                                            imageCapture, cameraExecutor, viewModel, context,
+                                            selectedModel, text, visionState, gpsData,
+                                            dgVoice, dashcamLogger, conversation, selectedPersonality,
                                             onResult = { liveResult = it; frameCount++ },
-                                            onProcessing = { isProcessing = it })
+                                            onProcessing = { isProcessing = it }
+                                        )
                                     },
-                                    onError = { isVoiceListening = false }
+                                    onPartial = { partialSpeech = it },
+                                    onError = { err ->
+                                        isVoiceListening = false
+                                        partialSpeech = ""
+                                        // Fallback: try DeepgramVoiceManager
+                                        dgVoice?.startListening(
+                                            onResult = { text ->
+                                                conversation.addUserQuestion(text)
+                                                triggerSmartCapture(
+                                                    imageCapture, cameraExecutor, viewModel, context,
+                                                    selectedModel, text, visionState, gpsData,
+                                                    dgVoice, dashcamLogger, conversation, selectedPersonality,
+                                                    onResult = { liveResult = it; frameCount++ },
+                                                    onProcessing = { isProcessing = it }
+                                                )
+                                            },
+                                            onError = { Toast.makeText(context, "Mic: $err", Toast.LENGTH_SHORT).show() }
+                                        )
+                                    }
                                 )
                             }
                         },
@@ -978,11 +1073,22 @@ fun LiveVisionScreen(
                         ),
                         contentPadding = PaddingValues(0.dp)
                     ) {
-                        Icon(Icons.Filled.Mic, "Mic", tint = BeeWhite, modifier = Modifier.size(24.dp))
+                        Icon(
+                            if (isVoiceListening) Icons.Filled.MicOff else Icons.Filled.Mic,
+                            "Mic", tint = BeeWhite, modifier = Modifier.size(24.dp)
+                        )
                     }
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text(if (isVoiceListening) "Escuchando" else "Preguntar", fontSize = 10.sp,
-                        color = if (isVoiceListening) Color(0xFF4CAF50) else BeeGray)
+                    Text(
+                        when {
+                            partialSpeech.isNotBlank() -> partialSpeech.takeLast(20)
+                            isVoiceListening -> "Escuchando..."
+                            else -> "Preguntar"
+                        },
+                        fontSize = 10.sp,
+                        color = if (isVoiceListening) Color(0xFF4CAF50) else BeeGray,
+                        maxLines = 1
+                    )
                 }
 
                 // Live toggle (BIGGEST button)
@@ -1131,6 +1237,99 @@ private fun triggerSingleCapture(
                             val msgs = listOf(ChatMessage(role = "user", content = fullPrompt, images = listOf(b64)))
                             val response = provider.complete(msgs, emptyList())
                             val result = response.text ?: ""
+                            onResult(result)
+
+                            if (state.voiceNarration && result.isNotBlank()) {
+                                dgVoice?.speak(text = result)
+                            }
+                        } catch (e: Exception) {
+                            onResult("[ERR] ${e.message?.take(80)}")
+                        }
+                        onProcessing(false)
+                    }.start()
+                } catch (e: Exception) {
+                    onResult("[ERR] ${e.message}")
+                    onProcessing(false)
+                }
+                imageProxy.close()
+            }
+
+            override fun onError(exception: ImageCaptureException) {
+                onResult("[ERR] ${exception.message}")
+                onProcessing(false)
+            }
+        }
+    )
+}
+
+/**
+ * 22-A: Smart capture with conversation context, personality, and system prompts.
+ */
+private fun triggerSmartCapture(
+    imageCapture: ImageCapture?,
+    executor: java.util.concurrent.ExecutorService,
+    viewModel: ChatViewModel,
+    context: android.content.Context,
+    model: String,
+    userQuestion: String,
+    state: VisionProState,
+    gpsData: GpsData,
+    dgVoice: com.beemovil.voice.DeepgramVoiceManager?,
+    logger: DashcamLogger,
+    conversation: VisionConversation,
+    personality: NarratorPersonality?,
+    onResult: (String) -> Unit,
+    onProcessing: (Boolean) -> Unit
+) {
+    val capture = imageCapture ?: return
+    onProcessing(true)
+
+    capture.takePicture(
+        executor,
+        object : ImageCapture.OnImageCapturedCallback() {
+            override fun onCaptureSuccess(imageProxy: ImageProxy) {
+                try {
+                    val bitmap = imageProxy.toBitmap()
+                    val scale = minOf(800f / bitmap.width, 800f / bitmap.height, 1f)
+                    val resized = Bitmap.createScaledBitmap(bitmap,
+                        (bitmap.width * scale).toInt(), (bitmap.height * scale).toInt(), true)
+                    val baos = ByteArrayOutputStream()
+                    resized.compress(Bitmap.CompressFormat.JPEG, 85, baos)
+                    val b64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
+
+                    Thread {
+                        try {
+                            val currentProviderType = viewModel.currentProvider.value
+                            val apiKey = when (currentProviderType) {
+                                "openrouter" -> com.beemovil.security.SecurePrefs.get(context).getString("openrouter_api_key", "") ?: ""
+                                "ollama" -> com.beemovil.security.SecurePrefs.get(context).getString("ollama_api_key", "") ?: ""
+                                else -> ""
+                            }
+
+                            val visionMode = when {
+                                state.dashcamMode -> VisionMode.DASHCAM
+                                state.touristGuide -> VisionMode.TOURIST
+                                state.backgroundAgent -> VisionMode.AGENT
+                                else -> VisionMode.GENERAL
+                            }
+                            val gpsCtx = if ((state.gpsOverlay || state.dashcamMode) && gpsData.latitude != 0.0)
+                                gpsData.toPromptContext() else ""
+
+                            val systemPrompt = conversation.buildSystemPrompt(
+                                mode = visionMode,
+                                personality = personality,
+                                gpsContext = gpsCtx,
+                                userQuestion = userQuestion
+                            )
+
+                            val provider = LlmFactory.createProvider(currentProviderType, apiKey, model)
+                            val msgs = listOf(
+                                ChatMessage(role = "system", content = systemPrompt),
+                                ChatMessage(role = "user", content = userQuestion, images = listOf(b64))
+                            )
+                            val response = provider.complete(msgs, emptyList())
+                            val result = response.text ?: ""
+                            conversation.addFrame(result)
                             onResult(result)
 
                             if (state.voiceNarration && result.isNotBlank()) {
