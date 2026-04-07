@@ -36,7 +36,7 @@ class GoogleAuthManager(private val context: Context) {
         // REPLACE THIS with your Web Client ID from Google Cloud Console
         // Go to: console.cloud.google.com → Credentials → OAuth 2.0 Client IDs → Web Client
         // ═══════════════════════════════════════
-        const val WEB_CLIENT_ID = "YOUR_WEB_CLIENT_ID.apps.googleusercontent.com"
+        const val WEB_CLIENT_ID = "714791487968-mo9kd08nln2tbf6t3cg1jeije0dejttr.apps.googleusercontent.com"
 
         // SecurePrefs keys
         private const val KEY_SIGNED_IN = "google_signed_in"
