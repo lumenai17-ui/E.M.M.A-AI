@@ -1,5 +1,5 @@
 # 🐝 Bee-Movil Native — Roadmap & Checklist
-### Ultima actualizacion: 7 de Abril 2026 · v5.5.0
+### Ultima actualizacion: 7 de Abril 2026 · v5.7.0
 
 ---
 
@@ -426,42 +426,42 @@
 
 ---
 
-### FASE 25 — Agent Intelligence + Chat Fix
+### FASE 25 — Agent Intelligence + Chat Fix (COMPLETADA v5.7.0)
 > *Hacer que los agentes se sientan inteligentes de verdad — PRIORIDAD*
 
 **25-A: Auto-Memory + Soul Profile**
-- [ ] Auto-extract memorias despues de cada conversacion (>3 turnos)
-- [ ] Regex-based fact extraction (nombre, email, empresa, preferencias)
-- [ ] Soul profile auto-population (se llena solo)
-- [ ] Memory deduplication (no repetir hechos)
+- [x] Auto-extract memorias despues de cada conversacion (>3 turnos)
+- [x] Regex-based fact extraction (nombre, email, empresa, preferencias)
+- [x] Soul profile auto-population (se llena solo)
+- [x] Memory deduplication (no repetir hechos)
 
 **25-B: File Reading Fix (el agente no lee sus propios archivos)**
-- [ ] Fix: archivos generados por agente -> path se inyecta al contexto
-- [ ] Fix: "Enviar al chat" desde FileExplorer -> leer TODO tipo de archivo
-- [ ] HTML, JS, CSS generados -> contextChunk completo
-- [ ] filePaths persisten en ChatHistoryDB (columna nueva)
-- [ ] Imagenes/videos se siguen mostrando al reabrir chat
+- [x] Fix: archivos generados por agente -> path se inyecta al contexto
+- [x] Fix: "Enviar al chat" desde FileExplorer -> leer TODO tipo de archivo
+- [x] HTML, JS, CSS generados -> contextChunk completo
+- [x] filePaths persisten en ChatHistoryDB (columna nueva)
+- [x] Imagenes/videos se siguen mostrando al reabrir chat
 
 **25-C: Email Directo (sin abrir Gmail)**
-- [ ] `EmailSkill.kt` rewrite: usar `EmailService.sendEmail()` directo con OAuth
-- [ ] Si tiene Google Workspace -> envia via XOAUTH2 automaticamente
-- [ ] Si tiene IMAP/SMTP config -> envia via SMTP directo
-- [ ] Fallback: Intent (solo si no hay config)
-- [ ] El agente CONFIRMA antes de enviar
+- [x] `EmailSkill.kt` rewrite: usar `EmailService.sendEmail()` directo con OAuth
+- [x] Si tiene Google Workspace -> envia via XOAUTH2 automaticamente
+- [x] Si tiene IMAP/SMTP config -> envia via SMTP directo
+- [x] Fallback: Intent (solo si no hay config)
+- [x] El agente CONFIRMA antes de enviar
 
 **25-D: Dashboard AI Insight Fix**
-- [ ] Eliminar frases hardcoded (SIEMPRE usar LLM — cloud o local)
-- [ ] Fallback solo: "Cargando..." mientras LLM inicia (primeros 30 seg)
-- [ ] Mas contexto: memorias + soul + calendario + hora + dia
-- [ ] Refresh button (tap para regenerar)
-- [ ] Variedad: tip, dato curioso, recordatorio, motivacion (rotar tipo)
+- [x] Eliminar frases hardcoded (SIEMPRE usar LLM — cloud o local)
+- [x] Fallback solo: "Cargando..." mientras LLM inicia (primeros 30 seg)
+- [x] Mas contexto: memorias + soul + calendario + hora + dia
+- [x] Refresh button (tap para regenerar)
+- [x] Variedad: tip, dato curioso, recordatorio, motivacion (rotar tipo)
 
 **25-E: Action Log + Thinking Visible**
-- [ ] Tabla `action_log`: timestamp, agent, skill, params, result, duration
-- [ ] `ActionLogScreen.kt` con timeline visual
-- [ ] `<think>` tags parsing -> UI expandible "Pensando..."
-- [ ] `NavigateAppSkill.kt` — el agente navega screens del app
-- [ ] Audit completo: que puede y que NO puede hacer el agente
+- [x] Tabla `action_log`: timestamp, agent, skill, params, result, duration
+- [x] `ActionLogScreen.kt` con timeline visual
+- [x] `<think>` tags parsing -> UI expandible "Pensando..."
+- [x] `NavigateAppSkill.kt` — el agente navega screens del app
+- [x] Audit completo: que puede y que NO puede hacer el agente
 
 ---
 
