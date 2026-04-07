@@ -1,5 +1,5 @@
 # 🐝 Bee-Movil Native — Roadmap & Checklist
-### Ultima actualizacion: 7 de Abril 2026 · v5.1.0
+### Ultima actualizacion: 7 de Abril 2026 · v5.5.0
 
 ---
 
@@ -305,7 +305,7 @@
 
 ## 🔜 ROADMAP — Fases pendientes
 
-> Orden: Custom Workflows → Producción/Deploy → Expansión → Lanzamiento
+> Orden: Custom Workflows → File Explorer → Browser → Deploy → Intelligence → Widgets → Lanzamiento
 
 ---
 
@@ -337,59 +337,178 @@
 
 ---
 
-### FASE 22 — Vision Pro Mode
-> *Camera + GPS + Voice narration + background agent*
+### ✅ FASE 22 — Vision Pro Audit (Completada v5.4.0)
+> *Auditoria completa del modo Vision Pro — 13 bugs resueltos*
 
-- [ ] Location overlay (GPS en prompt) + camera focus control
-- [ ] Video recording + voice narration (TTS narra lo que ve)
-- [ ] Conversacion en vivo (STT + Vision + TTS pipeline)
-- [ ] Background agent: toma acciones mientras miras
+- [x] Lifecycle management (DisposableEffect, stopSpeaking en onDispose)
+- [x] TTS leak fix (dgVoice.stopSpeaking en todos los exit paths)
+- [x] Local model routing (Gemma 4 con hasVision=true en ModelRegistry)
+- [x] Network-aware provider routing (offline → local, online → cloud)
+- [x] UI: GPS/minimap Z-order fix (offset + padding)
+- [x] UI: Quick actions panel constrained (maxHeight, scrim)
+- [x] UI: Result card constrained (maxHeight 200dp)
+- [x] Microphone sync fix (TTS ↔ STT state machine)
+- [x] Modules panel overlay fix (constrained height + dismiss)
 
 ---
 
-### FASE 23 — Image Generation (Stable Diffusion)
-- [ ] API integration + UI preview/edicion + historial
+### ✅ FASE 23 — Media IA: Imagen + Video + Galeria (Completada v5.5.0)
+> *Generacion de imagenes y videos con IA desde cualquier chat*
+
+**23-A: Multi-Provider Image Generation**
+- [x] `ImageGenSkill.kt` reescrito — 3 providers con auto-fallback:
+  - [x] fal.ai (Flux Schnell/Pro — el mas rapido, 2-4 seg)
+  - [x] Together AI (Flux.1 Schnell — creditos gratis de inicio)
+  - [x] OpenRouter (DALL-E 3 — pagado, existente)
+- [x] Auto-download a BeeMovil/images/
+- [x] Size: square/landscape/portrait
+- [x] Model selection: flux-schnell/flux-pro/dall-e-3
+- [x] Base64 image handling (Together AI)
+- [x] Async queue polling (fal.ai)
+
+**23-B: AI Video Generation**
+- [x] `VideoGenSkill.kt` — Kling 2.1 via fal.ai:
+  - [x] Text-to-video (5s o 10s)
+  - [x] Image-to-video (anima fotos)
+  - [x] Standard (rapido) y Pro (calidad)
+- [x] Async queue: submit → poll 3s → download MP4
+- [x] Auto-download a BeeMovil/videos/
+- [x] Video inline en chat (play button card + system player)
+
+**23-C: Media Gallery**
+- [x] `MediaGalleryScreen.kt` — galeria visual:
+  - [x] Grid 3 columnas con thumbnails
+  - [x] Tabs: Todo / Imagenes / Videos
+  - [x] Full-screen viewer con pinch-to-zoom
+  - [x] Video play → system player
+  - [x] Acciones: Compartir, Abrir, Al Chat, Eliminar
+  - [x] Prompt preview extraido del filename
+  - [x] Empty state con hint de generacion
+- [x] Dashboard: boton "Media" (purple) en quick actions
+- [x] Settings: seccion "MEDIA IA" con cost warning (naranja)
+- [x] fal.ai + Together AI API key fields (SecurePrefs)
+- [x] Skill count: 39 (image_gen multi + video_gen)
 
 ---
 
-### FASE 24 — Deploy + Cloud Files
-- [ ] Netlify/Vercel deploy desde el teléfono
-- [ ] Google Drive integration en FileExplorer
-- [ ] Vista previa WebView + historial de deploys
+### FASE 24 — File Explorer Real + Google Drive
+> *Rewrite completo del navegador de archivos + cloud sync*
+
+**24-A: File Explorer Rewrite**
+- [ ] Navegacion desde /storage/emulated/0/ (TODO el almacenamiento)
+- [ ] Quick access: Home, Downloads, DCIM/Camera, BeeMovil, Documents
+- [ ] Breadcrumb navigation interactiva (cada segmento clickeable)
+- [ ] Acciones por archivo: compartir, copiar, mover, renombrar, eliminar
+- [ ] Crear carpeta nueva
+- [ ] Busqueda recursiva con filtros
+- [ ] Ordenar por: nombre, tamano, fecha, tipo
+- [ ] Multi-select para operaciones masivas
+- [ ] Preview de imagenes (thumbnail en lista)
+- [ ] Preview de videos (.mp4) con play icon
+- [ ] Boton "Enviar al chat" (adjuntar al agente activo)
+- [ ] Badge "AI" en archivos generados por el agente
+
+**24-B: Google Drive Integration**
+- [ ] Google Drive API (OAuth2 + REST)
+- [ ] Tab "Drive" en el File Explorer
+- [ ] Browse carpetas de Drive
+- [ ] Upload/Download archivos
+- [ ] Sync bidireccional con BeeMovil/
+- [ ] Backup automatico de archivos generados
 
 ---
 
 ### FASE 25 — Browser Agent Mode
-> *WebView + chat bar + JS injection = Puppeteer móvil*
+> *WebView + chat panel + JS bridge = Puppeteer movil*
 
-- [ ] Split layout: WebView (70%) + Chat (30%)
-- [ ] JS bridge: read_dom, fill_input, click, scroll, navigate, screenshot, extract
-- [ ] Chat persistente con log de acciones + confirmación antes de submit
+**25-A: Split View + Chat Panel**
+- [ ] Layout: WebView (70%) + Agent Chat (30%)
+- [ ] Chat panel con historial de acciones del browser
+- [ ] Toggle full-screen / split mode
+- [ ] Agent puede "ver" y "actuar" sobre la pagina
+
+**25-B: JS Bridge (WebView ↔ Agent)**
+- [ ] read_page → document.body.innerText via evaluateJavascript()
+- [ ] click_element → querySelector(selector).click()
+- [ ] fill_form → set input values programaticamente
+- [ ] extract_links → retorna todos los `<a href>` de la pagina
+- [ ] extract_data → CSS selector → tabla de datos
+- [ ] screenshot → captura como base64 para vision AI
+- [ ] scroll_to → scroll a posicion/elemento
 
 ---
 
-### FASE 26 — Widget Android
+### FASE 26 — Deploy Agent (Netlify + Vercel)
+> *Publica sitios web directamente desde el telefono*
+
+- [ ] `DeploySkill.kt` — skill de deploy con 2 providers
+- [ ] Netlify: deploy via API (drag-and-drop zip)
+- [ ] Vercel: deploy via API (project upload)
+- [ ] Deploy desde FileExplorer (selecciona carpeta → deploy)
+- [ ] Deploy desde chat ("publica mi landing page")
+- [ ] Historial de deploys con URLs activas
+- [ ] API keys en Settings (Netlify token, Vercel token)
+- [ ] Badge "LIVE" en archivos que tienen deploy activo
+
+---
+
+### FASE 27 — Agent Intelligence + Chat Persistence
+> *Hacer que los agentes se sientan inteligentes de verdad*
+
+**27-A: Auto-Memory + Soul Profile**
+- [ ] Auto-extract memorias despues de cada conversacion (>3 turnos)
+- [ ] Regex-based fact extraction (nombre, email, empresa, preferencias)
+- [ ] Soul profile auto-population (se llena solo)
+- [ ] Memory deduplication (no repetir hechos)
+
+**27-B: Action Log + Timeline**
+- [ ] Tabla `action_log`: timestamp, agent, skill, params, result, duration
+- [ ] `ActionLogScreen.kt` con timeline visual
+- [ ] Filtrar por agente, skill, fecha
+- [ ] Accesible desde Dashboard
+
+**27-C: Thinking Visible**
+- [ ] `<think>` tags parsing → UI expandible "Pensando..."
+- [ ] Mostrar razonamiento del agente paso a paso
+- [ ] Colapsable (tap para expandir/colapsar)
+
+**27-D: Chat Persistence Upgrade**
+- [ ] filePaths persisten en ChatHistoryDB (columna nueva)
+- [ ] Imagenes/videos se siguen mostrando al reabrir chat
+- [ ] `NavigateAppSkill.kt` — el agente navega screens del app
+- [ ] Audit completo: que puede y que NO puede hacer el agente
+
+---
+
+### FASE 28 — Widget Android
 - [ ] Widgets 2x1, 4x2, 4x4 + shortcuts
+- [ ] Quick actions desde home screen
+- [ ] Status del agente en widget
 
 ---
 
-### FASE 27 — Onboarding Flow v2.0
+### FASE 29 — Onboarding Flow v2.0
 - [ ] 10-step guided setup (brand, personality, API keys, skills)
 - [ ] Template-based agent generation
+- [ ] Welcome wizard para nuevos usuarios
 
 ---
 
-### FASE 28 — Skills Expansion (37 a 65+)
-- [ ] 28 nuevos skills de negocio/productividad
+### FASE 30 — Skills Expansion (39 a 65+)
+- [ ] 26 nuevos skills de negocio/productividad
+- [ ] Social media posting
+- [ ] Invoice generation
+- [ ] Data analysis
 
 ---
 
-### FASE 29 — Business Automations (20)
+### FASE 31 — Business Automations (20)
 - [ ] CRM, invoicing, inventory, scheduling, reporting
+- [ ] Templates de automatizacion por industria
 
 ---
 
-### FASE 30 — Play Store + Distribución
+### FASE 32 — Play Store + Distribucion
 - [ ] R8 optimization, ProGuard, APK size reduction
 - [ ] Privacy policy, screenshots, listing
 - [ ] Beta testing round
@@ -398,11 +517,11 @@
 
 ## POST-LANZAMIENTO
 
-### FASE 31 — Social Media Hub
-### FASE 32 — Voice Realtime Mode (Full-Duplex)
-> *Conversación estilo ChatGPT Voice — interrumpibilidad natural*
+### FASE 33 — Social Media Hub
+### FASE 34 — Voice Realtime Mode (Full-Duplex)
+> *Conversacion estilo ChatGPT Voice — interrumpibilidad natural*
 
-- [ ] Deepgram WebSocket streaming STT (conexión persistente)
+- [ ] Deepgram WebSocket streaming STT (conexion persistente)
 - [ ] VAD (Voice Activity Detection) — detecta voz en tiempo real
 - [ ] Barge-in: mic abierto durante TTS, si hablas = corta al instante
 - [ ] Echo cancellation (AcousticEchoCanceler)
@@ -411,18 +530,17 @@
 
 ---
 
-## Métricas
+## Metricas
 
-| Métrica | Actual | Target v5.5 |
+| Metrica | Actual | Target v6.0 |
 |---------|--------|-------------|
-| Versión | v5.0.0 | v5.5 |
-| Skills | 37 | 65+ |
-| Pantallas | 18 | ~22 |
-| Providers LLM | 3 | 4 |
-| Fases completadas | 24 de 32 | 30 (pre-launch) |
-| APK tamaño | ~78 MB | Optimizar R8 |
-| Hito actual | **PRÓXIMO: Fase 21** (Custom Workflows + Scheduler) |
+| Version | v5.5.0 | v6.0 |
+| Skills | 39 | 65+ |
+| Pantallas | 19 | ~24 |
+| Providers LLM | 3 + 2 media | 4 + 3 media |
+| Fases completadas | 26 de 34 | 32 (pre-launch) |
+| APK tamano | ~82 MB | Optimizar R8 |
+| Hito actual | **PROXIMO: Fase 24** (File Explorer Real + Google Drive) |
 
 ---
-
 
