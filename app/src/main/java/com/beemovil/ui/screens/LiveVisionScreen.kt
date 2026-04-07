@@ -574,6 +574,41 @@ fun LiveVisionScreen(
             }
         }
 
+        // 22-C: Tourist quick action buttons
+        if (visionState.touristGuide && gpsData.latitude != 0.0) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(bottom = 180.dp, start = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                val touristActions = listOf(
+                    "🔍" to "¿Qué es lo que veo en esta imagen? Descríbelo con detalle y datos curiosos.",
+                    "📖" to "Cuéntame más sobre la historia de este lugar y la zona donde estoy.",
+                    "🍽️" to "¿Dónde puedo comer algo rico cerca de aquí? Recomienda platos locales."
+                )
+                touristActions.forEach { (emoji, question) ->
+                    Surface(
+                        onClick = {
+                            conversation.addUserQuestion(question)
+                            triggerSmartCapture(
+                                imageCapture, cameraExecutor, viewModel, context,
+                                selectedModel, question, visionState, gpsData,
+                                dgVoice, dashcamLogger, conversation, selectedPersonality,
+                                onResult = { liveResult = it; frameCount++ },
+                                onProcessing = { isProcessing = it }
+                            )
+                        },
+                        color = Color(0xFF8BC34A).copy(alpha = 0.85f),
+                        shape = RoundedCornerShape(20.dp)
+                    ) {
+                        Text(emoji, fontSize = 18.sp,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp))
+                    }
+                }
+            }
+        }
+
         // ═══════════════════════════════════════
         // MODULES PANEL (slide-in right)
         // ═══════════════════════════════════════
