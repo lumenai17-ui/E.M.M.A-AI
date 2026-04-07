@@ -75,10 +75,22 @@ fun DashboardScreen(
     val totalMessages = remember { mutableStateOf(0) }
     val recentChats = remember { mutableStateListOf<ChatHistoryDB.ConversationPreview>() }
     val batteryLevel = remember { mutableStateOf(getBatteryLevel(context)) }
+    val memoryCount = remember { mutableStateOf(0) }
 
     // Read user name from prefs
     val prefs = context.getSharedPreferences("beemovil", Context.MODE_PRIVATE)
     val userName = remember { prefs.getString("user_display_name", null) }
+
+    // AI Activity Scanner — shows what AI is doing on load
+    var scanPhase by remember { mutableStateOf(0) } // 0=scanning, 1=tasks, 2=memory, 3=done
+    var scanText by remember { mutableStateOf("Escaneando sistema...") }
+    val scanMessages = listOf(
+        "Escaneando sistema...",
+        "Revisando tareas pendientes...",
+        "Cargando memoria del agente...",
+        "Analizando conversaciones recientes...",
+        "Dashboard listo ✓"
+    )
 
     // Pull-to-refresh
     var isRefreshing by remember { mutableStateOf(false) }
@@ -88,22 +100,32 @@ fun DashboardScreen(
             isRefreshing = true
             totalMessages.value = chatHistoryDB?.getTotalMessageCount() ?: 0
             batteryLevel.value = getBatteryLevel(context)
+            memoryCount.value = memoryDB?.getMemoryCount() ?: 0
             chatHistoryDB?.let { db ->
                 recentChats.clear()
                 recentChats.addAll(db.getConversationPreviews().take(5))
             }
-            delay(600) // Visual feedback
+            delay(600)
             isRefreshing = false
         }
     }
 
+    // Boot scan animation
     LaunchedEffect(Unit) {
         totalMessages.value = chatHistoryDB?.getTotalMessageCount() ?: 0
         batteryLevel.value = getBatteryLevel(context)
+        memoryCount.value = memoryDB?.getMemoryCount() ?: 0
         chatHistoryDB?.let { db ->
             recentChats.clear()
             recentChats.addAll(db.getConversationPreviews().take(5))
         }
+        // Animate scan phases
+        for (i in scanMessages.indices) {
+            scanPhase = i
+            scanText = scanMessages[i]
+            delay(if (i < scanMessages.size - 1) 500L else 800L)
+        }
+        scanPhase = scanMessages.size // done
     }
 
     val telegramStatus = viewModel.telegramBotStatus.value
@@ -209,6 +231,34 @@ fun DashboardScreen(
                     Text("...", fontSize = 14.sp, color = TxtMuted)
                 }
             }
+
+        // ━━━━ AI ACTIVITY SCANNER ━━━━━━━━━━━━━━━━━━
+        if (scanPhase < scanMessages.size) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Surface(
+                color = Color(0xFF0D1117),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        color = Gold,
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        scanText,
+                        fontSize = 13.sp,
+                        color = Gold.copy(alpha = 0.8f),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        }
         }
 
         // ━━━━ AI STATUS CARD — Heartbeat Monitor ━━━━
@@ -337,14 +387,9 @@ fun DashboardScreen(
                 ) {
                     QuickStat(Icons.Outlined.Bolt, "$skillCount", "Skills", Gold)
                     QuickStat(Icons.Outlined.ChatBubble, "${totalMessages.value}", "Chats", Blue)
+                    QuickStat(Icons.Outlined.Memory, "${memoryCount.value}", "Memorias", Purple)
                     QuickStat(Icons.Outlined.Battery5Bar, "${batteryLevel.value}%", "Bateria", 
                         if (batteryLevel.value > 60) Green else if (batteryLevel.value > 30) Orange else Pink)
-                    QuickStat(
-                        Icons.Outlined.Send, 
-                        if (telegramStatus == "online") "On" else "Off", 
-                        "Telegram",
-                        if (telegramStatus == "online") Green else TxtMuted
-                    )
                 }
             }
         }
@@ -558,7 +603,7 @@ fun DashboardScreen(
         // Footer
         Spacer(modifier = Modifier.height(32.dp))
         Text(
-            "Bee-Movil v4.5.0",
+            "Bee-Movil v4.9.0",
             fontSize = 12.sp,
             color = TxtMuted.copy(alpha = 0.4f),
             modifier = Modifier.fillMaxWidth().padding(bottom = 80.dp),
