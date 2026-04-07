@@ -23,6 +23,8 @@ import com.beemovil.llm.OllamaCloudProvider
 import com.beemovil.memory.BeeMemoryDB
 import com.beemovil.memory.ChatHistoryDB
 import com.beemovil.skills.BeeSkill
+import com.beemovil.files.AttachedFile
+import com.beemovil.files.FileType
 import java.io.ByteArrayOutputStream
 import java.io.File
 
@@ -33,7 +35,8 @@ data class ChatUiMessage(
     val isError: Boolean = false,
     val isLoading: Boolean = false,
     val toolsUsed: List<String> = emptyList(),
-    val filePaths: List<String> = emptyList()  // Inline file attachments
+    val filePaths: List<String> = emptyList(),
+    val attachmentNames: List<String> = emptyList()  // Display names of attached files
 )
 
 class ChatViewModel : ViewModel() {
@@ -84,6 +87,9 @@ class ChatViewModel : ViewModel() {
     // Dashboard AI insight (dynamic, context-aware)
     val dashboardInsight = mutableStateOf("")
     val dashboardInsightLoading = mutableStateOf(false)
+
+    // Conversation attachments — persist across entire session
+    val conversationAttachments = mutableStateListOf<AttachedFile>()
 
     fun toggleVoiceInput(onText: (String) -> Unit) {
         val vm = voiceManager ?: return
@@ -482,6 +488,143 @@ class ChatViewModel : ViewModel() {
             files.add(match.groupValues[1])
         }
         return files.toList()
+    }
+
+    /**
+     * Send a message with file attachments.
+     * Attachments are processed by AttachmentManager and their context is injected
+     * into the agent's system prompt so the LLM can reference them across the conversation.
+     *
+     * For images: sent as vision (base64) in first message, then as text description after
+     * For documents: full extracted text injected into system prompt
+     */
+    fun sendMessageWithAttachments(text: String, pendingAttachments: List<AttachedFile>) {
+        if (isLoading.value) return
+
+        // Add new attachments to conversation-level context
+        pendingAttachments.forEach { att ->
+            if (conversationAttachments.none { it.id == att.id }) {
+                conversationAttachments.add(att)
+            }
+        }
+
+        val config = currentAgentConfig.value
+        val attachNames = pendingAttachments.map { it.name }
+        val imageAttachments = pendingAttachments.filter { it.type == FileType.IMAGE && it.base64 != null }
+        val textAttachments = pendingAttachments.filter { it.type != FileType.IMAGE || it.base64 == null }
+
+        // Build display text with attachment info
+        val userDisplayText = buildString {
+            if (attachNames.isNotEmpty()) {
+                append("📎 ")
+                append(attachNames.joinToString(", "))
+                append("\n")
+            }
+            append(text.ifBlank { "Analiza los archivos adjuntos" })
+        }
+
+        messages.add(ChatUiMessage(
+            text = userDisplayText, isUser = true,
+            attachmentNames = attachNames,
+            filePaths = pendingAttachments.mapNotNull { it.filePath }
+        ))
+        chatHistoryDB?.saveMessage(config.id, userDisplayText, true, config.icon)
+
+        val apiKey = apiKeys[currentProvider.value] ?: ""
+        if (apiKey.isBlank() && currentProvider.value != "local") {
+            val errorMsg = "Configura tu API key para **${getProviderDisplayName()}** primero"
+            messages.add(ChatUiMessage(text = errorMsg, isUser = false, agentIcon = "ERR", isError = true))
+            return
+        }
+
+        isLoading.value = true
+
+        Thread {
+            var responseText: String
+            var isError = false
+            var toolNames = emptyList<String>()
+            var detectedFiles = emptyList<String>()
+
+            try {
+                val agent = getOrCreateAgent(config)
+
+                // Inject ALL conversation attachments into system prompt
+                val attachmentContext = buildAttachmentContext()
+                if (attachmentContext.isNotBlank()) {
+                    agent.injectAttachmentContext(attachmentContext)
+                }
+
+                // If there are images, use chatWithImage for the first one
+                if (imageAttachments.isNotEmpty()) {
+                    val imgBase64 = imageAttachments.first().base64!!
+                    val fullPrompt = buildString {
+                        append(text.ifBlank { "Analiza los archivos adjuntos" })
+                        textAttachments.forEach { att ->
+                            append("\n\n${att.contextChunk}")
+                        }
+                    }
+                    val response = agent.chatWithImage(fullPrompt, imgBase64)
+                    responseText = response.text
+                    isError = response.isError
+                    toolNames = response.toolExecutions.map { it.skillName }
+                } else {
+                    // Text-only attachments: include context in the message itself
+                    val fullPrompt = buildString {
+                        append(text.ifBlank { "Analiza los archivos adjuntos" })
+                        textAttachments.forEach { att ->
+                            append("\n\n${att.contextChunk}")
+                        }
+                    }
+                    val response = agent.chat(fullPrompt)
+                    responseText = response.text
+                    isError = response.isError
+                    toolNames = response.toolExecutions.map { it.skillName }
+
+                    val toolFiles = mutableSetOf<String>()
+                    response.toolExecutions.forEach { exec ->
+                        arrayOf("path", "file_path", "filepath", "filePath", "output_path").forEach { key ->
+                            if (exec.result.has(key)) toolFiles.add(exec.result.getString(key))
+                        }
+                    }
+                    toolFiles.addAll(extractFilePaths(responseText))
+                    detectedFiles = toolFiles.toList()
+                }
+            } catch (e: Throwable) {
+                Log.e(TAG, "Chat+attachment error: ${e.message}", e)
+                responseText = "Error: ${e.javaClass.simpleName}: ${e.message}"
+                isError = true
+            }
+
+            chatHistoryDB?.saveMessage(config.id, responseText, false, config.icon, isError, toolNames)
+
+            mainHandler.post {
+                isLoading.value = false
+                messages.add(ChatUiMessage(
+                    text = responseText,
+                    isUser = false, agentIcon = config.icon,
+                    isError = isError, toolsUsed = toolNames,
+                    filePaths = detectedFiles
+                ))
+            }
+        }.start()
+    }
+
+    /**
+     * Build attachment context string for system prompt injection.
+     * All conversation attachments are summarized so the agent always knows what files are available.
+     */
+    private fun buildAttachmentContext(): String {
+        if (conversationAttachments.isEmpty()) return ""
+        return buildString {
+            appendLine("\n## Archivos adjuntos en esta conversacion:")
+            conversationAttachments.forEachIndexed { i, att ->
+                appendLine("${i + 1}. [${att.type.name}] ${att.name} (${att.preview})")
+                // For non-image files, include full content in context
+                if (att.type != FileType.IMAGE && att.contextChunk.length < 50_000) {
+                    appendLine(att.contextChunk)
+                }
+            }
+        }
     }
 
     /**

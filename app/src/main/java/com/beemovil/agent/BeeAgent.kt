@@ -70,6 +70,18 @@ class BeeAgent(
     }
 
     /**
+     * Inject file attachment context into the system prompt.
+     * Called before chat() when the conversation has attachments.
+     */
+    fun injectAttachmentContext(attachmentContext: String) {
+        val currentSystem = messages.firstOrNull()?.content ?: config.systemPrompt
+        // Remove old attachment context if present, add new
+        val base = currentSystem.substringBefore("\n## Archivos adjuntos en esta conversacion:")
+        messages[0] = ChatMessage(role = "system", content = base + attachmentContext)
+        Log.d(TAG, "[${config.id}] Attachment context injected (${attachmentContext.length} chars)")
+    }
+
+    /**
      * SYNCHRONOUS chat with image (vision). Image is base64 encoded.
      */
     fun chatWithImage(userMessage: String, imageBase64: String): AgentResponse {

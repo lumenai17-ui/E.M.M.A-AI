@@ -96,8 +96,9 @@ fun FileExplorerScreen(
         ) {
             val quickDirs = listOf(
                 "BeeMovil" to beeDir,
+                "Adjuntos" to File(beeDir, "attachments"),
+                "Generados" to File(beeDir, "generated"),
                 "Projects" to File(beeDir, "projects"),
-                "Repos" to File(beeDir, "repos"),
                 "Downloads" to Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
             )
             quickDirs.forEach { (label, dir) ->

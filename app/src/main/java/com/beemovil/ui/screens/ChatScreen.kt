@@ -50,6 +50,9 @@ import com.beemovil.R
 import com.beemovil.ui.ChatUiMessage
 import com.beemovil.ui.ChatViewModel
 import com.beemovil.ui.theme.*
+import com.beemovil.files.AttachmentManager
+import com.beemovil.files.AttachedFile
+import com.beemovil.files.FileType
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -62,6 +65,8 @@ fun ChatScreen(viewModel: ChatViewModel, onSettingsClick: () -> Unit = {}, onBac
     var showAgentPicker by remember { mutableStateOf(false) }
     var showAttachOptions by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val pendingAttachments = remember { mutableStateListOf<AttachedFile>() }
+    var isProcessingFile by remember { mutableStateOf(false) }
 
     // Pick up prefilled prompts from Dashboard tools
     val pending = viewModel.pendingPrompt.value
@@ -72,108 +77,60 @@ fun ChatScreen(viewModel: ChatViewModel, onSettingsClick: () -> Unit = {}, onBac
         }
     }
 
-    // File picker — handles PDF, DOCX, XLSX, TXT, CSV, etc.
+    // File picker — uses AttachmentManager for real context extraction
     val filePickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let {
-            try {
-                val cursor = context.contentResolver.query(it, null, null, null, null)
-                val displayName = cursor?.use { c ->
-                    val idx = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                    c.moveToFirst()
-                    if (idx >= 0) c.getString(idx) else "archivo"
-                } ?: "archivo"
-
-                val ext = displayName.substringAfterLast('.').lowercase()
-                val mimeType = context.contentResolver.getType(it) ?: ""
-
-                when {
-                    // Images → Vision model
-                    mimeType.startsWith("image/") -> {
-                        val tempFile = File(context.cacheDir, "attached_${System.currentTimeMillis()}.$ext")
-                        context.contentResolver.openInputStream(it)?.use { input ->
-                            tempFile.outputStream().use { output -> input.copyTo(output) }
-                        }
-                        viewModel.analyzeImageInChat(context, tempFile.absolutePath)
-                    }
-
-                    // Documents (PDF, DOC, XLSX) → Copy to cache, use read_document skill
-                    ext in listOf("pdf", "docx", "doc", "xlsx", "xls") -> {
-                        val tempFile = File(context.cacheDir, "doc_${System.currentTimeMillis()}_$displayName")
-                        context.contentResolver.openInputStream(it)?.use { input ->
-                            tempFile.outputStream().use { output -> input.copyTo(output) }
-                        }
-                        viewModel.sendMessage("Lee y analiza el archivo ${tempFile.absolutePath}")
-                    }
-
-                    // Text files → Read inline
-                    mimeType.startsWith("text/") || ext in listOf("csv", "json", "xml", "md", "txt", "log") -> {
-                        val text = context.contentResolver.openInputStream(it)?.bufferedReader()?.use { r -> r.readText() } ?: ""
-                        val truncated = if (text.length > 5000) text.take(5000) + "\n... (truncado)" else text
-                        viewModel.sendMessage("[Archivo: $displayName]\n```\n$truncated\n```\nAnaliza este archivo")
-                    }
-
-                    // Fallback
-                    else -> {
-                        viewModel.sendMessage("Formato .$ext no soportado aún. Formatos soportados: PDF, DOCX, XLSX, TXT, CSV, JSON, imágenes.")
+            isProcessingFile = true
+            Thread {
+                val attached = AttachmentManager.processUri(context, it)
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    isProcessingFile = false
+                    if (attached != null) {
+                        pendingAttachments.add(attached)
+                    } else {
+                        viewModel.messages.add(ChatUiMessage(
+                            text = "No se pudo procesar el archivo",
+                            isUser = false, agentIcon = "ERR", isError = true
+                        ))
                     }
                 }
-            } catch (e: Exception) {
-                viewModel.sendMessage("[Error cargando archivo: ${e.message}]")
-            }
+            }.start()
         }
     }
 
-    // Image picker (multi-select) — SAFE: sequential + OOM protected
+    // Image picker (multi-select) — uses AttachmentManager
     val imagePickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetMultipleContents()
     ) { uris: List<Uri> ->
-        val safeUris = uris.take(5) // Max 5 images to prevent OOM
-        if (uris.size > 5) {
-            viewModel.sendMessage("[AVISO] Solo se procesaran las primeras 5 imagenes de ${uris.size} seleccionadas.")
-        }
-        // Process sequentially on background thread to avoid UI freeze + OOM
-        Thread {
-            safeUris.forEachIndexed { index, uri ->
-                try {
-                    val inputStream = context.contentResolver.openInputStream(uri)
-                    val tempFile = File(context.cacheDir, "attached_image_${System.currentTimeMillis()}_$index.jpg")
-                    inputStream?.use { input -> tempFile.outputStream().use { output -> input.copyTo(output) } }
-
-                    // Scale down before passing to viewModel to prevent OOM
-                    val opts = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                    android.graphics.BitmapFactory.decodeFile(tempFile.absolutePath, opts)
-                    val scale = maxOf(1, maxOf(opts.outWidth, opts.outHeight) / 1024)
-                    val scaleOpts = android.graphics.BitmapFactory.Options().apply { inSampleSize = scale }
-                    val bitmap = android.graphics.BitmapFactory.decodeFile(tempFile.absolutePath, scaleOpts)
-                    if (bitmap != null) {
-                        val baos = java.io.ByteArrayOutputStream()
-                        bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, baos)
-                        val scaledFile = File(context.cacheDir, "scaled_image_${System.currentTimeMillis()}_$index.jpg")
-                        scaledFile.writeBytes(baos.toByteArray())
-                        bitmap.recycle()
-                        baos.close()
-                        tempFile.delete()
-
-                        // Analyze on main thread sequentially
-                        android.os.Handler(android.os.Looper.getMainLooper()).post {
-                            viewModel.analyzeImageInChat(context, scaledFile.absolutePath)
+        val safeUris = uris.take(10) // Up to 10 images
+        if (safeUris.isNotEmpty()) {
+            isProcessingFile = true
+            Thread {
+                safeUris.forEachIndexed { index, uri ->
+                    try {
+                        val attached = AttachmentManager.processUri(context, uri)
+                        if (attached != null) {
+                            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                pendingAttachments.add(attached)
+                            }
                         }
-                        // Small delay between images to let GC work
-                        if (index < safeUris.size - 1) Thread.sleep(500)
-                    }
-                } catch (e: OutOfMemoryError) {
-                    android.os.Handler(android.os.Looper.getMainLooper()).post {
-                        viewModel.sendMessage("[Error] Imagen ${index + 1} muy grande, no se pudo procesar (memoria insuficiente)")
-                    }
-                } catch (e: Exception) {
-                    android.os.Handler(android.os.Looper.getMainLooper()).post {
-                        viewModel.sendMessage("[Error cargando imagen ${index + 1}: ${e.message}]")
+                        if (index < safeUris.size - 1) Thread.sleep(200)
+                    } catch (e: Exception) {
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            viewModel.messages.add(ChatUiMessage(
+                                text = "Error con imagen ${index + 1}: ${e.message}",
+                                isUser = false, agentIcon = "ERR", isError = true
+                            ))
+                        }
                     }
                 }
-            }
-        }.start()
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    isProcessingFile = false
+                }
+            }.start()
+        }
     }
 
     // Auto-scroll on new messages
@@ -254,6 +211,55 @@ fun ChatScreen(viewModel: ChatViewModel, onSettingsClick: () -> Unit = {}, onBac
                 color = BeeBlackLight,
                 shadowElevation = 8.dp
             ) {
+                Column {
+                // Attachment chips row
+                if (pendingAttachments.isNotEmpty() || isProcessingFile) {
+                    LazyRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(pendingAttachments.toList()) { att ->
+                            val chipIcon = when (att.type) {
+                                FileType.IMAGE -> Icons.Filled.Image
+                                FileType.PDF -> Icons.Filled.PictureAsPdf
+                                FileType.DOCUMENT -> Icons.Filled.Description
+                                FileType.SPREADSHEET -> Icons.Filled.TableChart
+                                FileType.TEXT -> Icons.Filled.Code
+                                FileType.OTHER -> Icons.Filled.InsertDriveFile
+                            }
+                            val chipColor = when (att.type) {
+                                FileType.IMAGE -> Color(0xFFAB47BC)
+                                FileType.PDF -> Color(0xFFE53935)
+                                FileType.SPREADSHEET -> Color(0xFF4CAF50)
+                                FileType.DOCUMENT -> Color(0xFF42A5F5)
+                                else -> BeeYellow
+                            }
+                            InputChip(
+                                selected = false,
+                                onClick = { pendingAttachments.remove(att) },
+                                label = { Text(att.name.take(20), fontSize = 11.sp) },
+                                leadingIcon = { Icon(chipIcon, att.name, tint = chipColor, modifier = Modifier.size(16.dp)) },
+                                trailingIcon = { Icon(Icons.Filled.Close, "Remove", tint = BeeGray, modifier = Modifier.size(14.dp)) },
+                                colors = InputChipDefaults.inputChipColors(
+                                    containerColor = chipColor.copy(alpha = 0.15f),
+                                    labelColor = BeeWhite
+                                ),
+                                modifier = Modifier.height(30.dp)
+                            )
+                        }
+                        if (isProcessingFile) {
+                            item {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(4.dp)) {
+                                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = BeeYellow)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Procesando...", fontSize = 11.sp, color = BeeGray)
+                                }
+                            }
+                        }
+                    }
+                }
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -345,22 +351,32 @@ fun ChatScreen(viewModel: ChatViewModel, onSettingsClick: () -> Unit = {}, onBac
                     FloatingActionButton(
                         onClick = {
                             val msg = inputText.trim()
-                            if (msg.isNotEmpty()) {
+                            if (pendingAttachments.isNotEmpty()) {
+                                val atts = pendingAttachments.toList()
+                                inputText = ""
+                                pendingAttachments.clear()
+                                viewModel.sendMessageWithAttachments(msg, atts)
+                            } else if (msg.isNotEmpty()) {
                                 inputText = ""
                                 viewModel.sendMessage(msg)
                             }
                         },
-                        containerColor = if (viewModel.isLoading.value) BeeGray else BeeYellow,
-                        contentColor = BeeBlack,
+                        containerColor = if (viewModel.isLoading.value) BeeGray
+                            else if (pendingAttachments.isNotEmpty()) Color(0xFF4CAF50)
+                            else BeeYellow,
+                        contentColor = if (pendingAttachments.isNotEmpty()) BeeWhite else BeeBlack,
                         modifier = Modifier.size(48.dp)
                     ) {
                         if (viewModel.isLoading.value) {
                             TypingDots()
+                        } else if (pendingAttachments.isNotEmpty()) {
+                            Icon(Icons.Filled.AttachFile, "Send with attachments", modifier = Modifier.size(20.dp))
                         } else {
                             Icon(Icons.Filled.Send, "Send", modifier = Modifier.size(20.dp))
                         }
                     }
                 }
+                } // Column end
             }
         }
     ) { padding ->
