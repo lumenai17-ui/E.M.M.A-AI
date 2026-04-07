@@ -36,6 +36,8 @@ import com.beemovil.llm.ChatMessage
 import com.beemovil.llm.LlmFactory
 import com.beemovil.llm.OllamaCloudProvider
 import com.beemovil.ui.ChatViewModel
+import com.beemovil.ui.components.BeePermission
+import com.beemovil.ui.components.rememberPermissionGate
 import com.beemovil.ui.theme.*
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -119,13 +121,8 @@ fun CameraScreen(
         }
     }
 
-    // Permission launcher
-    val permLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) cameraLauncher.launch(photoUri)
-        else Toast.makeText(context, "Permiso de cámara necesario", Toast.LENGTH_SHORT).show()
-    }
+    // Permission gate — shows premium dialog
+    val cameraGate = rememberPermissionGate(BeePermission.CAMERA)
 
     // Quick prompts
     val quickPrompts = listOf(
@@ -322,10 +319,8 @@ fun CameraScreen(
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     onClick = {
-                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                        cameraGate.checkAndRun {
                             cameraLauncher.launch(photoUri)
-                        } else {
-                            permLauncher.launch(Manifest.permission.CAMERA)
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = BeeYellow, contentColor = BeeBlack),

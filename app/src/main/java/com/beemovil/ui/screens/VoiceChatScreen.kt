@@ -27,6 +27,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.beemovil.ui.ChatViewModel
+import com.beemovil.ui.components.BeePermission
+import com.beemovil.ui.components.PermissionDialog
+import com.beemovil.ui.components.isPermissionGranted
 import com.beemovil.ui.theme.*
 import java.util.Locale
 
@@ -44,15 +47,18 @@ fun VoiceChatScreen(
 
     // Mic permission
     var hasMicPermission by remember {
-        mutableStateOf(
-            androidx.core.content.ContextCompat.checkSelfPermission(
-                context, android.Manifest.permission.RECORD_AUDIO
-            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        mutableStateOf(isPermissionGranted(context, BeePermission.MICROPHONE))
+    }
+    var showMicPermDialog by remember { mutableStateOf(false) }
+
+    if (showMicPermDialog && !hasMicPermission) {
+        PermissionDialog(
+            permission = BeePermission.MICROPHONE,
+            onGranted = { hasMicPermission = true; showMicPermDialog = false },
+            onDenied = { showMicPermDialog = false },
+            onDismiss = { showMicPermDialog = false }
         )
     }
-    val micPermLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted -> hasMicPermission = granted }
 
     // Voice state
     var voiceState by remember { mutableStateOf(VoiceState.IDLE) }
@@ -104,8 +110,7 @@ fun VoiceChatScreen(
     fun startListening() {
         // Check mic permission first
         if (!hasMicPermission) {
-            micPermLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
-            errorText = "Se necesita permiso de microfono"
+            showMicPermDialog = true
             return
         }
         if (usingDeepgram) {

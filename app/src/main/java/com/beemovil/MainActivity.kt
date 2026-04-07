@@ -136,7 +136,7 @@ class MainActivity : ComponentActivity() {
         deepgramVoiceMgr.initialize()
         viewModel.deepgramVoiceManager = deepgramVoiceMgr
 
-        // Request permissions (mic, location, contacts, calendar)
+        // Request permissions (mic, location, contacts, calendar, notifications)
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
             val perms = mutableListOf<String>()
             if (!voiceManager.hasPermission) perms.add(android.Manifest.permission.RECORD_AUDIO)
@@ -146,6 +146,13 @@ class MainActivity : ComponentActivity() {
                 perms.add(android.Manifest.permission.READ_CONTACTS)
             if (checkSelfPermission(android.Manifest.permission.READ_CALENDAR) != android.content.pm.PackageManager.PERMISSION_GRANTED)
                 perms.add(android.Manifest.permission.READ_CALENDAR)
+            if (checkSelfPermission(android.Manifest.permission.WRITE_CALENDAR) != android.content.pm.PackageManager.PERMISSION_GRANTED)
+                perms.add(android.Manifest.permission.WRITE_CALENDAR)
+            // Android 13+ notification permission
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED)
+                    perms.add(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
             if (perms.isNotEmpty()) requestPermissions(perms.toTypedArray(), 1001)
         }
 

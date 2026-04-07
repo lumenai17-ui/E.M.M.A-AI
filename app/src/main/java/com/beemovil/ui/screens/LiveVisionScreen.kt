@@ -42,6 +42,9 @@ import androidx.core.content.ContextCompat
 import com.beemovil.llm.ChatMessage
 import com.beemovil.llm.LlmFactory
 import com.beemovil.ui.ChatViewModel
+import com.beemovil.ui.components.BeePermission
+import com.beemovil.ui.components.PermissionDialog
+import com.beemovil.ui.components.isPermissionGranted
 import com.beemovil.ui.theme.*
 import com.beemovil.vision.*
 import java.io.ByteArrayOutputStream
@@ -106,7 +109,16 @@ fun LiveVisionScreen(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         hasCameraPermission = granted
-        if (!granted) Toast.makeText(context, "Permiso de camara necesario", Toast.LENGTH_SHORT).show()
+    }
+    var showCameraPermDialog by remember { mutableStateOf(false) }
+
+    if (showCameraPermDialog && !hasCameraPermission) {
+        PermissionDialog(
+            permission = BeePermission.CAMERA,
+            onGranted = { hasCameraPermission = true; showCameraPermDialog = false },
+            onDenied = { showCameraPermDialog = false },
+            onDismiss = { showCameraPermDialog = false }
+        )
     }
 
     // GPS lifecycle
@@ -275,9 +287,11 @@ fun LiveVisionScreen(
             Spacer(modifier = Modifier.height(16.dp))
             Text("Permiso de camara necesario", fontWeight = FontWeight.Bold,
                 fontSize = 18.sp, color = BeeWhite)
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("Vision Pro necesita acceso a la camara", fontSize = 13.sp, color = BeeGray)
+            Spacer(modifier = Modifier.height(16.dp))
             Button(
-                onClick = { permLauncher.launch(Manifest.permission.CAMERA) },
+                onClick = { showCameraPermDialog = true },
                 colors = ButtonDefaults.buttonColors(containerColor = BeeYellow, contentColor = BeeBlack)
             ) {
                 Text("Permitir camara", fontWeight = FontWeight.Bold)
