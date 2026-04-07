@@ -337,16 +337,20 @@
 
 ---
 
-### ✅ FASE 22 — Vision Pro Audit & Face Intelligence (Completada v5.7.1)
-> *Auditoria completa del modo Vision Pro, fix del microfono y ML Kit Faces*
+### ✅ FASE 22 — #livevision Audit & Face Intelligence (Completada v5.7.1)
+> *Auditoria completa del modo #livevision, fix del microfono y ML Kit Faces*
 
+- [x] Rebranding UI: #livevision como concepto de "Feed continuo orgánico"
 - [x] Lifecycle management (DisposableEffect, stopSpeaking en onDispose)
 - [x] TTS leak fix (dgVoice.stopSpeaking en todos los exit paths)
 - [x] Local model routing (Gemma 4 con hasVision=true en ModelRegistry)
 - [x] Network-aware provider routing (offline → local, online → cloud)
+- [x] Prevención de silent fallback: Cloud-to-Local fallback abortado para prevenir bloqueos de GPU y RAM inesperados
+- [x] Prevención de Threads C++ concurrentes: Atomic lock para cargas seguras de LiteRT-LM (soluciona error "sesión local ya activa")
+- [x] Capture Loop Variable: Pausa automática asincrónica si el TTS está narrando (prevé autosolapamientos y latencia)
 - [x] UI: Eliminadas Quick Actions + POI limits logrando "Clean Vision Mode"
-- [x] Mic Fix: `RECORD_AUDIO` permission arreglado via `RequestMultiplePermissions`
-- [x] Face Tracking en vivo con ML Kit (FaceAnalyzer) + Canvas Drawing
+- [x] Mic Fix: `RECORD_AUDIO` permission arreglado via `RequestMultiplePermissions` y `<queries>` scope (Android 11+)
+- [x] Face Tracking en vivo con ML Kit (FaceAnalyzer) + Canvas Drawing (Corrección profunda matemática Center-Crop)
 - [x] Face Metadata LLM injection ("1 rostros en vivo", con tracker id)
 - [x] Concurrency limits: System prompts ultra-concisos (1-2 oraciones)
 - [x] Microphone sync fix (TTS ↔ STT state machine)
