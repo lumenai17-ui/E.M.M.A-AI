@@ -1,5 +1,5 @@
 # 🐝 Bee-Movil Native — Roadmap & Checklist
-### Ultima actualizacion: 6 de Abril 2026 · v4.4.0
+### Ultima actualizacion: 7 de Abril 2026 · v5.1.0
 
 ---
 
@@ -188,7 +188,7 @@
   - [x] Quote + Email (ventas → PDF → email)
   - [x] URL → Landing Page
   - [x] Daily Digest (noticias + agenda → PDF)
-- [ ] Guardar/cargar workflows personalizados (pendiente)
+- [x] Guardar/cargar workflows personalizados (Phase 21)
 - [x] Pantalla 16: WorkflowScreen en Dashboard
 
 **18B-4 — 🌐 A2A Gateway (Agent-to-Agent Protocol de Google)**
@@ -309,21 +309,31 @@
 
 ---
 
-### FASE 21 — Custom Workflows + Scheduler
-> *El usuario crea sus propios flujos*
+### ✅ FASE 21 — Custom Workflows + AI Generator + Full Scheduler (Completada v5.1.0)
+> *El usuario crea, edita y programa sus propios flujos*
 
-- [ ] **Editor visual de flujos custom**
-  - [ ] Agregar/quitar/reordenar pasos
-  - [ ] Seleccionar agente + modelo por paso
-  - [ ] Prompt editor por paso con {input} placeholder
-  - [ ] Guardar como template personal
-- [ ] **Scheduler / periódicos**
-  - [ ] Cron-like: ejecutar workflow diario/semanal
-  - [ ] Foreground Service para background processing
-  - [ ] Notificación con resultado al terminar
-- [ ] **Triggers** (futuro)
-  - [ ] "Cuando reciba email de X" → ejecutar workflow
-  - [ ] "Cuando la batería baje de 20%" → ejecutar workflow
+**21-A: Custom Workflow DB + Editor + 3-Tab UI**
+- [x] `CustomWorkflowDB.kt` — SQLite CRUD, JSON steps/schedule, triggers
+- [x] `WorkflowEditorScreen.kt` — Full editor (steps, agents, models, schedule config)
+- [x] `WorkflowScreen.kt` — 3 tabs (Templates | Mis Flujos | Historial)
+- [x] `CustomWorkflowsView` — list/create/edit/delete/execute custom workflows
+- [x] Schedule configuration: frequency, time, days, WiFi/battery/boot triggers
+- [x] Per-step model override via ModelPicker
+
+**21-B: AI Workflow Generator**
+- [x] `GenerateWorkflowSkill.kt` — create/edit workflows from natural language
+- [x] Auto-saves to CustomWorkflowDB on generation
+- [x] Registered as skill #38
+
+**21-C: Full Workflow Scheduler**
+- [x] `WorkflowScheduler.kt` — AlarmManager exact alarms + WorkManager fallback
+- [x] `WorkflowSchedulerWorker.kt` — background execution + notifications
+- [x] `WorkflowSchedulerReceiver` — boot + alarm triggers
+- [x] `WifiTriggerReceiver` — WiFi connect trigger
+- [x] `BatteryTriggerReceiver` — low battery trigger
+- [x] AndroidManifest: SCHEDULE_EXACT_ALARM, USE_EXACT_ALARM, receivers
+- [x] Auto-reschedule on boot and app start
+- [x] Results saved to history + file + notification
 
 ---
 
