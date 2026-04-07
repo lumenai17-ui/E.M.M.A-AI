@@ -31,6 +31,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.beemovil.ui.theme.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -68,6 +71,14 @@ fun FileExplorerScreen(
     var showRenameDialog by remember { mutableStateOf<File?>(null) }
     var showDeleteConfirm by remember { mutableStateOf<List<File>>(emptyList()) }
     var showFileActions by remember { mutableStateOf<File?>(null) }
+
+    // Google Drive state
+    val googleAuth = remember { com.beemovil.google.GoogleAuthManager(context) }
+    var isDriveMode by remember { mutableStateOf(false) }
+    var driveFiles by remember { mutableStateOf<List<com.beemovil.google.GoogleDriveService.DriveFile>>(emptyList()) }
+    var driveFolderStack by remember { mutableStateOf(listOf<Pair<String?, String>>("root" to "Mi Drive")) }
+    var driveLoading by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     // BeeMovil generated dirs
     val beeImageDir = File(rootDir, "Documents/BeeMovil/images")
@@ -289,6 +300,45 @@ fun FileExplorerScreen(
                             containerColor = BeeGray.copy(alpha = 0.15f),
                             labelColor = BeeGrayLight,
                             iconColor = BeeGrayLight
+                        ),
+                        modifier = Modifier.height(30.dp)
+                    )
+                }
+                // Google Drive chip
+                item {
+                    FilterChip(
+                        selected = isDriveMode,
+                        onClick = {
+                            if (googleAuth.isSignedIn() && googleAuth.hasDriveScope()) {
+                                isDriveMode = !isDriveMode
+                                if (isDriveMode) {
+                                    driveLoading = true
+                                    scope.launch {
+                                        val token = googleAuth.getAccessToken()
+                                        if (token != null) {
+                                            val svc = com.beemovil.google.GoogleDriveService(token)
+                                            driveFiles = withContext(Dispatchers.IO) { svc.listFiles(null) }
+                                        }
+                                        driveLoading = false
+                                    }
+                                }
+                            } else if (googleAuth.isSignedIn()) {
+                                Toast.makeText(context, "Autoriza Drive en Settings → Google Workspace", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "Conecta Google en Settings primero", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        label = { Text("Drive", fontSize = 11.sp) },
+                        leadingIcon = {
+                            Icon(Icons.Filled.Cloud, "Drive", modifier = Modifier.size(14.dp))
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFF4285F4),
+                            selectedLabelColor = Color.White,
+                            selectedLeadingIconColor = Color.White,
+                            containerColor = Color(0xFF4285F4).copy(alpha = 0.15f),
+                            labelColor = Color(0xFF4285F4),
+                            iconColor = Color(0xFF4285F4)
                         ),
                         modifier = Modifier.height(30.dp)
                     )

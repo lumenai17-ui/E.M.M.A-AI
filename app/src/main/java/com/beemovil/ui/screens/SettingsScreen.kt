@@ -32,6 +32,7 @@ import com.beemovil.security.SecurePrefs
 import com.beemovil.telegram.TelegramBotService
 import com.beemovil.ui.ChatViewModel
 import com.beemovil.ui.theme.*
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,6 +43,7 @@ fun SettingsScreen(
     val context = LocalContext.current
     val prefs = context.getSharedPreferences("beemovil", Context.MODE_PRIVATE)
     val securePrefs = remember { SecurePrefs.get(context) }
+    val scope = rememberCoroutineScope()
 
     var openRouterKey by remember { mutableStateOf(securePrefs.getString("openrouter_api_key", "") ?: "") }
     var ollamaKey by remember { mutableStateOf(securePrefs.getString("ollama_api_key", "") ?: "") }
@@ -1007,6 +1009,126 @@ fun SettingsScreen(
             }
 
             // ═══════════════════════════════════════
+            // GOOGLE WORKSPACE
+            // ═══════════════════════════════════════
+            SectionCard {
+                SectionTitle("GOOGLE WORKSPACE")
+                Text("Un solo login para Drive, Gmail y Calendar", fontSize = 12.sp, color = BeeGray)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                val googleAuth = remember { com.beemovil.google.GoogleAuthManager(context) }
+                var googleSignedIn by remember { mutableStateOf(googleAuth.isSignedIn()) }
+                var googleEmail by remember { mutableStateOf(googleAuth.getEmail() ?: "") }
+                var googleName by remember { mutableStateOf(googleAuth.getDisplayName() ?: "") }
+                var googleLoading by remember { mutableStateOf(false) }
+
+                if (googleSignedIn) {
+                    // ── Connected State ──
+                    Surface(
+                        color = Color(0xFF1A2E1A),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Avatar placeholder
+                            Surface(
+                                modifier = Modifier.size(44.dp),
+                                shape = CircleShape,
+                                color = Color(0xFF4285F4)
+                            ) {
+                                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                    Text(
+                                        googleName.firstOrNull()?.uppercase() ?: "G",
+                                        fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(googleName, color = BeeWhite, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                Text(googleEmail, color = BeeGray, fontSize = 12.sp)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    val hasDrive = googleAuth.hasDriveScope()
+                                    val hasGmail = googleAuth.hasGmailScope()
+                                    val hasCal = googleAuth.hasCalendarScope()
+                                    ServiceBadge("Drive", hasDrive)
+                                    ServiceBadge("Gmail", hasGmail)
+                                    ServiceBadge("Calendar", hasCal)
+                                }
+                            }
+                            Icon(Icons.Filled.CheckCircle, "Connected", tint = Color(0xFF4CAF50), modifier = Modifier.size(22.dp))
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    // Disconnect button
+                    TextButton(
+                        onClick = {
+                            scope.launch {
+                                googleAuth.signOut()
+                                googleSignedIn = false
+                                googleEmail = ""
+                                googleName = ""
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Desconectar cuenta Google", color = Color(0xFFFF6B6B), fontSize = 13.sp)
+                    }
+                } else {
+                    // ── Not Connected ──
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                googleLoading = true
+                                val user = googleAuth.signIn(context)
+                                if (user != null) {
+                                    googleSignedIn = true
+                                    googleEmail = user.email
+                                    googleName = user.displayName
+                                    // Auto-populate soul
+                                    try {
+                                        val memDb = com.beemovil.memory.BeeMemoryDB(context)
+                                        if (memDb.getSoul("name").isNullOrBlank()) {
+                                            memDb.setSoul("name", user.displayName)
+                                        }
+                                        if (memDb.getSoul("email").isNullOrBlank()) {
+                                            memDb.setSoul("email", user.email)
+                                        }
+                                    } catch (_: Exception) {}
+                                }
+                                googleLoading = false
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        enabled = !googleLoading,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.White,
+                            contentColor = Color(0xFF1F1F1F)
+                        ),
+                        shape = RoundedCornerShape(24.dp)
+                    ) {
+                        if (googleLoading) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Color(0xFF4285F4))
+                        } else {
+                            // Google G colors
+                            Text("G", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF4285F4))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Conectar con Google", fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        "Accede a Drive, Gmail y Calendar con un solo login.\nNecesitas configurar un proyecto en Google Cloud Console.",
+                        fontSize = 11.sp, color = BeeGray, lineHeight = 14.sp
+                    )
+                }
+            }
+
+            // ═══════════════════════════════════════
             // EMAIL CONFIG
             // ═══════════════════════════════════════
             SectionCard {
@@ -1411,6 +1533,28 @@ private fun ProviderChip(label: String, id: String, selected: String, onClick: (
             labelColor = Color(0xFFE0E0E0)
         )
     )
+}
+
+@Composable
+private fun ServiceBadge(label: String, active: Boolean) {
+    Surface(
+        color = if (active) Color(0xFF4CAF50).copy(alpha = 0.2f) else BeeGray.copy(alpha = 0.15f),
+        shape = RoundedCornerShape(4.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Icon(
+                if (active) Icons.Filled.Check else Icons.Filled.Lock,
+                label,
+                tint = if (active) Color(0xFF4CAF50) else BeeGray,
+                modifier = Modifier.size(10.dp)
+            )
+            Text(label, fontSize = 9.sp, color = if (active) Color(0xFF4CAF50) else BeeGray)
+        }
+    }
 }
 
 @Composable

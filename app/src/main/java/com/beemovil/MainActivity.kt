@@ -76,6 +76,7 @@ class MainActivity : ComponentActivity() {
         try { skills["video_gen"] = VideoGenSkill(
             getFalKey = { com.beemovil.security.SecurePrefs.get(this).getString("fal_api_key", "") ?: "" }
         ) } catch (e: Throwable) { Log.e("BeeMovil", "VideoGenSkill: ${e.message}") }
+        try { skills["google_drive"] = GoogleDriveSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "GoogleDriveSkill: ${e.message}") }
         try { skills["volume"] = VolumeSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "VolumeSkill: ${e.message}") }
         try { skills["alarm"] = AlarmSkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "AlarmSkill: ${e.message}") }
         try { skills["connectivity"] = ConnectivitySkill(this) } catch (e: Throwable) { Log.e("BeeMovil", "ConnectivitySkill: ${e.message}") }

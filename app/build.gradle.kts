@@ -5,12 +5,12 @@ plugins {
 
 android {
     namespace = "com.beemovil"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.beemovil"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 1
         versionName = "4.2.7"
     }
@@ -53,7 +53,12 @@ android {
                 "META-INF/DEPENDENCIES",
                 "META-INF/*.SF",
                 "META-INF/*.DSA",
-                "META-INF/*.RSA"
+                "META-INF/*.RSA",
+                "META-INF/INDEX.LIST",
+                "META-INF/versions/**",
+                "META-INF/AL2.0",
+                "META-INF/LGPL2.1",
+                "mozilla/public-suffix-list.txt"
             )
         }
     }
@@ -121,8 +126,24 @@ dependencies {
     // Git operations (clone, commit, push, pull)
     implementation("org.eclipse.jgit:org.eclipse.jgit:6.8.0.202311291450-r")
 
-    // Google Sign-In (Phase 8 - pending Cloud setup)
-    // implementation("com.google.android.gms:play-services-auth:21.0.0")
+    // Google Sign-In (Credential Manager) + Workspace APIs
+    implementation("androidx.credentials:credentials:1.5.0-alpha05")
+    implementation("androidx.credentials:credentials-play-services-auth:1.5.0-alpha05")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
+
+    // Google Drive API v3
+    implementation("com.google.api-client:google-api-client-android:2.7.0") {
+        exclude(group = "org.apache.httpcomponents")
+    }
+    implementation("com.google.apis:google-api-services-drive:v3-rev20250220-2.0.0")
+
+    // Google Calendar API v3
+    implementation("com.google.apis:google-api-services-calendar:v3-rev20250115-2.0.0")
+
+    // Google Auth (OAuth2 token handling)
+    implementation("com.google.auth:google-auth-library-oauth2-http:1.32.0") {
+        exclude(group = "org.apache.httpcomponents")
+    }
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
