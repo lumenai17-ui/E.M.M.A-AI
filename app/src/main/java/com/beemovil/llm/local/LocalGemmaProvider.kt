@@ -142,56 +142,17 @@ class LocalGemmaProvider(
                     if (hasImages) {
                         // 22-G: MULTIMODAL — try multiple approaches for image+text
                         val lastImageMsg = messages.lastOrNull { !it.images.isNullOrEmpty() }
+                        // 22-G: MULTIMODAL — Use the official LiteRT-LM Content API
                         val textPrompt = buildPrompt(messages, tools)
+                        val contents = buildMultimodalContent(messages, tools)
 
-                        // Attempt 1: Save image to temp file and try addImage/sendMessage
-                        val tempFile = lastImageMsg?.images?.lastOrNull()?.let { b64 ->
-                            try {
-                                val decoded = Base64.decode(b64, Base64.DEFAULT)
-                                val bmp = BitmapFactory.decodeByteArray(decoded, 0, decoded.size)
-                                if (bmp != null) {
-                                    val maxDim = 512
-                                    val resized = if (bmp.width > maxDim || bmp.height > maxDim) {
-                                        val s = minOf(maxDim.toFloat() / bmp.width, maxDim.toFloat() / bmp.height)
-                                        Bitmap.createScaledBitmap(bmp, (bmp.width * s).toInt(), (bmp.height * s).toInt(), true)
-                                    } else bmp
-                                    // Save to temp file for LiteRT-LM
-                                    val f = java.io.File.createTempFile("vision_", ".jpg", appContext?.cacheDir)
-                                    java.io.FileOutputStream(f).use { fos ->
-                                        resized.compress(Bitmap.CompressFormat.JPEG, 85, fos)
-                                    }
-                                    Log.i(TAG, "Temp image: ${f.absolutePath} (${f.length()} bytes)")
-                                    f
-                                } else null
-                            } catch (e: Exception) {
-                                Log.w(TAG, "Image prep failed: ${e.message}")
-                                null
-                            }
-                        }
-
-                        // Try multimodal via addImage + sendMessage
                         val response: Message = try {
-                            if (tempFile != null) {
-                                // Try the addImage approach (some LiteRT-LM versions)
-                                val addImageMethod = conversation.javaClass.methods.firstOrNull {
-                                    it.name == "addImage" || it.name == "addImageFile"
-                                }
-                                if (addImageMethod != null) {
-                                    addImageMethod.invoke(conversation, tempFile.absolutePath)
-                                    conversation.sendMessage(textPrompt)
-                                } else {
-                                    // Fallback: include image path in prompt context
-                                    Log.w(TAG, "No addImage method found, text-only mode")
-                                    conversation.sendMessage(textPrompt + "\n[Image provided but local model API doesn't support multimodal in this version]")
-                                }
-                            } else {
-                                conversation.sendMessage(textPrompt)
-                            }
+                            // Pass the properly built image and text contents
+                            val msg = Message.of(contents) 
+                            conversation.sendMessage(msg)
                         } catch (e: Exception) {
-                            Log.w(TAG, "Multimodal failed, text-only: ${e.message}")
+                            Log.w(TAG, "Multimodal Content API failed: ${e.message}", e)
                             conversation.sendMessage(textPrompt)
-                        } finally {
-                            tempFile?.delete()
                         }
                         extractText(response)
                     } else {
