@@ -270,7 +270,64 @@
 
 ---
 
-### FASE 20B — Vision Pro Mode
+### FASE 20C — Chat Memory + RAG + Multi-Image (Completada v4.8.0)
+> *Sesión actual — estabilización y mejoras*
+
+- [x] Pull-to-refresh en Dashboard, Conversations, Tasks, Notifications
+- [x] PermissionDialog premium (branded, no OS-level)
+- [x] Dashboard AI Scanner (5-phase boot animation + Memory widget)
+- [x] Sequential multi-image processing (OOM crash fix)
+
+---
+
+### FASE 20D — Workflow Resilience + Files (Completada v5.0.0)
+> *Workflows de producción + archivos inteligentes*
+
+- [x] Workflow delivery actions (Copy/Share/Save/Send-to-Chat)
+- [x] **AttachmentManager** — procesador universal de archivos:
+  - [x] Image: base64 1200px, persisted to BeeMovil/attachments/
+  - [x] PDF: PdfRenderer + raw text extraction (50 pages)
+  - [x] DOCX: ZIP parser → word/document.xml → text
+  - [x] XLSX: ZIP parser → sharedStrings + sheet1 → CSV
+  - [x] CSV/TXT/JSON/MD: full inline content
+- [x] Chat attachment chips (pending files UI + processing spinner)
+- [x] sendMessageWithAttachments() — persistent context injection
+- [x] BeeAgent.injectAttachmentContext() — survives across conversation
+- [x] FileExplorer: Adjuntos + Generados quick tabs
+- [x] **Workflow model selector** por step (ModelPicker dialog)
+- [x] **Error recovery** (Reintentar / Saltar / Cancelar)
+- [x] **WorkflowHistoryDB** — SQLite persistent run history
+- [x] History tab with delete (single, batch, clear all)
+- [x] Re-execute from history
+- [x] Auto-save results to BeeMovil/generated/
+
+---
+
+## 🔜 ROADMAP — Fases pendientes
+
+> Orden: Custom Workflows → Producción/Deploy → Expansión → Lanzamiento
+
+---
+
+### FASE 21 — Custom Workflows + Scheduler
+> *El usuario crea sus propios flujos*
+
+- [ ] **Editor visual de flujos custom**
+  - [ ] Agregar/quitar/reordenar pasos
+  - [ ] Seleccionar agente + modelo por paso
+  - [ ] Prompt editor por paso con {input} placeholder
+  - [ ] Guardar como template personal
+- [ ] **Scheduler / periódicos**
+  - [ ] Cron-like: ejecutar workflow diario/semanal
+  - [ ] Foreground Service para background processing
+  - [ ] Notificación con resultado al terminar
+- [ ] **Triggers** (futuro)
+  - [ ] "Cuando reciba email de X" → ejecutar workflow
+  - [ ] "Cuando la batería baje de 20%" → ejecutar workflow
+
+---
+
+### FASE 22 — Vision Pro Mode
 > *Camera + GPS + Voice narration + background agent*
 
 - [ ] Location overlay (GPS en prompt) + camera focus control
@@ -280,52 +337,62 @@
 
 ---
 
-### FASE 21 — Image Generation (Stable Diffusion)
+### FASE 23 — Image Generation (Stable Diffusion)
 - [ ] API integration + UI preview/edicion + historial
 
 ---
 
-### FASE 22 — Deploy + Attach Files
-- [ ] Netlify/Vercel deploy + attach archivos/carpetas a chat
+### FASE 24 — Deploy + Cloud Files
+- [ ] Netlify/Vercel deploy desde el teléfono
+- [ ] Google Drive integration en FileExplorer
 - [ ] Vista previa WebView + historial de deploys
 
 ---
 
-### FASE 22B — Browser Agent Mode
-> *WebView + chat bar + JS injection = Puppeteer movil*
+### FASE 25 — Browser Agent Mode
+> *WebView + chat bar + JS injection = Puppeteer móvil*
 
 - [ ] Split layout: WebView (70%) + Chat (30%)
 - [ ] JS bridge: read_dom, fill_input, click, scroll, navigate, screenshot, extract
-- [ ] Chat persistente con log de acciones + confirmacion antes de submit
+- [ ] Chat persistente con log de acciones + confirmación antes de submit
 
 ---
 
-### FASE 23 — Widget Android
+### FASE 26 — Widget Android
 - [ ] Widgets 2x1, 4x2, 4x4 + shortcuts
 
 ---
 
-### FASE 24 — Workflows v2 (Rewrite)
-- [ ] Steps con agentes existentes + combinaciones dinamicas en UI
-- [ ] Agent self-modify + Foreground Service para background processing
-- [ ] 8 templates + builder UI + scheduler
+### FASE 27 — Onboarding Flow v2.0
+- [ ] 10-step guided setup (brand, personality, API keys, skills)
+- [ ] Template-based agent generation
 
 ---
 
-### FASE 25 — Onboarding Flow v2.0
-### FASE 26 — Skills Expansion (37 a 65+)
-### FASE 27 — Business Automations (20)
-### FASE 28 — Play Store + Distribucion
+### FASE 28 — Skills Expansion (37 a 65+)
+- [ ] 28 nuevos skills de negocio/productividad
+
+---
+
+### FASE 29 — Business Automations (20)
+- [ ] CRM, invoicing, inventory, scheduling, reporting
+
+---
+
+### FASE 30 — Play Store + Distribución
+- [ ] R8 optimization, ProGuard, APK size reduction
+- [ ] Privacy policy, screenshots, listing
+- [ ] Beta testing round
 
 ---
 
 ## POST-LANZAMIENTO
 
-### FASE 29 — Social Media Hub
-### FASE 30 — Voice Realtime Mode (Full-Duplex)
-> *Conversacion estilo ChatGPT Voice — interrumpibilidad natural*
+### FASE 31 — Social Media Hub
+### FASE 32 — Voice Realtime Mode (Full-Duplex)
+> *Conversación estilo ChatGPT Voice — interrumpibilidad natural*
 
-- [ ] Deepgram WebSocket streaming STT (conexion persistente)
+- [ ] Deepgram WebSocket streaming STT (conexión persistente)
 - [ ] VAD (Voice Activity Detection) — detecta voz en tiempo real
 - [ ] Barge-in: mic abierto durante TTS, si hablas = corta al instante
 - [ ] Echo cancellation (AcousticEchoCanceler)
@@ -334,18 +401,18 @@
 
 ---
 
-## Metricas
+## Métricas
 
-| Metrica | Actual | Target v5.0 |
+| Métrica | Actual | Target v5.5 |
 |---------|--------|-------------|
-| Version | v4.6.0 | v5.0 |
+| Versión | v5.0.0 | v5.5 |
 | Skills | 37 | 65+ |
 | Pantallas | 18 | ~22 |
 | Providers LLM | 3 | 4 |
-| Fases completadas | 20 de 30 | 28 (pre-launch) |
-| APK tamano | ~78 MB | Optimizar R8 |
-| Hito actual | **PROXIMO: Fase 20B** (Vision Pro Mode) |
-
+| Fases completadas | 24 de 32 | 30 (pre-launch) |
+| APK tamaño | ~78 MB | Optimizar R8 |
+| Hito actual | **PRÓXIMO: Fase 21** (Custom Workflows + Scheduler) |
 
 ---
+
 

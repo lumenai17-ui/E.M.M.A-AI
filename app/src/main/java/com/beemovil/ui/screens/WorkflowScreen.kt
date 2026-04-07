@@ -28,6 +28,8 @@ import com.beemovil.ui.ChatViewModel
 import com.beemovil.ui.theme.*
 import com.beemovil.workflow.WorkflowHistoryDB
 import com.beemovil.workflow.WorkflowRunRecord
+import com.beemovil.workflow.CustomWorkflowDB
+import com.beemovil.workflow.CustomWorkflowRecord
 
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -52,23 +54,30 @@ fun WorkflowScreen(
     viewModel: ChatViewModel,
     onBack: () -> Unit,
     onSendToChat: ((String, String) -> Unit)? = null,
-    historyDB: WorkflowHistoryDB? = null
+    historyDB: WorkflowHistoryDB? = null,
+    customDB: CustomWorkflowDB? = null
 ) {
     var selectedWorkflow by remember { mutableStateOf<Workflow?>(null) }
     var userInput by remember { mutableStateOf("") }
     var workflowRun by remember { mutableStateOf<WorkflowRun?>(null) }
     var isRunning by remember { mutableStateOf(false) }
-    var selectedTab by remember { mutableIntStateOf(0) }  // 0=Templates, 1=History
+    var selectedTab by remember { mutableIntStateOf(0) }  // 0=Templates, 1=Mis Workflows, 2=History
     var historyRuns by remember { mutableStateOf<List<WorkflowRunRecord>>(emptyList()) }
     var showHistoryDetail by remember { mutableStateOf<WorkflowRunRecord?>(null) }
+    var customWorkflows by remember { mutableStateOf<List<CustomWorkflowRecord>>(emptyList()) }
+    var showEditor by remember { mutableStateOf(false) }
+    var editingCustomRecord by remember { mutableStateOf<CustomWorkflowRecord?>(null) }
 
     // Per-step model overrides
     val modelOverrides = remember { mutableStateMapOf<String, String>() }
     var showModelPicker by remember { mutableStateOf<String?>(null) } // step ID
 
-    // Load history
+    // Load data per tab
     LaunchedEffect(selectedTab) {
         if (selectedTab == 1) {
+            customWorkflows = customDB?.getAllWorkflows() ?: emptyList()
+        }
+        if (selectedTab == 2) {
             historyRuns = historyDB?.getAllRuns() ?: emptyList()
         }
     }
@@ -132,16 +141,16 @@ fun WorkflowScreen(
             }
         }
 
-        // ── Tabs: Templates | Historial ──
+        // ── Tabs: Templates | Mis Workflows | Historial ──
         TabRow(
-            selectedTabIndex = if (workflowRun != null || selectedWorkflow != null) selectedTab else selectedTab,
+            selectedTabIndex = if (workflowRun != null || selectedWorkflow != null || showEditor) selectedTab else selectedTab,
             containerColor = BeeBlackLight,
             contentColor = BeeYellow
         ) {
             Tab(
                 selected = selectedTab == 0,
                 onClick = { if (!isRunning) selectedTab = 0 },
-                text = { Text("Templates", fontSize = 13.sp) },
+                text = { Text("Templates", fontSize = 12.sp) },
                 selectedContentColor = BeeYellow,
                 unselectedContentColor = BeeGray
             )
@@ -149,20 +158,38 @@ fun WorkflowScreen(
                 selected = selectedTab == 1,
                 onClick = {
                     selectedTab = 1
+                    customWorkflows = customDB?.getAllWorkflows() ?: emptyList()
+                },
+                text = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Mis Flujos", fontSize = 12.sp)
+                        if (customWorkflows.isNotEmpty()) {
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Surface(color = BeeYellow, shape = CircleShape, modifier = Modifier.size(16.dp)) {
+                                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                    Text("${customWorkflows.size}", fontSize = 9.sp, color = BeeBlack, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                },
+                selectedContentColor = BeeYellow,
+                unselectedContentColor = BeeGray
+            )
+            Tab(
+                selected = selectedTab == 2,
+                onClick = {
+                    selectedTab = 2
                     historyRuns = historyDB?.getAllRuns() ?: emptyList()
                 },
                 text = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Historial", fontSize = 13.sp)
+                        Text("Historial", fontSize = 12.sp)
                         if (historyRuns.isNotEmpty()) {
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Surface(
-                                color = BeeYellow,
-                                shape = CircleShape,
-                                modifier = Modifier.size(18.dp)
-                            ) {
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Surface(color = BeeYellow, shape = CircleShape, modifier = Modifier.size(16.dp)) {
                                 Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                    Text("${historyRuns.size}", fontSize = 10.sp, color = BeeBlack, fontWeight = FontWeight.Bold)
+                                    Text("${historyRuns.size}", fontSize = 9.sp, color = BeeBlack, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -174,7 +201,23 @@ fun WorkflowScreen(
         }
 
         // ── Content ──
-        if (workflowRun != null) {
+        if (showEditor && customDB != null) {
+            WorkflowEditorScreen(
+                viewModel = viewModel,
+                customDB = customDB,
+                existingRecord = editingCustomRecord,
+                onSave = { id ->
+                    showEditor = false
+                    editingCustomRecord = null
+                    customWorkflows = customDB.getAllWorkflows()
+                    selectedTab = 1
+                },
+                onBack = {
+                    showEditor = false
+                    editingCustomRecord = null
+                }
+            )
+        } else if (workflowRun != null) {
             WorkflowExecutionView(
                 run = workflowRun!!,
                 isRunning = isRunning,
@@ -195,8 +238,8 @@ fun WorkflowScreen(
                 onBack = { showHistoryDetail = null },
                 onRerun = { record ->
                     showHistoryDetail = null
-                    // Find the template and re-run
                     val template = WorkflowTemplates.ALL.find { it.id == record.workflowId }
+                        ?: customDB?.getWorkflow(record.workflowId)?.toWorkflow()
                     if (template != null) {
                         selectedWorkflow = template
                         userInput = record.userInput
@@ -205,7 +248,7 @@ fun WorkflowScreen(
                 },
                 onSendToChat = { content -> onSendToChat?.invoke("main", content) }
             )
-        } else if (selectedWorkflow != null && selectedTab == 0) {
+        } else if (selectedWorkflow != null) {
             WorkflowInputView(
                 workflow = selectedWorkflow!!,
                 userInput = userInput,
@@ -234,6 +277,25 @@ fun WorkflowScreen(
                     modelOverrides.clear()
                 }
             )
+        } else if (selectedTab == 1) {
+            CustomWorkflowsView(
+                workflows = customWorkflows,
+                customDB = customDB,
+                onRefresh = { customWorkflows = customDB?.getAllWorkflows() ?: emptyList() },
+                onSelect = { record ->
+                    selectedWorkflow = record.toWorkflow()
+                    userInput = ""
+                    modelOverrides.clear()
+                },
+                onEdit = { record ->
+                    editingCustomRecord = record
+                    showEditor = true
+                },
+                onCreate = {
+                    editingCustomRecord = null
+                    showEditor = true
+                }
+            )
         } else {
             WorkflowHistoryView(
                 runs = historyRuns,
@@ -242,6 +304,7 @@ fun WorkflowScreen(
                 onViewDetail = { record -> showHistoryDetail = record },
                 onRerun = { record ->
                     val template = WorkflowTemplates.ALL.find { it.id == record.workflowId }
+                        ?: customDB?.getWorkflow(record.workflowId)?.toWorkflow()
                     if (template != null) {
                         selectedWorkflow = template
                         userInput = record.userInput
@@ -290,25 +353,6 @@ private fun WorkflowGallery(onSelect: (Workflow) -> Unit) {
         items(WorkflowTemplates.ALL) { workflow ->
             WorkflowTemplateCard(workflow = workflow, onClick = { onSelect(workflow) })
         }
-        item {
-            Spacer(modifier = Modifier.height(16.dp))
-            Surface(
-                color = BeeBlackLight.copy(alpha = 0.5f),
-                shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, BeeGray.copy(alpha = 0.2f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(Icons.Filled.Build, "Custom", tint = BeeGray, modifier = Modifier.size(28.dp))
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("Workflows custom — próximamente", fontSize = 13.sp, color = BeeGray)
-                    Text("Podrás crear y guardar tus propios flujos", fontSize = 11.sp, color = BeeGray.copy(alpha = 0.6f))
-                }
-            }
-        }
     }
 }
 
@@ -332,6 +376,145 @@ private fun WorkflowTemplateCard(workflow: Workflow, onClick: () -> Unit) {
                 Surface(color = BeeYellow.copy(alpha = 0.2f), shape = RoundedCornerShape(8.dp)) {
                     Text("${workflow.steps.size} pasos", fontSize = 10.sp, color = BeeYellow,
                         fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                }
+            }
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CUSTOM WORKFLOWS TAB
+// ═══════════════════════════════════════════════════════════════
+
+@Composable
+private fun CustomWorkflowsView(
+    workflows: List<CustomWorkflowRecord>,
+    customDB: CustomWorkflowDB?,
+    onRefresh: () -> Unit,
+    onSelect: (CustomWorkflowRecord) -> Unit,
+    onEdit: (CustomWorkflowRecord) -> Unit,
+    onCreate: () -> Unit
+) {
+    val context = LocalContext.current
+
+    LazyColumn(
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        // Create button
+        item {
+            Surface(
+                onClick = onCreate,
+                color = BeeYellow.copy(alpha = 0.1f),
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.5.dp, BeeYellow.copy(alpha = 0.4f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.Add, "New", tint = BeeYellow, modifier = Modifier.size(22.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Crear workflow", color = BeeYellow, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        if (workflows.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier.fillMaxWidth().height(200.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Filled.AutoAwesome, "Empty", tint = BeeGray, modifier = Modifier.size(40.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Sin workflows custom", color = BeeGray, fontSize = 14.sp)
+                        Text("Crea tu primer flujo personalizado", color = BeeGray.copy(alpha = 0.6f), fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+
+        items(workflows.size) { index ->
+            val record = workflows[index]
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = BeeBlackLight,
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, if (record.isScheduled) BeeYellow.copy(alpha = 0.3f) else BeeGray.copy(alpha = 0.12f))
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.AccountTree, record.name, tint = BeeYellow, modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(record.name, color = BeeWhite, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("${record.steps.size} pasos", fontSize = 10.sp, color = BeeGray)
+                                Text("·", fontSize = 10.sp, color = BeeGray)
+                                Text(record.getRelativeUpdated(), fontSize = 10.sp, color = BeeGray)
+                                if (record.runCount > 0) {
+                                    Text("· ${record.runCount}x", fontSize = 10.sp, color = BeeGray)
+                                }
+                            }
+                        }
+                    }
+
+                    if (record.description.isNotBlank()) {
+                        Text(record.description, fontSize = 11.sp, color = BeeGray.copy(alpha = 0.7f),
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 4.dp))
+                    }
+
+                    if (record.isScheduled) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Surface(color = BeeYellow.copy(alpha = 0.1f), shape = RoundedCornerShape(6.dp)) {
+                            Row(modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.Schedule, "Schedule", tint = BeeYellow, modifier = Modifier.size(12.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(record.schedule!!.getDisplayText(), fontSize = 10.sp, color = BeeYellow)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Button(
+                            onClick = { onSelect(record) },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = BeeYellow, contentColor = BeeBlack),
+                            shape = RoundedCornerShape(8.dp), contentPadding = PaddingValues(8.dp)
+                        ) {
+                            Icon(Icons.Filled.PlayArrow, "Run", modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text("Ejecutar", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                        OutlinedButton(
+                            onClick = { onEdit(record) },
+                            modifier = Modifier.weight(1f),
+                            border = BorderStroke(1.dp, BeeGray.copy(alpha = 0.3f)),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = BeeWhite),
+                            shape = RoundedCornerShape(8.dp), contentPadding = PaddingValues(8.dp)
+                        ) {
+                            Icon(Icons.Filled.Edit, "Edit", modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text("Editar", fontSize = 11.sp)
+                        }
+                        IconButton(
+                            onClick = {
+                                customDB?.deleteWorkflow(record.id)
+                                onRefresh()
+                                Toast.makeText(context, "Eliminado", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(Icons.Filled.Delete, "Delete", tint = Color(0xFFF44336).copy(alpha = 0.5f), modifier = Modifier.size(18.dp))
+                        }
+                    }
                 }
             }
         }
