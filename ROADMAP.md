@@ -391,30 +391,38 @@
 
 ---
 
-### FASE 24 — File Explorer Real + Google Drive
-> *Rewrite completo del navegador de archivos + cloud sync*
+### ✅ FASE 24 — File Explorer Real + Google Workspace (Completada v5.6.0)
+> *Rewrite completo del navegador de archivos + Google Workspace*
 
 **24-A: File Explorer Rewrite**
-- [ ] Navegacion desde /storage/emulated/0/ (TODO el almacenamiento)
-- [ ] Quick access: Home, Downloads, DCIM/Camera, BeeMovil, Documents
-- [ ] Breadcrumb navigation interactiva (cada segmento clickeable)
-- [ ] Acciones por archivo: compartir, copiar, mover, renombrar, eliminar
-- [ ] Crear carpeta nueva
-- [ ] Busqueda recursiva con filtros
-- [ ] Ordenar por: nombre, tamano, fecha, tipo
-- [ ] Multi-select para operaciones masivas
-- [ ] Preview de imagenes (thumbnail en lista)
-- [ ] Preview de videos (.mp4) con play icon
-- [ ] Boton "Enviar al chat" (adjuntar al agente activo)
-- [ ] Badge "AI" en archivos generados por el agente
+- [x] Navegacion desde /storage/emulated/0/ (TODO el almacenamiento)
+- [x] Quick access: Home, Downloads, DCIM/Camera, BeeMovil, Documents, Pictures, Music
+- [x] Breadcrumb navigation interactiva (cada segmento clickeable)
+- [x] Acciones por archivo: compartir, copiar, mover, renombrar, eliminar
+- [x] Crear carpeta nueva
+- [x] Busqueda recursiva con filtros (5 niveles, max 50)
+- [x] Ordenar por: nombre, tamano, fecha, tipo
+- [x] Multi-select para operaciones masivas (long-press)
+- [x] Preview de imagenes (thumbnail 1/8 sample)
+- [x] Preview de videos (.mp4) con play icon
+- [x] Boton "Enviar al chat" (adjuntar al agente activo)
+- [x] Badge "AI" en archivos generados por el agente
+- [x] 16 file type icons con colores distintos
 
-**24-B: Google Drive Integration**
-- [ ] Google Drive API (OAuth2 + REST)
-- [ ] Tab "Drive" en el File Explorer
-- [ ] Browse carpetas de Drive
-- [ ] Upload/Download archivos
-- [ ] Sync bidireccional con BeeMovil/
-- [ ] Backup automatico de archivos generados
+**24-B: Google Workspace Integration**
+- [x] `GoogleAuthManager.kt` — Credential Manager sign-in (one-tap)
+- [x] Persistent session: email, name, photo, tokens (SecurePrefs)
+- [x] Incremental scope tracking: Drive, Gmail, Calendar
+- [x] `GoogleDriveService.kt` — REST API v3 (list, search, upload, download, createFolder, delete, storage)
+- [x] `GoogleDriveSkill.kt` — Skill #40 (6 acciones para el agente)
+- [x] Tab "Drive" (chip azul) en File Explorer
+- [x] Settings: seccion GOOGLE WORKSPACE con branded sign-in
+- [x] Connected state: avatar, email, ServiceBadge per-service
+- [x] Soul auto-populate: nombre y email al hacer sign-in
+- [x] compileSdk/targetSdk 34→35 (Credential Manager requirement)
+- [x] `google-api-services-calendar:v3` ready (Phase 24-B-4)
+- [ ] Gmail OAuth2 (IMAP XOAUTH2) — pendiente config Cloud Console
+- [ ] Calendar API enhancement — pendiente scope authorization
 
 ---
 
