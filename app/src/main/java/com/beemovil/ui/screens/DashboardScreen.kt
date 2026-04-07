@@ -7,6 +7,8 @@ import android.os.BatteryManager
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -78,6 +80,23 @@ fun DashboardScreen(
     val prefs = context.getSharedPreferences("beemovil", Context.MODE_PRIVATE)
     val userName = remember { prefs.getString("user_display_name", null) }
 
+    // Pull-to-refresh
+    var isRefreshing by remember { mutableStateOf(false) }
+    val refreshScope = rememberCoroutineScope()
+    fun refreshData() {
+        refreshScope.launch {
+            isRefreshing = true
+            totalMessages.value = chatHistoryDB?.getTotalMessageCount() ?: 0
+            batteryLevel.value = getBatteryLevel(context)
+            chatHistoryDB?.let { db ->
+                recentChats.clear()
+                recentChats.addAll(db.getConversationPreviews().take(5))
+            }
+            delay(600) // Visual feedback
+            isRefreshing = false
+        }
+    }
+
     LaunchedEffect(Unit) {
         totalMessages.value = chatHistoryDB?.getTotalMessageCount() ?: 0
         batteryLevel.value = getBatteryLevel(context)
@@ -107,6 +126,7 @@ fun DashboardScreen(
         ), label = "phase"
     )
 
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -544,7 +564,32 @@ fun DashboardScreen(
             modifier = Modifier.fillMaxWidth().padding(bottom = 80.dp),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
+    } // Column end
+    // Pull-to-refresh indicator
+    if (isRefreshing) {
+        LinearProgressIndicator(
+            modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter),
+            color = Gold,
+            trackColor = CardBg
+        )
     }
+    // Pull-down hint (swipe gesture)
+    Box(
+        modifier = Modifier
+            .align(Alignment.TopCenter)
+            .padding(top = 4.dp)
+            .clickable { refreshData() }
+    ) {
+        if (!isRefreshing) {
+            Icon(
+                Icons.Filled.KeyboardArrowDown,
+                "Refresh",
+                tint = TxtMuted.copy(alpha = 0.3f),
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+    } // Box end
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

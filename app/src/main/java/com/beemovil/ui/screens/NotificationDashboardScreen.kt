@@ -105,6 +105,9 @@ fun NotificationDashboardScreen(
                             tint = Gold
                         )
                     }
+                    IconButton(onClick = { refresh() }) {
+                        Icon(Icons.Filled.Refresh, "Refresh", tint = TxtSub)
+                    }
                     IconButton(onClick = onConfigClick) {
                         Icon(Icons.Filled.Settings, "Config", tint = TxtSub)
                     }

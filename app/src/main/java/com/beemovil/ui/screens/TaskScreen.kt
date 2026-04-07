@@ -89,6 +89,10 @@ fun TaskScreen(
                         val pending = tasks.count { it.status == TaskStatus.PENDING || it.status == TaskStatus.IN_PROGRESS }
                         Text("$pending pendientes", fontSize = 13.sp, color = TxtSub)
                     }
+                    // Refresh button
+                    IconButton(onClick = { refresh() }) {
+                        Icon(Icons.Filled.Refresh, "Refresh", tint = TxtSub)
+                    }
                     // Calendar toggle
                     IconButton(onClick = { showCalendar = !showCalendar }) {
                         Icon(

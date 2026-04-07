@@ -29,6 +29,8 @@ import com.beemovil.agent.DefaultAgents
 import com.beemovil.memory.ChatHistoryDB
 import com.beemovil.ui.ChatViewModel
 import com.beemovil.ui.theme.*
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -57,6 +59,21 @@ fun ConversationsScreen(
         }
     }
 
+    // Pull-to-refresh
+    var isRefreshing by remember { mutableStateOf(false) }
+    val refreshScope = rememberCoroutineScope()
+    fun refreshData() {
+        refreshScope.launch {
+            isRefreshing = true
+            chatHistoryDB?.let { db ->
+                previews.clear()
+                previews.addAll(db.getConversationPreviews())
+            }
+            delay(500)
+            isRefreshing = false
+        }
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -65,6 +82,13 @@ fun ConversationsScreen(
     ) {
         // Header
         item {
+            if (isRefreshing) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = BeeYellow,
+                    trackColor = BeeBlack
+                )
+            }
             Surface(
                 color = Color.Transparent,
                 modifier = Modifier.fillMaxWidth().background(
@@ -83,13 +107,21 @@ fun ConversationsScreen(
                         Text("Mis Agentes", fontWeight = FontWeight.Bold, fontSize = 24.sp, color = BeeWhite)
                         Text("${agents.size} agentes · $skillCount skills", fontSize = 12.sp, color = BeeGray)
                     }
-                    FloatingActionButton(
-                        onClick = onCreateAgent,
-                        containerColor = BeeYellow,
-                        contentColor = BeeBlack,
-                        modifier = Modifier.size(44.dp)
-                    ) {
-                        Icon(Icons.Filled.Add, "Crear", modifier = Modifier.size(24.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        IconButton(
+                            onClick = { refreshData() },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(Icons.Filled.Refresh, "Refresh", tint = BeeGray, modifier = Modifier.size(20.dp))
+                        }
+                        FloatingActionButton(
+                            onClick = onCreateAgent,
+                            containerColor = BeeYellow,
+                            contentColor = BeeBlack,
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Icon(Icons.Filled.Add, "Crear", modifier = Modifier.size(24.dp))
+                        }
                     }
                 }
             }
