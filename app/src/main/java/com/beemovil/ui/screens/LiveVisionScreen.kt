@@ -61,6 +61,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.beemovil.llm.local.LocalGemmaProvider
 import com.beemovil.llm.LlmProvider
+import android.util.Log
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -190,6 +192,55 @@ fun LiveVisionScreen(
         }
     }
 
+    // ── BUG-L7 FIX: Pre-warm local engine BEFORE auto-capture loop ──
+    // The LiteRT-LM engine conflicts with camera GPU resources if loaded mid-capture.
+    // Solution: Load engine once when LiveVision opens with a local model selected,
+    // BEFORE the camera capture loop starts taking pictures.
+    var isEngineWarm by remember { mutableStateOf(false) }
+    var engineWarmError by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(selectedModel) {
+        val modelEntry = com.beemovil.llm.ModelRegistry.findModel(selectedModel)
+        val isLocalModel = modelEntry?.provider == "local"
+
+        if (!isLocalModel) {
+            isEngineWarm = true // Cloud models are always "warm"
+            engineWarmError = null
+            return@LaunchedEffect
+        }
+
+        // Check if engine is already loaded
+        if (!LocalGemmaProvider.isInitializing && !LocalGemmaProvider.isEngineBusy()) {
+            // Try to pre-warm the engine on a background thread
+            isEngineWarm = false
+            engineWarmError = null
+            withContext(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    val modelPath = com.beemovil.llm.local.LocalModelManager.getModelPath(selectedModel)
+                    if (modelPath == null) {
+                        engineWarmError = "Modelo no descargado. Ve a Settings."
+                        return@withContext
+                    }
+                    val provider = LocalGemmaProvider.getOrCreate(modelPath, modelEntry?.name ?: selectedModel)
+                    // Trigger engine initialization with a dummy call
+                    // This loads the 2.6GB model into RAM
+                    provider.complete(
+                        listOf(com.beemovil.llm.ChatMessage(role = "user", content = "hi")),
+                        emptyList()
+                    )
+                    isEngineWarm = true
+                    engineWarmError = null
+                } catch (e: Throwable) {
+                    Log.e("LiveVision", "Engine pre-warm failed: ${e.message}", e)
+                    engineWarmError = e.message?.take(100) ?: "Error desconocido"
+                    isEngineWarm = false
+                }
+            }
+        } else {
+            isEngineWarm = true // Already initializing or busy = will be warm soon
+        }
+    }
+
     // Auto-capture loop
     // BUG-01/09/12: Proper lifecycle — use session track to kill stale threads
     LaunchedEffect(isLiveActive, intervalSeconds) {
@@ -228,6 +279,22 @@ fun LiveVisionScreen(
                 liveResult = "[WARN] Configura API key de $loopProviderType"
                 return@LaunchedEffect
             }
+
+            // BUG-L7 FIX: For local models, wait for engine to be warm before starting loop
+            if (loopProviderType == "local") {
+                // Wait up to 120 seconds for engine to warm up (it's loading in the pre-warm LaunchedEffect)
+                var waitCount = 0
+                while (!isEngineWarm && engineWarmError == null && waitCount < 240) {
+                    kotlinx.coroutines.delay(500)
+                    waitCount++
+                    if (!isLiveActive) return@LaunchedEffect
+                }
+                if (!isEngineWarm) {
+                    liveResult = "[WARN] Motor local no pudo cargar: ${engineWarmError ?: "timeout"}. Cambia a modelo cloud."
+                    return@LaunchedEffect
+                }
+            }
+
             loopProvider = LlmFactory.createProvider(loopProviderType, loopApiKey, loopModel)
         } catch (e: Exception) {
             liveResult = "[ERR] ${e.message?.take(80)}"
