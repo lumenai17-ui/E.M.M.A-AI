@@ -1,5 +1,11 @@
 package com.beemovil.ui.screens
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.os.Environment
+import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
@@ -16,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -23,6 +30,9 @@ import androidx.compose.ui.unit.sp
 import com.beemovil.agent.*
 import com.beemovil.ui.ChatViewModel
 import com.beemovil.ui.theme.*
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.*
 
 /**
  * WorkflowScreen — Visual workflow executor with n8n-style node display.
@@ -34,7 +44,8 @@ import com.beemovil.ui.theme.*
 @Composable
 fun WorkflowScreen(
     viewModel: ChatViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onSendToChat: ((String, String) -> Unit)? = null  // (agentId, content) -> navigate to chat
 ) {
     var selectedWorkflow by remember { mutableStateOf<Workflow?>(null) }
     var userInput by remember { mutableStateOf("") }
@@ -102,6 +113,9 @@ fun WorkflowScreen(
                         selectedWorkflow = null
                         userInput = ""
                     }
+                },
+                onSendToChat = { content ->
+                    onSendToChat?.invoke("main", content)
                 }
             )
         } else if (selectedWorkflow != null) {
@@ -367,8 +381,10 @@ private fun WorkflowInputView(
 private fun WorkflowExecutionView(
     run: WorkflowRun,
     isRunning: Boolean,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onSendToChat: ((String) -> Unit)? = null
 ) {
+    val context = LocalContext.current
     val scrollState = rememberScrollState()
 
     Column(
@@ -456,6 +472,109 @@ private fun WorkflowExecutionView(
                         color = BeeWhite.copy(alpha = 0.9f),
                         lineHeight = 18.sp
                     )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // ── File Delivery Actions ──
+            Text(
+                "ENTREGAR RESULTADO",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = BeeYellow,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            // Row 1: Copy + Share
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Copy to clipboard
+                OutlinedButton(
+                    onClick = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.setPrimaryClip(ClipData.newPlainText("Workflow Result", run.finalOutput))
+                        Toast.makeText(context, "Copiado al portapapeles", Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, BeeGray.copy(alpha = 0.3f)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = BeeWhite)
+                ) {
+                    Icon(Icons.Filled.ContentCopy, "Copy", modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Copiar", fontSize = 12.sp)
+                }
+
+                // Share via Android
+                OutlinedButton(
+                    onClick = {
+                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_SUBJECT, "BeeMovil: ${run.workflow.name}")
+                            putExtra(Intent.EXTRA_TEXT, run.finalOutput)
+                        }
+                        context.startActivity(Intent.createChooser(shareIntent, "Compartir resultado"))
+                    },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, BeeGray.copy(alpha = 0.3f)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = BeeWhite)
+                ) {
+                    Icon(Icons.Filled.Share, "Share", modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Compartir", fontSize = 12.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Row 2: Save file + Send to chat
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Save to Downloads
+                OutlinedButton(
+                    onClick = {
+                        try {
+                            val ts = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+                            val fileName = "beemovil_${run.workflow.id}_$ts.txt"
+                            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                            val file = File(downloadsDir, fileName)
+                            file.writeText(run.finalOutput)
+                            Toast.makeText(context, "Guardado: $fileName", Toast.LENGTH_LONG).show()
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, BeeGray.copy(alpha = 0.3f)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = BeeWhite)
+                ) {
+                    Icon(Icons.Filled.SaveAlt, "Save", modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Guardar", fontSize = 12.sp)
+                }
+
+                // Send to agent chat
+                Button(
+                    onClick = {
+                        onSendToChat?.invoke(run.finalOutput)
+                    },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = BeeYellow,
+                        contentColor = BeeBlack
+                    )
+                ) {
+                    Icon(Icons.Filled.Send, "Send", modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Al Chat", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
 

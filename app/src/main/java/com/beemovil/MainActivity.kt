@@ -347,7 +347,10 @@ class MainActivity : ComponentActivity() {
                             "workflows" -> {
                                 WorkflowScreen(
                                     viewModel = viewModel,
-                                    onBack = { viewModel.currentScreen.value = "dashboard" }
+                                    onBack = { viewModel.currentScreen.value = "dashboard" },
+                                    onSendToChat = { agentId, content ->
+                                        viewModel.prefillAgentChat(agentId, "Resultado del workflow:\n\n$content")
+                                    }
                                 )
                             }
                             "notification_dashboard" -> {
