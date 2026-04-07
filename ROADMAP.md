@@ -426,65 +426,76 @@
 
 ---
 
-### FASE 25 — Browser Agent Mode
-> *WebView + chat panel + JS bridge = Puppeteer movil*
+### FASE 25 — Agent Intelligence + Chat Fix
+> *Hacer que los agentes se sientan inteligentes de verdad — PRIORIDAD*
 
-**25-A: Split View + Chat Panel**
-- [ ] Layout: WebView (70%) + Agent Chat (30%)
-- [ ] Chat panel con historial de acciones del browser
-- [ ] Toggle full-screen / split mode
-- [ ] Agent puede "ver" y "actuar" sobre la pagina
-
-**25-B: JS Bridge (WebView ↔ Agent)**
-- [ ] read_page → document.body.innerText via evaluateJavascript()
-- [ ] click_element → querySelector(selector).click()
-- [ ] fill_form → set input values programaticamente
-- [ ] extract_links → retorna todos los `<a href>` de la pagina
-- [ ] extract_data → CSS selector → tabla de datos
-- [ ] screenshot → captura como base64 para vision AI
-- [ ] scroll_to → scroll a posicion/elemento
-
----
-
-### FASE 26 — Deploy Agent (Netlify + Vercel)
-> *Publica sitios web directamente desde el telefono*
-
-- [ ] `DeploySkill.kt` — skill de deploy con 2 providers
-- [ ] Netlify: deploy via API (drag-and-drop zip)
-- [ ] Vercel: deploy via API (project upload)
-- [ ] Deploy desde FileExplorer (selecciona carpeta → deploy)
-- [ ] Deploy desde chat ("publica mi landing page")
-- [ ] Historial de deploys con URLs activas
-- [ ] API keys en Settings (Netlify token, Vercel token)
-- [ ] Badge "LIVE" en archivos que tienen deploy activo
-
----
-
-### FASE 27 — Agent Intelligence + Chat Persistence
-> *Hacer que los agentes se sientan inteligentes de verdad*
-
-**27-A: Auto-Memory + Soul Profile**
+**25-A: Auto-Memory + Soul Profile**
 - [ ] Auto-extract memorias despues de cada conversacion (>3 turnos)
 - [ ] Regex-based fact extraction (nombre, email, empresa, preferencias)
 - [ ] Soul profile auto-population (se llena solo)
 - [ ] Memory deduplication (no repetir hechos)
 
-**27-B: Action Log + Timeline**
-- [ ] Tabla `action_log`: timestamp, agent, skill, params, result, duration
-- [ ] `ActionLogScreen.kt` con timeline visual
-- [ ] Filtrar por agente, skill, fecha
-- [ ] Accesible desde Dashboard
-
-**27-C: Thinking Visible**
-- [ ] `<think>` tags parsing → UI expandible "Pensando..."
-- [ ] Mostrar razonamiento del agente paso a paso
-- [ ] Colapsable (tap para expandir/colapsar)
-
-**27-D: Chat Persistence Upgrade**
+**25-B: File Reading Fix (el agente no lee sus propios archivos)**
+- [ ] Fix: archivos generados por agente -> path se inyecta al contexto
+- [ ] Fix: "Enviar al chat" desde FileExplorer -> leer TODO tipo de archivo
+- [ ] HTML, JS, CSS generados -> contextChunk completo
 - [ ] filePaths persisten en ChatHistoryDB (columna nueva)
 - [ ] Imagenes/videos se siguen mostrando al reabrir chat
+
+**25-C: Email Directo (sin abrir Gmail)**
+- [ ] `EmailSkill.kt` rewrite: usar `EmailService.sendEmail()` directo con OAuth
+- [ ] Si tiene Google Workspace -> envia via XOAUTH2 automaticamente
+- [ ] Si tiene IMAP/SMTP config -> envia via SMTP directo
+- [ ] Fallback: Intent (solo si no hay config)
+- [ ] El agente CONFIRMA antes de enviar
+
+**25-D: Dashboard AI Insight Fix**
+- [ ] Eliminar frases hardcoded (SIEMPRE usar LLM — cloud o local)
+- [ ] Fallback solo: "Cargando..." mientras LLM inicia (primeros 30 seg)
+- [ ] Mas contexto: memorias + soul + calendario + hora + dia
+- [ ] Refresh button (tap para regenerar)
+- [ ] Variedad: tip, dato curioso, recordatorio, motivacion (rotar tipo)
+
+**25-E: Action Log + Thinking Visible**
+- [ ] Tabla `action_log`: timestamp, agent, skill, params, result, duration
+- [ ] `ActionLogScreen.kt` con timeline visual
+- [ ] `<think>` tags parsing -> UI expandible "Pensando..."
 - [ ] `NavigateAppSkill.kt` — el agente navega screens del app
 - [ ] Audit completo: que puede y que NO puede hacer el agente
+
+---
+
+### FASE 26 — Browser Agent Mode
+> *WebView + chat panel + JS bridge = Puppeteer movil*
+
+**26-A: Split View + Chat Panel**
+- [ ] Layout: WebView (70%) + Agent Chat (30%)
+- [ ] Chat panel con historial de acciones del browser
+- [ ] Toggle full-screen / split mode
+- [ ] Agent puede "ver" y "actuar" sobre la pagina
+
+**26-B: JS Bridge (WebView - Agent)**
+- [ ] read_page -> evaluateJavascript()
+- [ ] click_element -> querySelector(selector).click()
+- [ ] fill_form -> set input values
+- [ ] extract_links -> todos los a href de la pagina
+- [ ] extract_data -> CSS selector -> tabla de datos
+- [ ] screenshot -> captura como base64 para vision AI
+- [ ] scroll_to -> scroll a posicion/elemento
+
+---
+
+### FASE 27 — Deploy Agent (Netlify + Vercel)
+> *Publica sitios web directamente desde el telefono*
+
+- [ ] `DeploySkill.kt` — skill de deploy con 2 providers
+- [ ] Netlify: deploy via API (drag-and-drop zip)
+- [ ] Vercel: deploy via API (project upload)
+- [ ] Deploy desde FileExplorer (selecciona carpeta -> deploy)
+- [ ] Deploy desde chat ("publica mi landing page")
+- [ ] Historial de deploys con URLs activas
+- [ ] API keys en Settings (Netlify token, Vercel token)
+- [ ] Badge "LIVE" en archivos que tienen deploy activo
 
 ---
 
@@ -502,11 +513,13 @@
 
 ---
 
-### FASE 30 — Skills Expansion (39 a 65+)
-- [ ] 26 nuevos skills de negocio/productividad
+### FASE 30 — Skills Expansion (40 a 65+)
+- [ ] 25 nuevos skills de negocio/productividad
+- [ ] `SSHTerminalSkill.kt` — SSH a servidores remotos (terminal CLI, controlar apps)
 - [ ] Social media posting
 - [ ] Invoice generation
 - [ ] Data analysis
+- [ ] Music control via SSH/API (Spotify, YouTube Music)
 
 ---
 
@@ -519,6 +532,8 @@
 ### FASE 32 — Play Store + Distribucion
 - [ ] R8 optimization, ProGuard, APK size reduction
 - [ ] Privacy policy, screenshots, listing
+- [ ] Google OAuth scope verification (Gmail -> Gmail API REST si necesario)
+- [ ] Release keystore SHA-1 para OAuth Client ID produccion
 - [ ] Beta testing round
 
 ---
@@ -526,15 +541,18 @@
 ## POST-LANZAMIENTO
 
 ### FASE 33 — Social Media Hub
-### FASE 34 — Voice Realtime Mode (Full-Duplex)
-> *Conversacion estilo ChatGPT Voice — interrumpibilidad natural*
 
+### FASE 34 — Voice Realtime Mode (Full-Duplex)
+> *Conversacion estilo Alexa — siempre escuchando*
+
+- [ ] ForegroundService con wake word detection ("Hey Bee")
 - [ ] Deepgram WebSocket streaming STT (conexion persistente)
 - [ ] VAD (Voice Activity Detection) — detecta voz en tiempo real
 - [ ] Barge-in: mic abierto durante TTS, si hablas = corta al instante
 - [ ] Echo cancellation (AcousticEchoCanceler)
 - [ ] Streaming TTS: empieza a hablar antes de respuesta completa
 - [ ] Full-duplex audio pipeline
+- [ ] Battery optimization: DSP-level keyword detection si hardware lo permite
 
 ---
 
@@ -542,13 +560,13 @@
 
 | Metrica | Actual | Target v6.0 |
 |---------|--------|-------------|
-| Version | v5.5.0 | v6.0 |
-| Skills | 39 | 65+ |
+| Version | v5.6.1 | v6.0 |
+| Skills | 40 | 65+ |
 | Pantallas | 19 | ~24 |
 | Providers LLM | 3 + 2 media | 4 + 3 media |
-| Fases completadas | 26 de 34 | 32 (pre-launch) |
-| APK tamano | ~82 MB | Optimizar R8 |
-| Hito actual | **PROXIMO: Fase 24** (File Explorer Real + Google Drive) |
+| Fases completadas | 27 de 34 | 32 (pre-launch) |
+| APK tamano | ~85 MB | Optimizar R8 |
+| Google Workspace | ✅ Configurado (Web Client ID activo) |
+| Hito actual | **PROXIMO: Fase 25** (Browser Agent Mode) |
 
 ---
-
