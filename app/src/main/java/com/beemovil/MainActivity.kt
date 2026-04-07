@@ -22,6 +22,7 @@ import com.beemovil.agent.CustomAgentDB
 import com.beemovil.memory.ChatHistoryDB
 import com.beemovil.memory.NotificationLogDB
 import com.beemovil.memory.TaskDB
+import com.beemovil.workflow.WorkflowHistoryDB
 import com.beemovil.skills.*
 import com.beemovil.ui.ChatUiMessage
 import com.beemovil.ui.ChatViewModel
@@ -117,6 +118,9 @@ class MainActivity : ComponentActivity() {
         // Phase 19D: Notification Intelligence
         val notifDB = NotificationLogDB(this)
         try { skills["notification_query"] = NotificationQuerySkill(notifDB) } catch (e: Throwable) { Log.e("BeeMovil", "NotifQuerySkill: ${e.message}") }
+
+        // Phase 20D: Workflow History
+        val workflowHistoryDB = WorkflowHistoryDB(this)
 
         // Load saved preferences
         val prefs = getSharedPreferences("beemovil", Context.MODE_PRIVATE)
@@ -350,7 +354,8 @@ class MainActivity : ComponentActivity() {
                                     onBack = { viewModel.currentScreen.value = "dashboard" },
                                     onSendToChat = { agentId, content ->
                                         viewModel.prefillAgentChat(agentId, "Resultado del workflow:\n\n$content")
-                                    }
+                                    },
+                                    historyDB = workflowHistoryDB
                                 )
                             }
                             "notification_dashboard" -> {

@@ -37,7 +37,9 @@ data class WorkflowStep(
     /** The prompt/instruction for this step. Use {input} to reference previous step output */
     val prompt: String = "",
     /** For SKILL type: fixed params to merge with dynamic input */
-    val fixedParams: Map<String, String> = emptyMap()
+    val fixedParams: Map<String, String> = emptyMap(),
+    /** Override the LLM model for this step (null = use agent default) */
+    val modelOverride: String? = null
 )
 
 enum class StepType {
@@ -54,7 +56,12 @@ data class WorkflowRun(
     var currentStepIndex: Int = -1,
     var isComplete: Boolean = false,
     var isFailed: Boolean = false,
-    var finalOutput: String = ""
+    var isCancelled: Boolean = false,
+    var finalOutput: String = "",
+    /** Waiting for user action on error (retry/skip/cancel) */
+    var pendingErrorAction: Boolean = false,
+    /** DB record ID for persistence */
+    var historyId: Long = -1
 )
 
 data class StepState(
@@ -71,4 +78,13 @@ enum class StepStatus {
     COMPLETED,  // Done
     FAILED,     // Error
     SKIPPED     // Skipped
+}
+
+/**
+ * Actions available when a workflow step fails.
+ */
+enum class StepErrorAction {
+    RETRY,      // Re-execute the failed step
+    SKIP,       // Skip to next step (use previous output)
+    CANCEL      // Cancel entire workflow
 }
