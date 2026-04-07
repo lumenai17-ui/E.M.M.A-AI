@@ -97,6 +97,13 @@ fun LiveVisionScreen(
     val sessionManager = remember { VisionSessionManager(context) }
     var showSessionDialog by remember { mutableStateOf(false) }
 
+    // 22-B: GPS Navigator + Mini Map
+    val gpsNavigator = remember { GpsNavigator() }
+    var showNavInput by remember { mutableStateOf(false) }
+    var navDestinationText by remember { mutableStateOf("") }
+    var navUpdate by remember { mutableStateOf(NavigationUpdate.idle()) }
+    var poiSuggestions by remember { mutableStateOf<List<PoiSuggestion>>(emptyList()) }
+
     // Camera
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
@@ -138,9 +145,16 @@ fun LiveVisionScreen(
     }
 
     // GPS lifecycle
-    LaunchedEffect(visionState.gpsOverlay || visionState.dashcamMode) {
-        if (visionState.gpsOverlay || visionState.dashcamMode) {
-            gpsModule.onLocationUpdate = { data -> gpsData = data }
+    LaunchedEffect(visionState.gpsOverlay || visionState.dashcamMode || visionState.touristGuide) {
+        if (visionState.gpsOverlay || visionState.dashcamMode || visionState.touristGuide) {
+            gpsModule.onLocationUpdate = { data ->
+                gpsData = data
+                // 22-B: Update navigator on every GPS tick
+                if (gpsNavigator.isNavigating) {
+                    navUpdate = gpsNavigator.update(data)
+                    poiSuggestions = gpsNavigator.getContextualSuggestions(data)
+                }
+            }
             gpsModule.start()
         } else {
             gpsModule.stop()
@@ -495,6 +509,19 @@ fun LiveVisionScreen(
         }
 
         // ═══════════════════════════════════════
+        // 22-B: MINI MAP PIP (top-right)
+        // ═══════════════════════════════════════
+        if ((visionState.gpsOverlay || visionState.touristGuide) && gpsData.latitude != 0.0) {
+            MiniMapPIP(
+                gpsData = gpsData,
+                navigator = gpsNavigator,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 72.dp, end = 8.dp)
+            )
+        }
+
+        // ═══════════════════════════════════════
         // DASHCAM HUD (top-left under header)
         // ═══════════════════════════════════════
         if (visionState.dashcamMode) {
@@ -673,6 +700,91 @@ fun LiveVisionScreen(
                         visionState.touristGuide, Color(0xFF8BC34A)) {
                         visionState = visionState.copy(touristGuide = it)
                         if (it) visionState = visionState.copy(gpsOverlay = true, voiceNarration = true)
+                    }
+
+                    // ── 22-B: GPS NAVIGATION ──
+                    if (visionState.gpsOverlay || visionState.touristGuide) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        HorizontalDivider(color = Color(0xFF4CAF50).copy(alpha = 0.3f))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("NAVEGACIÓN", fontSize = 10.sp, color = Color(0xFF4CAF50),
+                            fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text("Ingresa destino para navegar", fontSize = 9.sp, color = BeeGray)
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        OutlinedTextField(
+                            value = navDestinationText,
+                            onValueChange = { navDestinationText = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("Ej: Parque Central, OXXO, Aeropuerto...", fontSize = 10.sp, color = BeeGray) },
+                            maxLines = 1,
+                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = BeeWhite),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color(0xFF4CAF50),
+                                unfocusedBorderColor = BeeGray.copy(alpha = 0.3f),
+                                cursorColor = Color(0xFF4CAF50)
+                            ),
+                            trailingIcon = {
+                                if (gpsNavigator.isNavigating) {
+                                    IconButton(onClick = {
+                                        gpsNavigator.stopNavigation()
+                                        navUpdate = NavigationUpdate.idle()
+                                    }) {
+                                        Icon(Icons.Filled.Close, "Stop", tint = Color(0xFFF44336), modifier = Modifier.size(18.dp))
+                                    }
+                                } else {
+                                    IconButton(onClick = {
+                                        if (navDestinationText.isNotBlank()) {
+                                            // Try geocoder first
+                                            Thread {
+                                                try {
+                                                    val geocoder = android.location.Geocoder(context, java.util.Locale("es"))
+                                                    val results = geocoder.getFromLocationName(navDestinationText, 1)
+                                                    if (!results.isNullOrEmpty()) {
+                                                        val addr = results[0]
+                                                        val dest = NavigationDestination(
+                                                            name = navDestinationText,
+                                                            latitude = addr.latitude,
+                                                            longitude = addr.longitude,
+                                                            resolvedBy = "geocoder"
+                                                        )
+                                                        gpsNavigator.startNavigation(dest)
+                                                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                                            navUpdate = gpsNavigator.update(gpsData)
+                                                            poiSuggestions = gpsNavigator.getContextualSuggestions(gpsData)
+                                                            Toast.makeText(context, "🗺️ Navegando a: ${navDestinationText}", Toast.LENGTH_SHORT).show()
+                                                        }
+                                                    } else {
+                                                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                                            Toast.makeText(context, "No se encontró: $navDestinationText", Toast.LENGTH_SHORT).show()
+                                                        }
+                                                    }
+                                                } catch (e: Exception) {
+                                                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                                        Toast.makeText(context, "Error: ${e.message?.take(40)}", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }
+                                            }.start()
+                                        }
+                                    }) {
+                                        Icon(Icons.Filled.Navigation, "Go", tint = Color(0xFF4CAF50), modifier = Modifier.size(18.dp))
+                                    }
+                                }
+                            }
+                        )
+
+                        // Nav status inline
+                        if (gpsNavigator.isNavigating) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(navUpdate.arrow, fontSize = 16.sp)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(navUpdate.distance, fontSize = 12.sp, color = Color(0xFF4CAF50), fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.weight(1f))
+                                Text(navUpdate.eta, fontSize = 11.sp, color = BeeGray)
+                            }
+                        }
                     }
 
                     // ── 22-E: NARRATOR PERSONALITY ──
@@ -979,6 +1091,26 @@ fun LiveVisionScreen(
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
         ) {
+            // 22-B: Navigation HUD (when navigating)
+            if (gpsNavigator.isNavigating && navUpdate.phase != NavPhase.IDLE) {
+                NavigationHUD(
+                    navUpdate = navUpdate,
+                    destinationName = gpsNavigator.destination?.name ?: "",
+                    onPoiClick = { query ->
+                        // Use the query as a voice prompt for the AI
+                        conversation.addUserQuestion(query)
+                        triggerSmartCapture(
+                            imageCapture, cameraExecutor, viewModel, context,
+                            selectedModel, query, visionState, gpsData,
+                            dgVoice, dashcamLogger, conversation, selectedPersonality,
+                            onResult = { liveResult = it; frameCount++ },
+                            onProcessing = { isProcessing = it }
+                        )
+                    },
+                    poiSuggestions = poiSuggestions
+                )
+            }
+
             // 22-H: Quick Actions Bar (Google Lens-style, always visible)
             AnimatedVisibility(
                 visible = !isLiveActive && !isProcessing,
