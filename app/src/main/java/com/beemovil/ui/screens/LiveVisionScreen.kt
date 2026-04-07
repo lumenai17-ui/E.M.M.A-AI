@@ -409,7 +409,7 @@ fun LiveVisionScreen(
             Text("Permisos necesarios", fontWeight = FontWeight.Bold,
                 fontSize = 18.sp, color = BeeWhite)
             Spacer(modifier = Modifier.height(8.dp))
-            Text("Vision Pro necesita acceso a cámara y micrófono", fontSize = 13.sp, color = BeeGray)
+            Text("#livevision necesita acceso a cámara y micrófono", fontSize = 13.sp, color = BeeGray)
             Spacer(modifier = Modifier.height(16.dp))
             Button(
                 onClick = {
@@ -568,7 +568,7 @@ fun LiveVisionScreen(
                     Icon(Icons.Filled.ArrowBack, "Back", tint = BeeWhite)
                 }
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Vision Pro", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = BeeWhite)
+                    Text("#livevision", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = BeeWhite)
                     val modelName = LlmFactory.VISION_MODELS.find { it.id == selectedModel }?.name ?: selectedModel
                     Text("$modelName · ${intervalSeconds}s", fontSize = 11.sp, color = BeeGray)
                 }
@@ -1273,7 +1273,7 @@ fun LiveVisionScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                if (visionState.arTextOverlay) "VISION AI" else "RECONOCIMIENTO",
+                                if (visionState.arTextOverlay) "#livevision" else "#livevision",
                                 fontSize = 10.sp, color = accentColor,
                                 fontWeight = FontWeight.Bold, letterSpacing = 1.sp
                             )
