@@ -181,11 +181,11 @@ object ModelRegistry {
 
     val LOCAL = listOf(
         ModelEntry("gemma4-e2b", "Gemma 4 E2B (Rapido)", "local",
-            Category.LOCAL,
-            sizeLabel = "~2.6 GB", description = "Optimizado para velocidad. Chat general."),
+            Category.LOCAL, hasVision = true,
+            sizeLabel = "~2.6 GB", description = "Offline. Texto + Vision en dispositivo."),
         ModelEntry("gemma4-e4b", "Gemma 4 E4B (Inteligente)", "local",
-            Category.LOCAL,
-            sizeLabel = "~3.7 GB", description = "Mayor razonamiento. Requiere mas RAM.")
+            Category.LOCAL, hasVision = true,
+            sizeLabel = "~3.7 GB", description = "Offline. Vision + razonamiento avanzado.")
     )
 
     // ═══════════════════════════════════════════════════════════
@@ -202,7 +202,12 @@ object ModelRegistry {
 
     /** Get all vision-capable models (for CameraScreen etc) */
     fun getVisionModels(): List<ModelEntry> {
-        return (OLLAMA_CLOUD + OPENROUTER).filter { it.hasVision }
+        // Include downloaded local models + cloud models with vision
+        val cloudVision = (OLLAMA_CLOUD + OPENROUTER).filter { it.hasVision }
+        val localVision = LOCAL.filter { it.hasVision && 
+            com.beemovil.llm.local.LocalModelManager.isModelDownloaded(it.id) 
+        }
+        return localVision + cloudVision // Local first for easy access
     }
 
     /** Get models grouped by category for a provider */

@@ -200,13 +200,41 @@ fun LiveVisionScreen(
 
                             Thread {
                                 try {
-                                    val currentProviderType = viewModel.currentProvider.value
+                                    // 22-G: Smart provider routing — detect local vs cloud
+                                    val modelEntry = com.beemovil.llm.ModelRegistry.findModel(selectedModel)
+                                    val isLocalModel = modelEntry?.provider == "local"
+                                    
+                                    // Detect network availability for auto-fallback
+                                    val cm = context.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+                                    val hasNetwork = cm?.activeNetwork != null
+                                    
+                                    val currentProviderType = when {
+                                        isLocalModel -> "local"
+                                        !hasNetwork -> {
+                                            // Airplane mode: try local if downloaded
+                                            val localModel = com.beemovil.llm.local.LocalModelManager.getDownloadedModels().firstOrNull()
+                                            if (localModel != null) "local" else viewModel.currentProvider.value
+                                        }
+                                        else -> viewModel.currentProvider.value
+                                    }
+                                    
+                                    // If forced to local by airplane mode, use first downloaded model
+                                    val effectiveModel = if (!isLocalModel && currentProviderType == "local") {
+                                        com.beemovil.llm.local.LocalModelManager.getDownloadedModels().firstOrNull()?.id ?: selectedModel
+                                    } else selectedModel
+
                                     val apiKey = when (currentProviderType) {
                                         "openrouter" -> com.beemovil.security.SecurePrefs.get(context).getString("openrouter_api_key", "") ?: ""
                                         "ollama" -> com.beemovil.security.SecurePrefs.get(context).getString("ollama_api_key", "") ?: ""
                                         else -> ""
                                     }
                                     if (apiKey.isBlank() && currentProviderType != "local") {
+                                        // No API key AND no local model — can't do anything
+                                        if (!hasNetwork || com.beemovil.llm.local.LocalModelManager.getDownloadedModels().isEmpty()) {
+                                            liveResult = "[WARN] Sin red y sin modelo local. Descarga Gemma 4 en Settings."
+                                            isProcessing = false
+                                            return@Thread
+                                        }
                                         liveResult = "[WARN] Configura API key de ${currentProviderType}"
                                         isProcessing = false
                                         return@Thread
@@ -256,7 +284,7 @@ fun LiveVisionScreen(
                                     val provider = LlmFactory.createProvider(
                                         providerType = currentProviderType,
                                         apiKey = apiKey,
-                                        model = selectedModel
+                                        model = effectiveModel
                                     )
                                     val msgs = listOf(
                                         ChatMessage(role = "system", content = systemPrompt),
@@ -440,6 +468,7 @@ fun LiveVisionScreen(
 
                 // Active module indicators
                 Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    if (selectedModel.startsWith("gemma4-e")) ModuleChip("📱OFF", Color(0xFF4CAF50))
                     if (visionState.gpsOverlay) ModuleChip("GPS", Color(0xFF4CAF50))
                     if (visionState.voiceNarration) ModuleChip("VOZ", Color(0xFF2196F3))
                     if (visionState.dashcamMode) ModuleChip("REC", Color(0xFFF44336))
@@ -1018,20 +1047,38 @@ fun LiveVisionScreen(
                     Spacer(modifier = Modifier.height(4.dp))
                     LlmFactory.VISION_MODELS.forEach { model ->
                         val isSelected = selectedModel == model.id
+                        val isLocal = model.id.startsWith("gemma4-e")
                         Surface(
                             onClick = {
                                 selectedModel = model.id
                                 prefs.edit().putString("vision_model", model.id).apply()
                             },
-                            color = if (isSelected) BeeYellow.copy(alpha = 0.15f) else Color.Transparent,
+                            color = when {
+                                isSelected && isLocal -> Color(0xFF4CAF50).copy(alpha = 0.15f)
+                                isSelected -> BeeYellow.copy(alpha = 0.15f)
+                                else -> Color.Transparent
+                            },
                             shape = RoundedCornerShape(6.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text(model.name, fontSize = 12.sp,
-                                    color = if (isSelected) BeeYellow else Color(0xFFE0E0E0))
-                                Spacer(modifier = Modifier.weight(1f))
-                                if (isSelected) Icon(Icons.Filled.CheckCircle, "Sel", tint = BeeYellow, modifier = Modifier.size(14.dp))
+                                if (isLocal) {
+                                    Text("📱 ", fontSize = 12.sp)
+                                }
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(model.name, fontSize = 12.sp,
+                                        color = when {
+                                            isSelected && isLocal -> Color(0xFF4CAF50)
+                                            isSelected -> BeeYellow
+                                            else -> Color(0xFFE0E0E0)
+                                        })
+                                    if (isLocal) {
+                                        Text("OFFLINE · Sin internet", fontSize = 9.sp, color = Color(0xFF4CAF50).copy(alpha = 0.7f))
+                                    }
+                                }
+                                if (isSelected) Icon(Icons.Filled.CheckCircle, "Sel",
+                                    tint = if (isLocal) Color(0xFF4CAF50) else BeeYellow,
+                                    modifier = Modifier.size(14.dp))
                             }
                         }
                     }
