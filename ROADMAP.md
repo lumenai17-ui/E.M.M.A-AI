@@ -1,5 +1,5 @@
 # 🐝 Bee-Movil Native — Roadmap & Checklist
-### Ultima actualizacion: 7 de Abril 2026 · v5.7.2
+### Ultima actualizacion: 7 de Abril 2026 · v5.7.4
 
 ---
 
@@ -470,9 +470,10 @@
 
 ---
 
-### ✅ FASE 25B — Local LLM Bug Sweep (v5.7.2)
-> *6 bugs criticos en la infraestructura del modelo local (Gemma 4 E2B/E4B)*
+### ✅ FASE 25B — Local LLM Bug Sweep + LiveVision Upgrades (v5.7.2 → v5.7.4)
+> *8 bugs criticos + 1 feature nueva en la infraestructura del modelo local*
 
+**v5.7.2 — Local LLM Stability**
 - [x] BUG-L1: Singleton provider cache — `LlmFactory.createProvider("local")` ya no crea instancia nueva cada llamada
 - [x] BUG-L2: `ReentrantLock.tryLock()` reemplaza `@Synchronized` — elimina deadlocks entre init e inference
 - [x] BUG-L2b: `AtomicBoolean isBusy` guard — inferencias concurrentes fallan rapido en vez de bloquear
@@ -481,6 +482,20 @@
 - [x] BUG-L5: LiveVision `AtomicBoolean isProcessing` + provider cacheado por sesion de loop
 - [x] BUG-L5b: LiveVision skip tick si `isEngineBusy()` — previene acumulacion de threads bloqueados
 - [x] BUG-L6: Dashboard insight no carga modelo local innecesariamente
+
+**v5.7.3 — MiniMapPIP con tiles reales de OpenStreetMap**
+- [x] Reemplaza Canvas compass con tiles PNG reales de tile.openstreetmap.org
+- [x] Cache: LruCache memoria (30 tiles ~1MB) + disco (7 dias expiry)
+- [x] Carga 3x3 grid de tiles — funciona offline despues de primer carga
+- [x] Dark overlay + GPS blue dot + heading indicator sobre mapa real
+- [x] Zero API keys, zero costo, zero dependencias extra
+
+**v5.7.4 — Fix crash LiveVision con modelo local**
+- [x] BUG-L7: Pre-warm engine ANTES del auto-capture loop
+- [x] Root cause: conflicto GPU/NPU entre camera hardware y LiteRT-LM engine
+- [x] Engine se carga en Dispatchers.IO antes de iniciar capturas
+- [x] Auto-capture loop espera hasta 120s que engine este warm
+- [x] Catch Throwable para capturar native crashes del SDK C++
 
 ---
 
@@ -579,7 +594,7 @@
 
 | Metrica | Actual | Target v6.0 |
 |---------|--------|-------------|
-| Version | v5.7.2 | v6.0 |
+| Version | v5.7.4 | v6.0 |
 | Skills | 40 | 65+ |
 | Pantallas | 19 | ~24 |
 | Providers LLM | 3 + 2 media | 4 + 3 media |
