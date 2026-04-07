@@ -55,6 +55,9 @@ import com.beemovil.ui.theme.*
 import com.beemovil.vision.*
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import com.beemovil.llm.local.LocalGemmaProvider
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -92,6 +95,9 @@ fun LiveVisionScreen(
     // 22-A: Conversation engine (history, repetition detection, smart prompts)
     val conversation = remember { VisionConversation() }
     var selectedPersonality by remember { mutableStateOf<NarratorPersonality?>(null) }
+    
+    // 25: Local LLM Loading State
+    val isLLMLoading by LocalGemmaProvider.engineLoadingState.collectAsState()
 
     // 22-A: Native speech input (works without Deepgram API key)
     val nativeSpeech = remember { NativeSpeechInput(context) }
@@ -482,16 +488,19 @@ fun LiveVisionScreen(
         // ═══════════════════════════════════════
         if (detectedFaces.isNotEmpty()) {
             androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
-                // Adjust scale because camera preview likely doesn't match raw image dims exactly
-                val scaleX = size.width / imageHeight.toFloat() // Portrait Mode (Width/Height swap)
-                val scaleY = size.height / imageWidth.toFloat()
+                // Adjust scale using Center-Crop logic to match PreviewView scaleType=FILL_CENTER
+                val scale = maxOf(size.width / imageWidth.toFloat(), size.height / imageHeight.toFloat())
+                val scaledWidth = imageWidth * scale
+                val scaledHeight = imageHeight * scale
+                val offsetX = (size.width - scaledWidth) / 2f
+                val offsetY = (size.height - scaledHeight) / 2f
                 
                 detectedFaces.forEach { face ->
-                    // Map bounding box to screen coordinates (assuming device is in Portrait)
-                    val left = face.boundingBox.top * scaleX
-                    val top = (imageWidth - face.boundingBox.right) * scaleY
-                    val right = face.boundingBox.bottom * scaleX
-                    val bottom = (imageWidth - face.boundingBox.left) * scaleY
+                    // Map bounding box to screen coordinates using scale and offset
+                    val left = face.boundingBox.left * scale + offsetX
+                    val top = face.boundingBox.top * scale + offsetY
+                    val right = face.boundingBox.right * scale + offsetX
+                    val bottom = face.boundingBox.bottom * scale + offsetY
                     
                     val rectWidth = right - left
                     val rectHeight = bottom - top
@@ -1534,6 +1543,49 @@ fun LiveVisionScreen(
                     }
                 }
             )
+        }
+    } // end dialog
+
+    // 25: Local LLM Server Loading Dialog
+    if (isLLMLoading) {
+        Dialog(
+            onDismissRequest = { /* Cannot dismiss by tapping outside */ },
+            properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = BeeBlackLight,
+                border = BorderStroke(1.dp, BeeGray),
+                modifier = Modifier.padding(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    CircularProgressIndicator(color = BeeYellow, modifier = Modifier.size(48.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Encendiendo Motor...",
+                        color = BeeWhite,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Cargando modelo de Visión en la memoria RAM.\n\nEsto asume mucho ancho de banda. Por favor, espera antes de usar la cámara.",
+                        color = BeeGray,
+                        fontSize = 13.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Button(
+                        onClick = { LocalGemmaProvider.releaseEngine() },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE53935))
+                    ) {
+                        Text("Detener / Cancelar", color = BeeWhite, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
         }
     }
 }

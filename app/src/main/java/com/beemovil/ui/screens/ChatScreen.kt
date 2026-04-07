@@ -55,6 +55,9 @@ import com.beemovil.files.AttachedFile
 import com.beemovil.files.FileType
 import kotlinx.coroutines.launch
 import java.io.File
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import com.beemovil.llm.local.LocalGemmaProvider
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,6 +79,9 @@ fun ChatScreen(viewModel: ChatViewModel, onSettingsClick: () -> Unit = {}, onBac
             viewModel.pendingPrompt.value = ""
         }
     }
+
+    // 25: Local LLM Loading State
+    val isLLMLoading by LocalGemmaProvider.engineLoadingState.collectAsState()
 
     // File picker — uses AttachmentManager for real context extraction
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -456,6 +462,49 @@ fun ChatScreen(viewModel: ChatViewModel, onSettingsClick: () -> Unit = {}, onBac
                             ),
                             shape = RoundedCornerShape(20.dp)
                         )
+                    }
+                }
+            }
+        }
+    }
+
+    // 25: Local LLM Server Loading Dialog
+    if (isLLMLoading) {
+        Dialog(
+            onDismissRequest = { /* Cannot dismiss by tapping outside */ },
+            properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = BeeBlackLight,
+                border = BorderStroke(1.dp, BeeGray),
+                modifier = Modifier.padding(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    CircularProgressIndicator(color = BeeYellow, modifier = Modifier.size(48.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Encendiendo Motor...",
+                        color = BeeWhite,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Cargando modelo LLM de N-Billion parámetros en la memoria RAM.\n\nEsto puede sobrecalentar tu dispositivo. Por favor, espera sin salir de la app...",
+                        color = BeeGray,
+                        fontSize = 13.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Button(
+                        onClick = { LocalGemmaProvider.releaseEngine() },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE53935))
+                    ) {
+                        Text("Detener / Cancelar", color = BeeWhite, fontWeight = FontWeight.Bold)
                     }
                 }
             }

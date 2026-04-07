@@ -14,6 +14,7 @@ import android.util.Base64
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.*
+import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
  * LocalGemmaProvider — On-device LLM inference using Gemma 4 via LiteRT-LM.
@@ -43,6 +44,9 @@ class LocalGemmaProvider(
         private var currentModelPath: String? = null
         @Volatile var isInitializing = false
             private set
+            
+        // Emit state for UI Loading Dialog
+        val engineLoadingState = MutableStateFlow(false)
 
         // Store application context for initialization
         var appContext: Context? = null
@@ -65,6 +69,7 @@ class LocalGemmaProvider(
             sharedEngine = null
             currentModelPath = null
             isInitializing = false
+            engineLoadingState.value = false
             Log.i(TAG, "Engine released")
         }
     }
@@ -85,6 +90,7 @@ class LocalGemmaProvider(
 
         Log.i(TAG, "Initializing LiteRT-LM engine from: $modelPath")
         isInitializing = true
+        engineLoadingState.value = true
         val startTime = System.currentTimeMillis()
 
         try {
@@ -112,16 +118,19 @@ class LocalGemmaProvider(
             val elapsed = System.currentTimeMillis() - startTime
             Log.i(TAG, "Engine initialized in ${elapsed}ms")
             isInitializing = false
+            engineLoadingState.value = false
 
             return engine
 
         } catch (e: OutOfMemoryError) {
             isInitializing = false
+            engineLoadingState.value = false
             releaseEngine()
             System.gc()
             throw RuntimeException("[DEV] Sin memoria RAM suficiente para este modelo. Cierra otras apps e intenta de nuevo, o usa un modelo en la nube.")
         } catch (e: Exception) {
             isInitializing = false
+            engineLoadingState.value = false
             releaseEngine()
             throw e
         }
@@ -184,23 +193,7 @@ class LocalGemmaProvider(
             "[DEV] Sin memoria. Cierra otras apps e intenta de nuevo."
         } catch (e: Exception) {
             Log.e(TAG, "Inference failed: ${e.message}", e)
-
-            // Try to recover by releasing and retrying once
-            try {
-                releaseEngine()
-                val engine = getEngine()
-                val conversation = engine.createConversation()
-                try {
-                    val retryPrompt = buildPrompt(messages, tools)
-                    val response = conversation.sendMessage(retryPrompt)
-                    extractText(response)
-                } finally {
-                    try { conversation.close() } catch (_: Exception) {}
-                }
-            } catch (e2: Exception) {
-                Log.e(TAG, "Retry also failed: ${e2.message}", e2)
-                "[WARN] Error en modelo local: ${e.message?.take(200)}"
-            }
+            "[WARN] Error en modelo local: ${e.message?.take(200)}. El proceso ha sido cancelado con seguridad para proteger el dispositivo."
         }
 
         Log.d(TAG, "Response: ${responseText.take(200)}")
