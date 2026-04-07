@@ -3,6 +3,7 @@ package com.beemovil.vision
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Log
+import android.util.LruCache
 import androidx.compose.animation.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -21,12 +22,17 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileOutputStream
 import java.net.URL
 import kotlin.math.*
 
@@ -38,15 +44,21 @@ private val BeeGray = Color(0xFF888888)
 private val NavGreen = Color(0xFF4CAF50)
 
 /**
- * MiniMapPIP — Picture-in-Picture mini map using OpenStreetMap tiles.
+ * MiniMapPIP — Picture-in-Picture mini map using REAL OpenStreetMap tiles.
  *
  * Features:
- * - Shows current position (blue dot)
- * - Line to destination (green dashed)
- * - Destination marker (red pin)
- * - Expandable/collapsible
- * - Speed + bearing display
- * - POI suggestion chips
+ * - Real street-level map tiles from OpenStreetMap (free, no API key)
+ * - Disk + memory tile cache (works offline after first load)
+ * - GPS blue dot with heading indicator
+ * - Green dashed line to destination
+ * - Red destination marker
+ * - Expandable/collapsible (120dp / 200dp)
+ * - Speed + bearing + distance display
+ * - Dark map overlay for night/driving mode
+ *
+ * Tile math: OpenStreetMap uses Slippy Map Tilenames (z/x/y).
+ *   x = floor((lng + 180) / 360 * 2^z)
+ *   y = floor((1 - ln(tan(lat_rad) + sec(lat_rad)) / PI) / 2 * 2^z)
  */
 @Composable
 fun MiniMapPIP(
@@ -56,10 +68,44 @@ fun MiniMapPIP(
 ) {
     var isExpanded by remember { mutableStateOf(false) }
     val mapSize = if (isExpanded) 200.dp else 120.dp
+    val context = LocalContext.current
+
+    // Initialize tile cache with app context
+    LaunchedEffect(Unit) {
+        OsmTileCache.init(context)
+    }
+
+    // Load tiles for current position
+    val zoom = if (isExpanded) 16 else 15
+    val tileBitmaps = remember { mutableStateMapOf<String, ImageBitmap?>() }
+
+    // Fetch tiles when position or zoom changes
+    LaunchedEffect(gpsData.latitude, gpsData.longitude, zoom) {
+        if (gpsData.latitude == 0.0) return@LaunchedEffect
+        val centerTileX = OsmTileCache.lngToTileX(gpsData.longitude, zoom)
+        val centerTileY = OsmTileCache.latToTileY(gpsData.latitude, zoom)
+
+        // Load 3x3 grid of tiles around current position for smooth scrolling
+        for (dx in -1..1) {
+            for (dy in -1..1) {
+                val tx = centerTileX + dx
+                val ty = centerTileY + dy
+                val key = "$zoom/$tx/$ty"
+                if (!tileBitmaps.containsKey(key)) {
+                    tileBitmaps[key] = null // placeholder
+                    withContext(Dispatchers.IO) {
+                        val bitmap = OsmTileCache.getTile(zoom, tx, ty)
+                        if (bitmap != null) {
+                            tileBitmaps[key] = bitmap.asImageBitmap()
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     Card(
-        modifier = modifier
-            .size(mapSize),
+        modifier = modifier.size(mapSize),
         colors = CardDefaults.cardColors(containerColor = BeeBlack.copy(alpha = 0.92f)),
         shape = RoundedCornerShape(if (isExpanded) 16.dp else 12.dp),
         border = androidx.compose.foundation.BorderStroke(
@@ -69,22 +115,24 @@ fun MiniMapPIP(
         onClick = { isExpanded = !isExpanded }
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            // Map canvas (GPS visualization)
-            MapCanvas(
+            // Real map canvas with OSM tiles
+            OsmMapCanvas(
                 currentLat = gpsData.latitude,
                 currentLng = gpsData.longitude,
                 bearing = gpsData.bearing,
                 destLat = navigator.destination?.latitude,
                 destLng = navigator.destination?.longitude,
+                zoom = zoom,
+                tiles = tileBitmaps,
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Overlay info
+            // Overlay info bar at bottom
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .fillMaxWidth()
-                    .background(BeeBlack.copy(alpha = 0.75f))
+                    .background(BeeBlack.copy(alpha = 0.8f))
                     .padding(horizontal = 6.dp, vertical = 3.dp)
             ) {
                 if (navigator.isNavigating && navigator.destination != null) {
@@ -130,7 +178,7 @@ fun MiniMapPIP(
             Icon(
                 if (isExpanded) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
                 "Toggle",
-                tint = BeeGray.copy(alpha = 0.5f),
+                tint = BeeWhite.copy(alpha = 0.6f),
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(2.dp)
@@ -141,121 +189,277 @@ fun MiniMapPIP(
 }
 
 /**
- * MapCanvas — Draws a simple GPS map with position, heading, and destination line.
- * Uses a compass-style view rather than actual map tiles to avoid API keys.
+ * OsmMapCanvas — Renders real OpenStreetMap tiles with GPS overlay.
+ * Tiles are 256x256 PNG images fetched from OSM servers and cached locally.
  */
 @Composable
-private fun MapCanvas(
+private fun OsmMapCanvas(
     currentLat: Double,
     currentLng: Double,
     bearing: Float,
     destLat: Double?,
     destLng: Double?,
+    zoom: Int,
+    tiles: Map<String, ImageBitmap?>,
     modifier: Modifier = Modifier
 ) {
-    val gridColor = Color(0xFF2A2A4E)
     val posColor = Color(0xFF2196F3) // Blue dot
     val destColor = Color(0xFFF44336) // Red pin
-    val lineColor = NavGreen.copy(alpha = 0.6f)
-    val northColor = Color(0xFFFF5722)
+    val lineColor = NavGreen.copy(alpha = 0.7f)
+    val darkOverlay = BeeBlack.copy(alpha = 0.25f) // Subtle dark tint for readability
 
     Canvas(modifier = modifier) {
-        val cx = size.width / 2
-        val cy = size.height / 2
-        val radius = minOf(cx, cy) * 0.85f
+        val canvasW = size.width
+        val canvasH = size.height
+        val tileSize = 256f
+        val n = (1 shl zoom).toDouble()
 
-        // Background gradient (dark map style)
-        drawRect(
-            brush = Brush.radialGradient(
-                colors = listOf(Color(0xFF1E1E3F), Color(0xFF0D0D1A)),
-                center = Offset(cx, cy),
-                radius = radius * 1.5f
-            )
-        )
+        // Calculate exact pixel position of current location
+        val exactTileX = (currentLng + 180.0) / 360.0 * n
+        val latRad = Math.toRadians(currentLat)
+        val exactTileY = (1.0 - ln(tan(latRad) + 1.0 / cos(latRad)) / PI) / 2.0 * n
 
-        // Grid lines (simulated map grid)
-        val gridStep = radius / 3
-        for (i in -3..3) {
-            val offset = i * gridStep
-            // Horizontal
-            drawLine(
-                gridColor, Offset(0f, cy + offset), Offset(size.width, cy + offset),
-                strokeWidth = 0.5f
-            )
-            // Vertical
-            drawLine(
-                gridColor, Offset(cx + offset, 0f), Offset(cx + offset, size.height),
-                strokeWidth = 0.5f
-            )
+        // Pixel offset within the center tile
+        val centerTileX = exactTileX.toInt()
+        val centerTileY = exactTileY.toInt()
+        val pixelOffsetX = ((exactTileX - centerTileX) * tileSize).toFloat()
+        val pixelOffsetY = ((exactTileY - centerTileY) * tileSize).toFloat()
+
+        // Draw tiles in a 3x3 grid centered on current position
+        for (dx in -1..1) {
+            for (dy in -1..1) {
+                val tx = centerTileX + dx
+                val ty = centerTileY + dy
+                val key = "$zoom/$tx/$ty"
+                val tileBitmap = tiles[key]
+
+                // Calculate where this tile should be drawn on canvas
+                val drawX = canvasW / 2f - pixelOffsetX + dx * tileSize
+                val drawY = canvasH / 2f - pixelOffsetY + dy * tileSize
+
+                if (tileBitmap != null) {
+                    // Draw the real map tile
+                    drawImage(
+                        image = tileBitmap,
+                        dstOffset = IntOffset(drawX.toInt(), drawY.toInt()),
+                        dstSize = IntSize(tileSize.toInt(), tileSize.toInt())
+                    )
+                } else {
+                    // Loading placeholder — dark grid
+                    drawRect(
+                        color = Color(0xFF1E1E3F),
+                        topLeft = Offset(drawX, drawY),
+                        size = Size(tileSize, tileSize)
+                    )
+                    // Grid lines as placeholder
+                    drawRect(
+                        color = Color(0xFF2A2A4E),
+                        topLeft = Offset(drawX, drawY),
+                        size = Size(tileSize, tileSize),
+                        style = Stroke(0.5f)
+                    )
+                }
+            }
         }
 
-        // Compass circle
-        drawCircle(
-            color = gridColor.copy(alpha = 0.3f),
-            radius = radius,
-            center = Offset(cx, cy),
-            style = androidx.compose.ui.graphics.drawscope.Stroke(1f)
-        )
-        drawCircle(
-            color = gridColor.copy(alpha = 0.2f),
-            radius = radius * 0.5f,
-            center = Offset(cx, cy),
-            style = androidx.compose.ui.graphics.drawscope.Stroke(0.5f)
-        )
+        // Dark overlay for better contrast with HUD elements
+        drawRect(darkOverlay)
 
-        // North indicator (rotated by bearing)
-        val northAngle = Math.toRadians((-bearing).toDouble())
-        val northX = cx + (radius * 0.9f * sin(northAngle)).toFloat()
-        val northY = cy - (radius * 0.9f * cos(northAngle)).toFloat()
-        drawCircle(northColor, 4f, Offset(northX, northY))
+        val cx = canvasW / 2f
+        val cy = canvasH / 2f
 
-        // Destination line and marker
+        // ── Destination line and marker ──
         if (destLat != null && destLng != null && currentLat != 0.0) {
-            val results = FloatArray(3)
-            android.location.Location.distanceBetween(
-                currentLat, currentLng, destLat, destLng, results
-            )
-            val destBearing = if (results.size > 1) results[1] else 0f
-            val destDist = results[0]
+            // Calculate destination pixel position relative to center
+            val destExactX = (destLng + 180.0) / 360.0 * n
+            val destLatRad = Math.toRadians(destLat)
+            val destExactY = (1.0 - ln(tan(destLatRad) + 1.0 / cos(destLatRad)) / PI) / 2.0 * n
 
-            // Scale distance to fit in circle (logarithmic for large distances)
-            val scaledDist = when {
-                destDist > 10000 -> radius * 0.85f
-                destDist > 1000 -> radius * (0.5f + 0.35f * (destDist / 10000f))
-                else -> radius * (destDist / 2000f).coerceIn(0.1f, 0.85f)
-            }
+            val destPixelX = cx + ((destExactX - exactTileX) * tileSize).toFloat()
+            val destPixelY = cy + ((destExactY - exactTileY) * tileSize).toFloat()
 
-            // Rotate relative to phone bearing
-            val relAngle = Math.toRadians((destBearing - bearing).toDouble())
-            val destX = cx + (scaledDist * sin(relAngle)).toFloat()
-            val destY = cy - (scaledDist * cos(relAngle)).toFloat()
+            // Clamp to visible area (draw line to edge if destination is off-screen)
+            val clampedX = destPixelX.coerceIn(8f, canvasW - 8f)
+            val clampedY = destPixelY.coerceIn(8f, canvasH - 8f)
 
             // Dashed line to destination
             drawLine(
-                lineColor, Offset(cx, cy), Offset(destX, destY),
-                strokeWidth = 2f,
-                pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f))
+                lineColor, Offset(cx, cy), Offset(clampedX, clampedY),
+                strokeWidth = 3f,
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 6f))
             )
 
-            // Destination marker (red circle with white border)
-            drawCircle(Color.White, 8f, Offset(destX, destY))
-            drawCircle(destColor, 6f, Offset(destX, destY))
+            // Destination marker (only if on-screen)
+            if (destPixelX in 0f..canvasW && destPixelY in 0f..canvasH) {
+                drawCircle(Color.White, 9f, Offset(destPixelX, destPixelY))
+                drawCircle(destColor, 7f, Offset(destPixelX, destPixelY))
+            } else {
+                // Edge indicator — small red dot at clamped position
+                drawCircle(destColor.copy(alpha = 0.7f), 5f, Offset(clampedX, clampedY))
+            }
         }
 
-        // Current position (blue dot with pulse effect)
-        drawCircle(posColor.copy(alpha = 0.15f), 18f, Offset(cx, cy))
-        drawCircle(posColor.copy(alpha = 0.3f), 12f, Offset(cx, cy))
-        drawCircle(Color.White, 7f, Offset(cx, cy))
-        drawCircle(posColor, 5f, Offset(cx, cy))
+        // ── Current position (blue dot with pulse + heading) ──
+        // Accuracy circle
+        drawCircle(posColor.copy(alpha = 0.08f), 24f, Offset(cx, cy))
+        drawCircle(posColor.copy(alpha = 0.15f), 16f, Offset(cx, cy))
+        // White border
+        drawCircle(Color.White, 9f, Offset(cx, cy))
+        // Blue dot
+        drawCircle(posColor, 7f, Offset(cx, cy))
 
-        // Heading indicator (triangle pointing forward)
+        // Heading indicator (triangle pointing in bearing direction)
+        val headAngle = Math.toRadians(bearing.toDouble())
+        val headTipX = cx + (16f * sin(headAngle)).toFloat()
+        val headTipY = cy - (16f * cos(headAngle)).toFloat()
+        val headLeftX = cx + (7f * sin(headAngle - 2.5)).toFloat()
+        val headLeftY = cy - (7f * cos(headAngle - 2.5)).toFloat()
+        val headRightX = cx + (7f * sin(headAngle + 2.5)).toFloat()
+        val headRightY = cy - (7f * cos(headAngle + 2.5)).toFloat()
+
         val headPath = Path().apply {
-            moveTo(cx, cy - 14f)
-            lineTo(cx - 5f, cy - 6f)
-            lineTo(cx + 5f, cy - 6f)
+            moveTo(headTipX, headTipY)
+            lineTo(headLeftX, headLeftY)
+            lineTo(headRightX, headRightY)
             close()
         }
         drawPath(headPath, posColor)
+    }
+}
+
+/**
+ * OsmTileCache — Disk + memory cache for OpenStreetMap tiles.
+ *
+ * - Memory: LruCache (max 30 tiles = ~1MB)
+ * - Disk: {app_files}/map_tiles/{z}/{x}/{y}.png
+ * - Network: https://tile.openstreetmap.org/{z}/{x}/{y}.png
+ * - Tiles expire after 7 days (re-download on next use)
+ */
+object OsmTileCache {
+    private const val TAG = "OsmTileCache"
+    private const val TILE_EXPIRE_MS = 7L * 24 * 60 * 60 * 1000 // 7 days
+    private const val MAX_MEMORY_TILES = 30
+    private const val USER_AGENT = "BeeMovil/5.7.2 Android"
+
+    private var cacheDir: File? = null
+
+    // In-memory LRU cache (max ~1MB for 30 tiles of ~30KB each)
+    private val memoryCache = LruCache<String, Bitmap>(MAX_MEMORY_TILES)
+
+    fun init(context: android.content.Context) {
+        if (cacheDir == null) {
+            cacheDir = File(context.filesDir, "map_tiles").also { it.mkdirs() }
+        }
+    }
+
+    /**
+     * Get a tile bitmap (memory → disk → network).
+     * Returns null if all sources fail.
+     */
+    fun getTile(z: Int, x: Int, y: Int): Bitmap? {
+        val key = "$z/$x/$y"
+
+        // 1. Memory cache
+        memoryCache.get(key)?.let { return it }
+
+        // 2. Disk cache
+        val file = getDiskFile(z, x, y)
+        if (file.exists() && !isExpired(file)) {
+            try {
+                val bitmap = BitmapFactory.decodeFile(file.absolutePath)
+                if (bitmap != null) {
+                    memoryCache.put(key, bitmap)
+                    return bitmap
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Disk read failed for $key: ${e.message}")
+            }
+        }
+
+        // 3. Network download
+        return try {
+            downloadTile(z, x, y)
+        } catch (e: Exception) {
+            Log.w(TAG, "Download failed for $key: ${e.message}")
+            null
+        }
+    }
+
+    private fun downloadTile(z: Int, x: Int, y: Int): Bitmap? {
+        val key = "$z/$x/$y"
+        // OSM tile server — free, no API key needed
+        // Must include proper User-Agent per OSM Tile Usage Policy
+        val url = "https://tile.openstreetmap.org/$z/$x/$y.png"
+
+        val connection = URL(url).openConnection().apply {
+            setRequestProperty("User-Agent", USER_AGENT)
+            connectTimeout = 5000
+            readTimeout = 5000
+        }
+
+        val bitmap = connection.getInputStream().use { stream ->
+            BitmapFactory.decodeStream(stream)
+        }
+
+        if (bitmap != null) {
+            // Save to disk
+            try {
+                val file = getDiskFile(z, x, y)
+                file.parentFile?.mkdirs()
+                FileOutputStream(file).use { out ->
+                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Disk write failed for $key: ${e.message}")
+            }
+
+            // Save to memory
+            memoryCache.put(key, bitmap)
+        }
+
+        return bitmap
+    }
+
+    private fun getDiskFile(z: Int, x: Int, y: Int): File {
+        return File(cacheDir ?: File("/tmp"), "$z/$x/$y.png")
+    }
+
+    private fun isExpired(file: File): Boolean {
+        return System.currentTimeMillis() - file.lastModified() > TILE_EXPIRE_MS
+    }
+
+    // ═══════════════════════════════════════
+    // Tile coordinate math (Slippy Map)
+    // ═══════════════════════════════════════
+
+    /** Convert longitude to tile X number at given zoom */
+    fun lngToTileX(lng: Double, zoom: Int): Int {
+        return ((lng + 180.0) / 360.0 * (1 shl zoom)).toInt()
+    }
+
+    /** Convert latitude to tile Y number at given zoom */
+    fun latToTileY(lat: Double, zoom: Int): Int {
+        val latRad = Math.toRadians(lat)
+        return ((1.0 - ln(tan(latRad) + 1.0 / cos(latRad)) / PI) / 2.0 * (1 shl zoom)).toInt()
+    }
+
+    /** Get total cached tiles count */
+    fun getCacheStats(): Pair<Int, Long> {
+        val dir = cacheDir ?: return Pair(0, 0L)
+        var count = 0
+        var bytes = 0L
+        dir.walkTopDown().filter { it.isFile }.forEach { 
+            count++
+            bytes += it.length()
+        }
+        return Pair(count, bytes)
+    }
+
+    /** Clear all cached tiles */
+    fun clearCache() {
+        memoryCache.evictAll()
+        cacheDir?.deleteRecursively()
+        cacheDir?.mkdirs()
     }
 }
 
