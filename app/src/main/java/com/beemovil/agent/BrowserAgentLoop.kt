@@ -78,7 +78,7 @@ class BrowserAgentLoop(
     /**
      * Resume a paused task (after human intervention).
      */
-    fun resumeTask(llmProvider: LlmProvider, modelName: String = ""): BrowserTaskResult {
+    fun resumeTask(llmProvider: LlmProvider, modelName: String = "", additionalContext: String = ""): BrowserTaskResult {
         val task = currentTask ?: return BrowserTaskResult("No hay tarea activa", false)
         if (status != TaskStatus.PAUSED_NEED_HELP && status != TaskStatus.PAUSED_LOOP) {
             return BrowserTaskResult("Tarea no esta pausada", false)
@@ -88,9 +88,26 @@ class BrowserAgentLoop(
         onStatusChange?.invoke(TaskStatus.RUNNING, "Reanudando tarea...")
         actionHistory.clear() // Reset loop detection after human help
 
+        if (additionalContext.isNotBlank()) {
+            task.goal += "\n\n(Instrucción añadida por el usuario durante la pausa): $additionalContext"
+        }
+
         activityLog.logAction(task.sessionId, "", "task_resume", "", "", task.goal, modelName)
 
         return executeLoop(task, llmProvider, modelName)
+    }
+
+    /**
+     * Inject instructions in real-time while a task is running.
+     * The LLM will see this added to the Main Goal on the next executeLoop interaction.
+     */
+    fun injectInstructions(newText: String) {
+        currentTask?.let { task ->
+            if (newText.isNotBlank()) {
+                task.goal += "\n\n[CORRECCIÓN DEL USUARIO EN TIEMPO REAL]: $newText"
+                onStatusChange?.invoke(status, "Instrucción recibida...")
+            }
+        }
     }
 
     /**
@@ -384,7 +401,7 @@ class BrowserAgentLoop(
 
 data class BrowserTask(
     val sessionId: String,
-    val goal: String,
+    var goal: String,
     val completedSteps: MutableList<BrowserStep> = mutableListOf(),
     var status: TaskStatus = TaskStatus.IDLE
 )

@@ -187,10 +187,13 @@ fun BrowserScreen(
                 }
                 val provider = LlmFactory.createProvider(providerType, apiKey, selectedModel)
 
-                if (agentStatus == TaskStatus.PAUSED_NEED_HELP || agentStatus == TaskStatus.PAUSED_LOOP) {
+                if (agentStatus == TaskStatus.RUNNING) {
+                    chatMessages.add(BrowserChatMessage("Inyectando instrucción...", MessageSender.SYSTEM))
+                    agentLoop?.injectInstructions(message)
+                } else if (agentStatus == TaskStatus.PAUSED_NEED_HELP || agentStatus == TaskStatus.PAUSED_LOOP) {
                     // Resume with user's message as context
                     chatMessages.add(BrowserChatMessage("Reanudando...", MessageSender.SYSTEM))
-                    agentLoop?.resumeTask(provider, selectedModel)
+                    agentLoop?.resumeTask(provider, selectedModel, message)
                 } else {
                     agentLoop?.startTask(message, provider, selectedModel)
                 }
