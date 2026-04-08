@@ -43,6 +43,9 @@ class BrowserSkill(private val context: Context) : BeeSkill {
         - 'run_js': Execute JavaScript on the page. Params: code
         - 'screenshot': Take a screenshot (returns base64)
         - 'get_elements': Get form fields/buttons on the page. Params: selector (optional)
+        - 'scroll_to': Scroll to an element. Params: selector
+        - 'wait_for': Wait for element to appear (max 10s). Params: selector
+        - 'highlight': Highlight an element with yellow border. Params: selector
         - 'back': Go back
         - 'forward': Go forward
         - 'current': Get current URL and title"""
@@ -106,6 +109,9 @@ class BrowserSkill(private val context: Context) : BeeSkill {
                 "run_js" -> runJs(params.optString("code", ""))
                 "screenshot" -> takeScreenshot()
                 "get_elements" -> getElements(params.optString("selector", ""))
+                "scroll_to" -> scrollTo(params.optString("selector", ""))
+                "wait_for" -> waitFor(params.optString("selector", ""))
+                "highlight" -> highlightElement(params.optString("selector", ""))
                 "back" -> { mainHandler.post { webView?.goBack() }; JSONObject().put("success", true).put("message", "Navegando atras") }
                 "forward" -> { mainHandler.post { webView?.goForward() }; JSONObject().put("success", true).put("message", "Navegando adelante") }
                 "current" -> getCurrentInfo()
@@ -414,5 +420,85 @@ class BrowserSkill(private val context: Context) : BeeSkill {
     inner class BrowserBridge {
         @JavascriptInterface
         fun log(msg: String) { Log.d(TAG, "Browser: $msg") }
+    }
+
+    // ═══════════════════════════════════════════
+    // New actions for Phase 26
+    // ═══════════════════════════════════════════
+
+    private fun scrollTo(selector: String): JSONObject {
+        if (selector.isBlank()) return JSONObject().put("error", "selector required")
+        val safeSel = selector.replace("'", "\\'")
+        val js = """
+            (function() {
+                var el = document.querySelector('$safeSel');
+                if (!el) {
+                    var all = document.querySelectorAll('*');
+                    for (var i = 0; i < all.length; i++) {
+                        if (all[i].textContent.trim().toLowerCase().includes('${safeSel.lowercase()}')) {
+                            el = all[i]; break;
+                        }
+                    }
+                }
+                if (el) { el.scrollIntoView({behavior: 'smooth', block: 'center'}); return 'scrolled'; }
+                return 'not_found';
+            })();
+        """.trimIndent()
+        val result = evalJs(js)
+        return if (result == "scrolled") {
+            JSONObject().put("success", true).put("message", "Scroll a '$selector'")
+        } else {
+            JSONObject().put("error", "Element not found: $selector")
+        }
+    }
+
+    private fun waitFor(selector: String): JSONObject {
+        if (selector.isBlank()) return JSONObject().put("error", "selector required")
+        val safeSel = selector.replace("'", "\\'")
+        // Poll every 500ms for up to 10 seconds
+        for (attempt in 1..20) {
+            val js = "(function() { return document.querySelector('$safeSel') ? 'found' : 'waiting'; })();"
+            val result = evalJs(js)
+            if (result == "found") {
+                return JSONObject().put("success", true)
+                    .put("message", "Elemento '$selector' encontrado (${attempt * 500}ms)")
+            }
+            Thread.sleep(500)
+        }
+        return JSONObject().put("error", "Timeout: '$selector' not found after 10s")
+    }
+
+    private fun highlightElement(selector: String): JSONObject {
+        if (selector.isBlank()) return JSONObject().put("error", "selector required")
+        val safeSel = selector.replace("'", "\\'")
+        val js = """
+            (function() {
+                var el = document.querySelector('$safeSel');
+                if (!el) {
+                    var all = document.querySelectorAll('a, button, input, textarea, select');
+                    for (var i = 0; i < all.length; i++) {
+                        if (all[i].textContent.trim().toLowerCase().includes('${safeSel.lowercase()}')) {
+                            el = all[i]; break;
+                        }
+                    }
+                }
+                if (el) {
+                    el.scrollIntoView({behavior: 'smooth', block: 'center'});
+                    var orig = el.style.cssText;
+                    el.style.outline = '3px solid #D4A843';
+                    el.style.outlineOffset = '2px';
+                    el.style.boxShadow = '0 0 10px rgba(212,168,67,0.5)';
+                    setTimeout(function() { el.style.cssText = orig; }, 2500);
+                    return 'highlighted';
+                }
+                return 'not_found';
+            })();
+        """.trimIndent()
+        val result = evalJs(js)
+        return if (result == "highlighted") {
+            JSONObject().put("success", true).put("message", "Elemento resaltado: '$selector'")
+        } else {
+            JSONObject().put("error", "Element not found: $selector")
+        }
     }
 }

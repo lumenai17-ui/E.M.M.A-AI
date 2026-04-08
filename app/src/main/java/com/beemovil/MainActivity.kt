@@ -345,6 +345,7 @@ class MainActivity : ComponentActivity() {
                             "browser" -> {
                                 BrowserScreen(
                                     browserSkill = skills["browser_agent"] as? BrowserSkill,
+                                    viewModel = viewModel,
                                     onBack = { viewModel.currentScreen.value = "dashboard" }
                                 )
                             }
