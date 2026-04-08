@@ -49,7 +49,8 @@ class BrowserSkill(private val context: Context) : BeeSkill {
         - 'back': Go back
         - 'forward': Go forward
         - 'current': Get current URL and title
-        - 'save_to_file': Save text/markdown/csv to a file in Downloads. Params: filename, content"""
+        - 'save_to_file': Save text/markdown/csv to a file in Downloads. Params: filename, content
+        - 'search_web': Search the internet natively to get quick URLs. Params: query"""
 
     override val parametersSchema = JSONObject("""
         {"type":"object","properties":{
@@ -60,6 +61,7 @@ class BrowserSkill(private val context: Context) : BeeSkill {
             "code":{"type":"string","description":"JavaScript to execute"},
             "filename":{"type":"string","description":"Filename for save_to_file"},
             "content":{"type":"string","description":"Content for save_to_file"},
+            "query":{"type":"string","description":"Search query for search_web"},
             "fields":{"type":"array","items":{"type":"object"},"description":"Array of {selector, value} for fill_form"}
         },"required":["action"]}
     """.trimIndent())
@@ -118,6 +120,7 @@ class BrowserSkill(private val context: Context) : BeeSkill {
                 "back" -> { mainHandler.post { webView?.goBack() }; JSONObject().put("success", true).put("message", "Navegando atras") }
                 "forward" -> { mainHandler.post { webView?.goForward() }; JSONObject().put("success", true).put("message", "Navegando adelante") }
                 "current" -> getCurrentInfo()
+                "search_web" -> WebSearchSkill().execute(params)
                 "save_to_file" -> {
                     val filename = params.optString("filename", "export.txt")
                     val content = params.optString("content", "")
