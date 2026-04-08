@@ -63,6 +63,9 @@ fun BrowserScreen(
     var isLoading by remember { mutableStateOf(false) }
     var progress by remember { mutableStateOf(0) }
     var lastLoadedUrl by remember { mutableStateOf("") }
+    var webViewInstance by remember { mutableStateOf<android.webkit.WebView?>(null) }
+    var canGoBack by remember { mutableStateOf(false) }
+    var canGoForward by remember { mutableStateOf(false) }
 
     // ── Chat panel state ──
     var showChatPanel by remember { mutableStateOf(false) }
@@ -147,8 +150,8 @@ fun BrowserScreen(
                 else -> {}
             }
         }
-        agentLoop?.onAgentMessage = { msg ->
-            chatMessages.add(BrowserChatMessage(msg, MessageSender.AGENT))
+        agentLoop?.onAgentMessage = { msg, imageUrl ->
+            chatMessages.add(com.beemovil.ui.components.BrowserChatMessage(msg, com.beemovil.ui.components.MessageSender.AGENT, imageUrl))
         }
     }
 
@@ -222,9 +225,32 @@ fun BrowserScreen(
                     .padding(horizontal = 8.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Back button
+                // System Close/Back button
                 IconButton(onClick = onBack, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Filled.ArrowBack, "Back", tint = BeeYellowAccent, modifier = Modifier.size(20.dp))
+                    Icon(Icons.Filled.Close, "Cerrar", tint = BeeGray, modifier = Modifier.size(20.dp))
+                }
+
+                // WebView Back Navigation
+                IconButton(
+                    onClick = { webViewInstance?.goBack() },
+                    modifier = Modifier.size(36.dp),
+                    enabled = canGoBack
+                ) {
+                    Icon(Icons.Filled.ArrowBack, "Back", tint = if (canGoBack) BeeYellowAccent else BeeGray.copy(alpha = 0.3f), modifier = Modifier.size(20.dp))
+                }
+
+                // WebView Forward Navigation
+                IconButton(
+                    onClick = { webViewInstance?.goForward() },
+                    modifier = Modifier.size(36.dp),
+                    enabled = canGoForward
+                ) {
+                    Icon(Icons.Filled.ArrowForward, "Forward", tint = if (canGoForward) BeeWhite else BeeGray.copy(alpha = 0.3f), modifier = Modifier.size(20.dp))
+                }
+
+                // WebView Refresh
+                IconButton(onClick = { webViewInstance?.reload() }, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Filled.Refresh, "Refresh", tint = BeeWhite, modifier = Modifier.size(20.dp))
                 }
 
                 // URL input
@@ -357,6 +383,8 @@ fun BrowserScreen(
                                 isLoading = false
                                 pageTitle = view?.title ?: ""
                                 urlInput = url ?: ""
+                                canGoBack = view?.canGoBack() == true
+                                canGoForward = view?.canGoForward() == true
                                 // Persist cookies
                                 CookieManager.getInstance().flush()
                             }
@@ -373,6 +401,7 @@ fun BrowserScreen(
                                 pageTitle = title ?: ""
                             }
                         }
+                        webViewInstance = this
 
                         // Download listener — files go to Downloads folder
                         setDownloadListener { url, userAgent, contentDisposition, mimetype, contentLength ->

@@ -42,7 +42,7 @@ class BrowserAgentLoop(
     // ── Callbacks ──
     var onStepComplete: ((BrowserStep, String) -> Unit)? = null
     var onStatusChange: ((TaskStatus, String?) -> Unit)? = null
-    var onAgentMessage: ((String) -> Unit)? = null
+    var onAgentMessage: ((String, String?) -> Unit)? = null
 
     // Action history for loop detection
     private val actionHistory = mutableListOf<Pair<String, String>>() // (action, target)
@@ -155,7 +155,7 @@ class BrowserAgentLoop(
                 if (blocker != null) {
                     status = TaskStatus.PAUSED_NEED_HELP
                     onStatusChange?.invoke(TaskStatus.PAUSED_NEED_HELP, blocker)
-                    onAgentMessage?.invoke(blocker)
+                    onAgentMessage?.invoke(blocker, null)
                     activityLog.logAction(task.sessionId, currentUrl, "blocker_detected", blocker, "paused", task.goal, modelName)
                     return BrowserTaskResult(blocker, false, isPaused = true)
                 }
@@ -188,7 +188,7 @@ class BrowserAgentLoop(
                     val resultText = response.text.substringAfter("[TASK_DONE]").trim()
                     status = TaskStatus.COMPLETED
                     onStatusChange?.invoke(TaskStatus.COMPLETED, "Tarea completada")
-                    onAgentMessage?.invoke(resultText.ifBlank { "Tarea completada." })
+                    onAgentMessage?.invoke(resultText.ifBlank { "Tarea completada." }, null)
                     activityLog.logAction(task.sessionId, "", "task_done", "", resultText.take(200), task.goal, modelName)
                     return BrowserTaskResult(resultText, true)
                 }
@@ -197,7 +197,7 @@ class BrowserAgentLoop(
                     val helpText = response.text.substringAfter("[NEED_HELP]").trim()
                     status = TaskStatus.PAUSED_NEED_HELP
                     onStatusChange?.invoke(TaskStatus.PAUSED_NEED_HELP, helpText)
-                    onAgentMessage?.invoke(helpText)
+                    onAgentMessage?.invoke(helpText, null)
                     activityLog.logAction(task.sessionId, "", "need_help", "", helpText.take(200), task.goal, modelName)
                     return BrowserTaskResult(helpText, false, isPaused = true)
                 }
@@ -216,7 +216,7 @@ class BrowserAgentLoop(
                             status = TaskStatus.PAUSED_LOOP
                             val loopMsg = "Loop detectado: repitiendo '$action' en '$target'. Respondeme que debo hacer diferente."
                             onStatusChange?.invoke(TaskStatus.PAUSED_LOOP, loopMsg)
-                            onAgentMessage?.invoke(loopMsg)
+                            onAgentMessage?.invoke(loopMsg, null)
                             activityLog.logAction(task.sessionId, "", "loop_detected", action, target, task.goal, modelName)
                             return BrowserTaskResult(loopMsg, false, isPaused = true)
                         }
@@ -236,7 +236,21 @@ class BrowserAgentLoop(
                         stepCount++
 
                         onStepComplete?.invoke(step, resultStr)
-                        onAgentMessage?.invoke("$action: ${result.optString("message", resultStr.take(80))}")
+                        
+                        // Verbosity Filter: Only notify chat if it's a screenshot or explicit conversational output.
+                        // Standard clicks and typing will only update the Status bar (onStatusChange).
+                        if (action == "screenshot") {
+                            val path = result.optString("path", null)
+                            if (path != null) {
+                                onAgentMessage?.invoke("He capturado la pantalla:", path)
+                            } else {
+                                onAgentMessage?.invoke("He capturado la pantalla (no path)", null)
+                            }
+                        } else if (action == "extract_text") {
+                            onAgentMessage?.invoke("Texto extraído:\n\n${resultStr.take(500)}", null)
+                        }
+                        
+                        // onAgentMessage for other actions is suppressed to avoid log spam.
 
                         activityLog.logAction(
                             task.sessionId,
@@ -256,7 +270,7 @@ class BrowserAgentLoop(
                 } else {
                     // No tool call — agent is providing a text response
                     val text = response.text ?: "..."
-                    onAgentMessage?.invoke(text)
+                    onAgentMessage?.invoke(text, null)
                     messages.add(ChatMessage(role = "assistant", content = text))
 
                     // If no tool call, assume task is done or agent is summarizing
@@ -299,7 +313,7 @@ class BrowserAgentLoop(
             } catch (e: Throwable) {
                 Log.e(TAG, "Step error: ${e.message}", e)
                 val errorMsg = "Error en paso ${stepCount + 1}: ${e.message?.take(100)}"
-                onAgentMessage?.invoke(errorMsg)
+                onAgentMessage?.invoke(errorMsg, null)
                 activityLog.logAction(task.sessionId, "", "error", "", e.message?.take(200) ?: "", task.goal, modelName)
 
                 // Give it a breather to prevent ultra-fast crash loop
@@ -319,7 +333,7 @@ class BrowserAgentLoop(
             status = TaskStatus.MAX_STEPS
             val msg = "Limite de $MAX_STEPS pasos alcanzado. ${task.completedSteps.size} pasos completados."
             onStatusChange?.invoke(TaskStatus.MAX_STEPS, msg)
-            onAgentMessage?.invoke(msg)
+            onAgentMessage?.invoke(msg, null)
             return BrowserTaskResult(msg, false)
         }
 

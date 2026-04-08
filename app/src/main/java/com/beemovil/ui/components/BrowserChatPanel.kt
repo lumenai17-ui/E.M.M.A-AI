@@ -26,6 +26,11 @@ import androidx.compose.ui.unit.sp
 import com.beemovil.agent.TaskStatus
 import com.beemovil.ui.theme.*
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.ui.graphics.asImageBitmap
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
 
 // Bee tokens for browser panel
 private val PanelBg = Color(0xFF141428)
@@ -304,6 +309,28 @@ private fun BrowserMessageBubble(message: BrowserChatMessage) {
             )
         ) {
             Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                
+                // ── Image renderer ──
+                if (message.imageUrl != null) {
+                    val bitmap = remember(message.imageUrl) {
+                        try {
+                            BitmapFactory.decodeFile(message.imageUrl)?.asImageBitmap()
+                        } catch (e: Exception) { null }
+                    }
+                    if (bitmap != null) {
+                        Image(
+                            bitmap = bitmap,
+                            contentDescription = "Screenshot",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 220.dp)
+                                .clip(RoundedCornerShape(8.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                    }
+                }
+
                 if (isSystem) {
                     Text(
                         message.text,
@@ -312,12 +339,14 @@ private fun BrowserMessageBubble(message: BrowserChatMessage) {
                         fontWeight = FontWeight.Medium
                     )
                 } else {
-                    Text(
-                        message.text,
-                        fontSize = 13.sp,
-                        color = if (isAgent) BeeWhite else Color(0xFFCCDDCC),
-                        lineHeight = 18.sp
-                    )
+                    SelectionContainer {
+                        Text(
+                            message.text,
+                            fontSize = 13.sp,
+                            color = if (isAgent) BeeWhite else Color(0xFFCCDDCC),
+                            lineHeight = 18.sp
+                        )
+                    }
                 }
             }
         }
@@ -348,6 +377,7 @@ private fun QuickChip(label: String, onClick: () -> Unit) {
 data class BrowserChatMessage(
     val text: String,
     val sender: MessageSender,
+    val imageUrl: String? = null,
     val timestamp: Long = System.currentTimeMillis()
 )
 
