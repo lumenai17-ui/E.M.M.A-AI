@@ -28,7 +28,7 @@ class BrowserAgentLoop(
 ) {
     companion object {
         private const val TAG = "BrowserAgentLoop"
-        private const val MAX_STEPS = 20
+        private const val MAX_STEPS = 40
         private const val PAGE_LOAD_TIMEOUT_MS = 30_000L
     }
 
@@ -168,7 +168,8 @@ class BrowserAgentLoop(
                     elements = parseElements(pageState),
                     memoryContext = if (stepCount == 0) memoryContext else ""
                 )
-                messages.add(ChatMessage(role = "system", content = contextMsg))
+                val finalContextMsg = "OBJETIVO ACTUAL DEL USUARIO: ${task.goal}\n\n$contextMsg"
+                messages.add(ChatMessage(role = "system", content = finalContextMsg))
 
                 // 4. Ask LLM for next action
                 val tools = listOf(
@@ -263,16 +264,36 @@ class BrowserAgentLoop(
                         status = TaskStatus.COMPLETED
                         onStatusChange?.invoke(TaskStatus.COMPLETED, "Tarea completada")
                         return BrowserTaskResult(text, true)
+                    } else {
+                        // The agent hasn't done anything and just replied with text.
+                        stepCount++ // Increment so it doesn't loop infinitely
+                        messages.add(ChatMessage(role = "user", content = "No has ejecutado ninguna accion. Por favor usa una herramienta o responde [TASK_DONE] para terminar o [NEED_HELP] si hay problemas."))
                     }
                 }
 
                 // Trim messages if getting too long
                 if (messages.size > 30) {
                     val system = messages.first()
+                    // Asegurar que el task.goal (usualmente el msj #2 si no hay historia) sobreviva
+                    val taskGoalMessage = messages.find { it.role == "user" && it.content?.contains(task.goal) == true }
+                        ?: ChatMessage(role = "user", content = "Mi objetivo original era: ${task.goal}")
+                    
                     val recent = messages.takeLast(20)
                     messages.clear()
                     messages.add(system)
-                    messages.addAll(recent)
+                    messages.add(taskGoalMessage)
+                    if (!recent.contains(taskGoalMessage)) {
+                        messages.addAll(recent)
+                    } else {
+                        val filteredRecent = recent.filter { it != taskGoalMessage }
+                        messages.addAll(filteredRecent)
+                    }
+                }
+
+                // Thermal Cooldown if local provider
+                if (llmProvider.javaClass.simpleName.contains("Local", ignoreCase = true) || modelName.contains("local", ignoreCase = true)) {
+                    Log.d(TAG, "Thermal Cooldown... descansando GPU por 4s")
+                    Thread.sleep(4000)
                 }
 
             } catch (e: Throwable) {
@@ -280,6 +301,10 @@ class BrowserAgentLoop(
                 val errorMsg = "Error en paso ${stepCount + 1}: ${e.message?.take(100)}"
                 onAgentMessage?.invoke(errorMsg)
                 activityLog.logAction(task.sessionId, "", "error", "", e.message?.take(200) ?: "", task.goal, modelName)
+
+                // Give it a breather to prevent ultra-fast crash loop
+                Thread.sleep(2500)
+                stepCount++
 
                 // Don't crash — let the agent retry or user can cancel
                 if (stepCount >= MAX_STEPS - 1) {

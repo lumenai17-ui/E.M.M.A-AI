@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.beemovil.agent.TaskStatus
 import com.beemovil.ui.theme.*
+import androidx.compose.foundation.clickable
 
 // Bee tokens for browser panel
 private val PanelBg = Color(0xFF141428)
@@ -82,16 +83,25 @@ fun BrowserChatPanel(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp),
+                .clickable { onDismiss() }
+                .padding(top = 8.dp, bottom = 4.dp),
             contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .width(40.dp)
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(PanelBorder)
-            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(
+                    modifier = Modifier
+                        .width(60.dp)
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(StatusYellow)
+                )
+                Icon(
+                    Icons.Filled.KeyboardArrowDown, 
+                    contentDescription = "Ocultar",
+                    tint = StatusYellow.copy(alpha = 0.5f),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
         }
 
         // ── Header: Status + Model + Close ──

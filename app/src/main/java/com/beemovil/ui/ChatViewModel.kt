@@ -56,6 +56,12 @@ class ChatViewModel : ViewModel() {
 
     // Navigation state
     val currentScreen = mutableStateOf("conversations") // "conversations" | "chat" | "settings"
+    
+    // Browser Agent state
+    val browserUrl = mutableStateOf("https://www.google.com")
+    val browserMessages = androidx.compose.runtime.mutableStateListOf<com.beemovil.ui.components.BrowserChatMessage>()
+    val browserAgentTaskStatus = mutableStateOf(com.beemovil.agent.TaskStatus.IDLE)
+    val browserAgentStatusText = mutableStateOf("Listo")
 
     // Email navigation state
     val selectedEmailUid = mutableStateOf(0L)

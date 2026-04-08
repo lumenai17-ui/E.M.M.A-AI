@@ -48,7 +48,8 @@ class BrowserSkill(private val context: Context) : BeeSkill {
         - 'highlight': Highlight an element with yellow border. Params: selector
         - 'back': Go back
         - 'forward': Go forward
-        - 'current': Get current URL and title"""
+        - 'current': Get current URL and title
+        - 'save_to_file': Save text/markdown/csv to a file in Downloads. Params: filename, content"""
 
     override val parametersSchema = JSONObject("""
         {"type":"object","properties":{
@@ -57,6 +58,8 @@ class BrowserSkill(private val context: Context) : BeeSkill {
             "selector":{"type":"string","description":"CSS selector or text to find element"},
             "text":{"type":"string","description":"Text to type"},
             "code":{"type":"string","description":"JavaScript to execute"},
+            "filename":{"type":"string","description":"Filename for save_to_file"},
+            "content":{"type":"string","description":"Content for save_to_file"},
             "fields":{"type":"array","items":{"type":"object"},"description":"Array of {selector, value} for fill_form"}
         },"required":["action"]}
     """.trimIndent())
@@ -115,6 +118,18 @@ class BrowserSkill(private val context: Context) : BeeSkill {
                 "back" -> { mainHandler.post { webView?.goBack() }; JSONObject().put("success", true).put("message", "Navegando atras") }
                 "forward" -> { mainHandler.post { webView?.goForward() }; JSONObject().put("success", true).put("message", "Navegando adelante") }
                 "current" -> getCurrentInfo()
+                "save_to_file" -> {
+                    val filename = params.optString("filename", "export.txt")
+                    val content = params.optString("content", "")
+                    try {
+                        val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+                        val file = java.io.File(downloadsDir, filename)
+                        file.writeText(content)
+                        JSONObject().put("message", "Archivo guardado exitosamente en Descargas: ${file.name}")
+                    } catch (e: Exception) {
+                        JSONObject().put("error", "Error guardando archivo: ${e.message}")
+                    }
+                }
                 else -> JSONObject().put("error", "Unknown action: $action")
             }
         } catch (e: Exception) {

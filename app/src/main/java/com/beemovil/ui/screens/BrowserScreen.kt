@@ -57,8 +57,8 @@ fun BrowserScreen(
     val context = LocalContext.current
 
     // ── URL state ──
-    var currentUrl by remember { mutableStateOf("https://www.google.com") }
-    var urlInput by remember { mutableStateOf("") }
+    var currentUrl by viewModel.browserUrl
+    var urlInput by remember { mutableStateOf(currentUrl) }
     var pageTitle by remember { mutableStateOf("Browser") }
     var isLoading by remember { mutableStateOf(false) }
     var progress by remember { mutableStateOf(0) }
@@ -66,11 +66,11 @@ fun BrowserScreen(
 
     // ── Chat panel state ──
     var showChatPanel by remember { mutableStateOf(false) }
-    val chatMessages = remember { mutableStateListOf<BrowserChatMessage>() }
+    val chatMessages = viewModel.browserMessages
 
     // ── Agent state ──
-    var agentStatus by remember { mutableStateOf(TaskStatus.IDLE) }
-    var agentStatusText by remember { mutableStateOf("Listo") }
+    var agentStatus by viewModel.browserAgentTaskStatus
+    var agentStatusText by viewModel.browserAgentStatusText
     val activityLog = remember { BrowserActivityLog(context) }
     val agentLoop = remember {
         browserSkill?.let { BrowserAgentLoop(context, it, activityLog) }
@@ -92,8 +92,11 @@ fun BrowserScreen(
 
     // ── Cookie persistence ──
     LaunchedEffect(Unit) {
-        CookieManager.getInstance().setAcceptCookie(true)
-        CookieManager.getInstance().setAcceptThirdPartyCookies(null, true)
+        try {
+            CookieManager.getInstance().setAcceptCookie(true)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     // ── Configure agent loop callbacks ──
@@ -192,7 +195,7 @@ fun BrowserScreen(
 
     Box(modifier = Modifier.fillMaxSize().background(BeeBlack)) {
 
-        Column(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
             // ── Top: URL Bar ──
             Row(
                 modifier = Modifier
@@ -211,7 +214,7 @@ fun BrowserScreen(
                     value = urlInput,
                     onValueChange = { urlInput = it },
                     placeholder = { Text("URL o buscar...", color = BeeGray, fontSize = 12.sp) },
-                    modifier = Modifier.weight(1f).height(44.dp),
+                    modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                     singleLine = true,
                     textStyle = LocalTextStyle.current.copy(fontSize = 12.sp, color = BeeWhite),
                     colors = OutlinedTextFieldDefaults.colors(
@@ -325,6 +328,12 @@ fun BrowserScreen(
                         settings.mediaPlaybackRequiresUserGesture = false
                         settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
 
+                        try {
+                            CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+
                         webViewClient = object : WebViewClient() {
                             override fun onPageFinished(view: WebView?, url: String?) {
                                 isLoading = false
@@ -421,12 +430,12 @@ fun BrowserScreen(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(16.dp)
-                .size(48.dp),
-            containerColor = FabBg,
-            contentColor = BeeYellowAccent,
+                .size(56.dp),
+            containerColor = BeeYellowAccent,
+            contentColor = BeeBlack,
             shape = CircleShape
         ) {
-            Icon(Icons.Filled.SmartToy, "Agent", modifier = Modifier.size(22.dp))
+            Icon(Icons.Filled.SmartToy, "Agent", modifier = Modifier.size(26.dp))
         }
 
         // ── Chat panel (bottom sheet) ──
@@ -437,7 +446,9 @@ fun BrowserScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .fillMaxHeight(0.55f)
+                .navigationBarsPadding()
+                .imePadding()
+                .heightIn(max = 450.dp)
         ) {
             BrowserChatPanel(
                 messages = chatMessages,
