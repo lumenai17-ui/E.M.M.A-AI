@@ -371,6 +371,7 @@ class BrowserSkill(private val context: Context) : BeeSkill {
     private fun takeScreenshot(): JSONObject {
         val latch = CountDownLatch(1)
         var base64 = ""
+        var filePath = ""
 
         mainHandler.post {
             webView?.let { wv ->
@@ -385,6 +386,16 @@ class BrowserSkill(private val context: Context) : BeeSkill {
                 val baos = ByteArrayOutputStream()
                 bitmap.compress(Bitmap.CompressFormat.JPEG, 70, baos)
                 base64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
+                
+                try {
+                    val file = java.io.File(context.cacheDir, "browser_snap_${System.currentTimeMillis()}.jpg")
+                    val fos = java.io.FileOutputStream(file)
+                    fos.write(baos.toByteArray())
+                    fos.flush()
+                    fos.close()
+                    filePath = file.absolutePath
+                } catch(e: Exception) { e.printStackTrace() }
+
                 bitmap.recycle()
             }
             latch.countDown()
@@ -395,6 +406,7 @@ class BrowserSkill(private val context: Context) : BeeSkill {
         return JSONObject()
             .put("success", true)
             .put("screenshot_base64", base64.take(100) + "...")
+            .put("path", filePath)
             .put("size", base64.length)
             .put("message", "Screenshot tomado (${base64.length / 1024} KB)")
     }
