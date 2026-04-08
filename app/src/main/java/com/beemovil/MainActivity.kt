@@ -345,6 +345,8 @@ class MainActivity : ComponentActivity() {
                             "browser" -> {
                                 BrowserScreen(
                                     browserSkill = skills["browser_agent"] as? BrowserSkill,
+                                    delegateSkill = skills["delegate_to_agent"] as? com.beemovil.skills.DelegateSkill,
+                                    remoteAgentSkill = skills["call_remote_agent"] as? com.beemovil.skills.RemoteAgentSkill,
                                     viewModel = viewModel,
                                     onBack = { viewModel.currentScreen.value = "dashboard" }
                                 )

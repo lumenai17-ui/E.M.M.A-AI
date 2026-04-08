@@ -24,6 +24,8 @@ import java.util.UUID
 class BrowserAgentLoop(
     private val context: Context,
     private val browserSkill: BrowserSkill,
+    private val delegateSkill: com.beemovil.skills.BeeSkill? = null,
+    private val remoteAgentSkill: com.beemovil.skills.BeeSkill? = null,
     private val activityLog: BrowserActivityLog
 ) {
     companion object {
@@ -172,13 +174,26 @@ class BrowserAgentLoop(
                 messages.add(ChatMessage(role = "system", content = finalContextMsg))
 
                 // 4. Ask LLM for next action
-                val tools = listOf(
-                    ToolDefinition(
-                        name = browserSkill.name,
-                        description = browserSkill.description,
-                        parameters = browserSkill.parametersSchema
-                    )
-                )
+                val tools = mutableListOf<ToolDefinition>()
+                tools.add(ToolDefinition(
+                    name = browserSkill.name,
+                    description = browserSkill.description,
+                    parameters = browserSkill.parametersSchema
+                ))
+                delegateSkill?.let { skill ->
+                    tools.add(ToolDefinition(
+                        name = skill.name,
+                        description = skill.description,
+                        parameters = skill.parametersSchema
+                    ))
+                }
+                remoteAgentSkill?.let { skill ->
+                    tools.add(ToolDefinition(
+                        name = skill.name,
+                        description = skill.description,
+                        parameters = skill.parametersSchema
+                    ))
+                }
 
                 onStatusChange?.invoke(TaskStatus.RUNNING, "Paso ${stepCount + 1}: Pensando...")
                 val response = llmProvider.complete(messages, tools)
@@ -222,7 +237,12 @@ class BrowserAgentLoop(
                         }
 
                         // 7. Execute the action
-                        val result = browserSkill.execute(toolCall.params)
+                        val result = when (toolCall.name) {
+                            browserSkill.name -> browserSkill.execute(toolCall.params)
+                            delegateSkill?.name -> delegateSkill.execute(toolCall.params)
+                            remoteAgentSkill?.name -> remoteAgentSkill.execute(toolCall.params)
+                            else -> org.json.JSONObject().put("error", "Herramienta no encontrada o no soportada: ${toolCall.name}")
+                        }
                         val resultStr = result.toString().take(300)
 
                         val step = BrowserStep(
@@ -246,8 +266,8 @@ class BrowserAgentLoop(
                             } else {
                                 onAgentMessage?.invoke("He capturado la pantalla (no path)", null)
                             }
-                        } else if (action == "extract_text") {
-                            onAgentMessage?.invoke("Texto extraído:\n\n${resultStr.take(500)}", null)
+                        } else if (action == "extract_text" || toolCall.name == delegateSkill?.name || toolCall.name == remoteAgentSkill?.name) {
+                            onAgentMessage?.invoke("Acción completada: ${action}\n\n${resultStr.take(500)}", null)
                         }
                         
                         // onAgentMessage for other actions is suppressed to avoid log spam.

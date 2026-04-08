@@ -51,6 +51,8 @@ private val FabBg = Color(0xFF1A1A2E)
 @Composable
 fun BrowserScreen(
     browserSkill: BrowserSkill?,
+    delegateSkill: com.beemovil.skills.BeeSkill? = null,
+    remoteAgentSkill: com.beemovil.skills.BeeSkill? = null,
     viewModel: ChatViewModel,
     onBack: () -> Unit
 ) {
@@ -76,7 +78,7 @@ fun BrowserScreen(
     var agentStatusText by viewModel.browserAgentStatusText
     val activityLog = remember { BrowserActivityLog(context) }
     val agentLoop = remember {
-        browserSkill?.let { BrowserAgentLoop(context, it, activityLog) }
+        browserSkill?.let { BrowserAgentLoop(context, it, delegateSkill, remoteAgentSkill, activityLog) }
     }
 
     // ── Toast state ──

@@ -126,7 +126,15 @@ object PageContextProvider {
     fun detectLoop(actionHistory: List<Pair<String, String>>): Boolean {
         if (actionHistory.size < 3) return false
         val last3 = actionHistory.takeLast(3)
-        return last3.all { it == last3.first() }
+        if (last3.all { it == last3.first() }) {
+            val action = last3.first().first
+            // Whitelist safe repetitive actions (e.g., trying to delegate multiple times or screenshot)
+            if (action == "screenshot" || action == "delegate_to_agent" || action == "call_remote_agent" || action == "search_web" || action == "send") {
+                return false
+            }
+            return true
+        }
+        return false
     }
 
     /**
@@ -165,6 +173,8 @@ object PageContextProvider {
         - back/forward: Navegacion historial
         - current: URL y titulo actual
         - save_to_file(filename, content): Guardar un archivo .txt, .md o .csv en Descargas con el contenido dado.
+        - delegate_to_agent(agent_id, task): Enviar resumen y URLs a un agente local (ej: 'vision', 'sales', 'telegram')
+        - call_remote_agent(agent_url, task): Enviar tareas a un nodo A2A externo o bot de servidor.
         
         FORMATO DE RESPUESTA:
         Piensa paso a paso. Usa una herramienta por turno. 
