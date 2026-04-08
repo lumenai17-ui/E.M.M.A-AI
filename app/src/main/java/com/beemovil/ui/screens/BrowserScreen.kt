@@ -80,6 +80,24 @@ fun BrowserScreen(
     var toastMessage by remember { mutableStateOf<String?>(null) }
     var toastIsError by remember { mutableStateOf(false) }
 
+    // ── Voice state ──
+    val voiceManager = remember { com.beemovil.skills.VoiceInputManager(context) }
+    var isListening by remember { mutableStateOf(false) }
+
+    val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+        onResult = { granted ->
+            if (!granted) {
+                toastMessage = "Se requiere permiso de micrófono"
+                toastIsError = true
+            }
+        }
+    )
+
+    DisposableEffect(Unit) {
+        onDispose { voiceManager.destroy() }
+    }
+
     // ── Modal (human help) state ──
     var showHelpModal by remember { mutableStateOf(false) }
     var helpModalText by remember { mutableStateOf("") }
@@ -424,18 +442,56 @@ fun BrowserScreen(
             }
         }
 
-        // ── FAB (open chat panel) ──
-        FloatingActionButton(
-            onClick = { showChatPanel = true },
+        // ── FABs Column (Chat + Mic) ──
+        Column(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(16.dp)
-                .size(56.dp),
-            containerColor = BeeYellowAccent,
-            contentColor = BeeBlack,
-            shape = CircleShape
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Icon(Icons.Filled.SmartToy, "Agent", modifier = Modifier.size(26.dp))
+            // Mic FAB
+            SmallFloatingActionButton(
+                onClick = {
+                    if (isListening) {
+                        voiceManager.stopListening()
+                    } else {
+                        if (voiceManager.hasPermission) {
+                            voiceManager.startListening(
+                                onListeningState = { state -> isListening = state },
+                                onErrorCallback = { err ->
+                                    toastMessage = err
+                                    toastIsError = true
+                                    isListening = false
+                                },
+                                onFinalResult = { text ->
+                                    toastMessage = "Entendido"
+                                    sendToAgent(text)
+                                }
+                            )
+                        } else {
+                            permissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                        }
+                    }
+                },
+                containerColor = if (isListening) ToastError else FabBg.copy(alpha = 0.9f),
+                contentColor = if (isListening) BeeWhite else BeeYellowAccent,
+                shape = CircleShape
+            ) {
+                Icon(if (isListening) Icons.Filled.Mic else Icons.Filled.MicNone, "Mic", modifier = Modifier.size(20.dp))
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Agent Chat FAB
+            FloatingActionButton(
+                onClick = { showChatPanel = true },
+                modifier = Modifier.size(56.dp),
+                containerColor = BeeYellowAccent,
+                contentColor = BeeBlack,
+                shape = CircleShape
+            ) {
+                Icon(Icons.Filled.SmartToy, "Agent", modifier = Modifier.size(26.dp))
+            }
         }
 
         // ── Chat panel (bottom sheet) ──
