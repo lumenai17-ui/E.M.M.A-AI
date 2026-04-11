@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("com.google.devtools.ksp") version "1.9.22-1.0.17"
 }
 
 android {
@@ -8,7 +9,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.beemovil"
+        applicationId = "com.beemovil.emma"
         minSdk = 26
         targetSdk = 35
         versionCode = 3
@@ -55,6 +56,7 @@ android {
                 "META-INF/*.DSA",
                 "META-INF/*.RSA",
                 "META-INF/INDEX.LIST",
+                "META-INF/io.netty.versions.properties",
                 "META-INF/versions/**",
                 "META-INF/AL2.0",
                 "META-INF/LGPL2.1",
@@ -90,18 +92,12 @@ dependencies {
     // On-device LLM inference (Gemma 4 via LiteRT-LM — replaces deprecated MediaPipe GenAI)
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.9.0")
 
-    // JSON parsing — Android includes org.json natively, no extra dependency needed
+    // Koog Framework (AI Agents KMP)
+    implementation("ai.koog:koog-agents:0.5.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
     // Coroutines
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
-
-    // Room (SQLite for conversation history)
-    implementation("androidx.room:room-runtime:2.6.1")
-    implementation("androidx.room:room-ktx:2.6.1")
-    annotationProcessor("androidx.room:room-compiler:2.6.1")
-
-    // WorkManager (background tasks / cron jobs)
-    implementation("androidx.work:work-runtime-ktx:2.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
 
     // Markdown rendering
     implementation("io.noties.markwon:core:4.6.2")
@@ -126,8 +122,7 @@ dependencies {
     }
     implementation("org.apache.xmlbeans:xmlbeans:5.1.1")
 
-    // Git operations (clone, commit, push, pull)
-    implementation("org.eclipse.jgit:org.eclipse.jgit:6.8.0.202311291450-r")
+
 
     // Google Sign-In (Credential Manager) + Workspace APIs
     implementation("androidx.credentials:credentials:1.5.0-alpha05")
@@ -142,6 +137,15 @@ dependencies {
 
     // Google Calendar API v3
     implementation("com.google.apis:google-api-services-calendar:v3-rev20250115-2.0.0")
+
+    // Room Database
+    val roomVersion = "2.6.1"
+    implementation("androidx.room:room-runtime:$roomVersion")
+    implementation("androidx.room:room-ktx:$roomVersion")
+    ksp("androidx.room:room-compiler:$roomVersion")
+
+    // WorkManager
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
 
     // Google Auth (OAuth2 token handling)
     implementation("com.google.auth:google-auth-library-oauth2-http:1.32.0") {

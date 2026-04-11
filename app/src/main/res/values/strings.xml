@@ -1,4 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Bee-Movil</string>
+    <string name="app_name">E.M.M.A. Ai</string>
+    <!-- Chat Screen -->
+    <string name="status_online">En línea</string>
+    <string name="chat_input_placeholder">Escribe a Emma...</string>
+    
+    <!-- Dashboard Screen -->
+    <string name="dashboard_subtitle">Sistema Central Operativo</string>
+    <string name="dashboard_section_access">Accesos Principales</string>
+    
+    <string name="dash_card_emma_title">Emma Chat</string>
+    <string name="dash_card_emma_subtitle">Agente Base Local &amp; Koog API</string>
+    
+    <string name="dash_card_vision_title">Emma Vision</string>
+    <string name="dash_card_vision_subtitle">Visión en tiempo real offline</string>
+    
+    <string name="dash_card_voice_title">Deep Voice</string>
+    <string name="dash_card_voice_subtitle">Modo Walkie-talkie</string>
+    
+    <string name="dash_card_ops_title">Ops Inbox</string>
+    <string name="dash_card_ops_subtitle">Correos y Notificaciones</string>
 </resources>

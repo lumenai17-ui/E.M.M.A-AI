@@ -1,0 +1,45 @@
+MIT License
+
+Copyright (c) 2026 LumenAI
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+# OPEN SOURCE & THIRD-PARTY ACKNOWLEDGEMENTS
+
+La arquitectura de E.M.M.A. AI V2 se apoya en tecnologías, librerías y modelos de terceros. En cumplimiento con sus respectivas licencias (MIT, Apache 2.0, y licencias de Modelos Abiertos), se hace el reconocimiento oficial a sus creadores originarios:
+
+### Librerías Base & UI (Apache License 2.0)
+*   **Kotlin (JetBrains):** Licensed under the Apache License, Version 2.0.
+*   **Android Jetpack Compose & Navigation (Google):** Licensed under the Apache License, Version 2.0.
+*   **Room Database (Google):** Licensed under the Apache License, Version 2.0.
+*   **OkHttp & Retrofit (Square, Inc.):** Licensed under the Apache License, Version 2.0.
+
+### Motores de Inteligencia Artificial (Apache 2.0 & Custom Licenses)
+*   **LiteRT (anteriormente TensorFlow Lite - Google):** Motor de inferencia nativo licenciado bajo Apache License 2.0.
+*   **Modelos Locales - Gemma 4 (Google DeepMind):** El uso de pesos de Gemma está sujeto a la *Gemma Terms of Use* oficial dictada por Google.
+*   **Ollama (Local/Edge):** E.M.M.A. actúa como cliente API para interactuar con instancias de Ollama (software de terceros bajo Licencia MIT).
+*   **Modelos de Código Abierto (Qwen, Mistral):** Accesibles a través de pasarelas remotas, bajo licencias permisivas open-weights / MIT / Apache 2.0 dependiendo de la red elegida.
+
+### Servicios SaaS y APIs Comerciales Externas
+*   **OpenRouter & Deepgram:** La aplicación se integra mediante peticiones REST. Estos servicios operan bajo sus propios Términos de Servicio (Terms of Service) y Acuerdos de Nivel de Servicio (SLA) propietarios. 
+*   **Koog Engine:** El motor de enrutamiento "Koog Engine" pertenece a sus creadores originales y opera bajo sus respectivos acuerdos y licencias externas, conectándose al sistema como una dependencia independiente.
+
+*Nota legal final:* La implementación principal de "E.M.M.A. AI" en Android, así como el diseño del "Agent Hub", se distribuyen bajo la Licencia MIT descrita superiormente, reconociendo el respeto y separación de las licencias de las tecnologías de terceros aquí listadas.

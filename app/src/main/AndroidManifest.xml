@@ -40,6 +40,12 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.SET_ALARM" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
+    <!-- Telemetry & Sensors (Phase 7) -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
 
     <!-- Foreground service for background tasks -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -52,7 +58,7 @@
         android:name=".BeeMovilApp"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="Bee-Movil"
+        android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.BeeMovil"
         android:usesCleartextTraffic="true">
@@ -67,56 +73,7 @@
             </intent-filter>
         </activity>
 
-        <service
-            android:name=".telegram.TelegramBotService"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
-
-        <service
-            android:name=".service.BeeNotificationService"
-            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.service.notification.NotificationListenerService"/>
-            </intent-filter>
-        </service>
-
-        <provider
-            android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.fileprovider"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths" />
-        </provider>
-
-        <!-- Workflow Scheduler Receivers -->
-        <receiver
-            android:name=".workflow.WorkflowSchedulerReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="com.beemovil.WORKFLOW_ALARM" />
-            </intent-filter>
-        </receiver>
-
-        <receiver
-            android:name=".workflow.WifiTriggerReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.net.wifi.STATE_CHANGE" />
-                <action android:name="android.net.conn.CONNECTIVITY_CHANGE" />
-            </intent-filter>
-        </receiver>
-
-        <receiver
-            android:name=".workflow.BatteryTriggerReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.intent.action.BATTERY_LOW" />
-            </intent-filter>
-        </receiver>
+        <!-- Servicios eliminados temporalmente para Koog -->
 
     </application>
 </manifest>

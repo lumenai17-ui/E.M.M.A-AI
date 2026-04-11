@@ -4,20 +4,8 @@ import android.content.Context
 import android.speech.tts.TextToSpeech
 import android.util.Log
 import com.beemovil.security.SecurePrefs
-import com.beemovil.skills.VoiceInputManager
 import java.util.Locale
 
-/**
- * DeepgramVoiceManager — Unified voice I/O manager.
- *
- * Intelligently routes between Deepgram (cloud) and native Android (offline):
- *
- *   STT: Deepgram Nova-3  →  fallback: Android SpeechRecognizer
- *   TTS: Deepgram Aura    →  fallback: Android TextToSpeech
- *
- * The manager checks for API key availability and network state
- * to decide which backend to use at runtime.
- */
 class DeepgramVoiceManager(private val context: Context) {
 
     companion object {
@@ -30,20 +18,18 @@ class DeepgramVoiceManager(private val context: Context) {
     }
 
     // Deepgram engines
-    val deepgramSTT = DeepgramSTT(context)
-    val deepgramTTS = DeepgramTTS(context)
+    private val deepgramSTT = try { DeepgramSTT(context) } catch (e: Exception) { null }
+    private val deepgramTTS = try { DeepgramTTS(context) } catch (e: Exception) { null }
 
-    // Native fallbacks
-    val nativeSTT = VoiceInputManager(context)
     private var nativeTTS: TextToSpeech? = null
     private var nativeTTSReady = false
+    private var nativeSTT: android.speech.SpeechRecognizer? = null
 
-    // Config — API key stored in SecurePrefs (encrypted)
     val apiKey: String get() = SecurePrefs.get(context).getString(KEY_DEEPGRAM, "") ?: ""
     val hasApiKey: Boolean get() = apiKey.isNotBlank()
 
     val selectedVoice: String get() = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        .getString(KEY_VOICE, DeepgramTTS.DEFAULT_VOICE) ?: DeepgramTTS.DEFAULT_VOICE
+        .getString(KEY_VOICE, "aura-asteria-en") ?: "aura-asteria-en"
 
     val useDeepgramSTT: Boolean get() = hasApiKey && context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         .getBoolean(KEY_USE_DEEPGRAM_STT, true)
@@ -52,20 +38,19 @@ class DeepgramVoiceManager(private val context: Context) {
         .getBoolean(KEY_USE_DEEPGRAM_TTS, true)
 
     fun initialize() {
-        // Init native STT as fallback
-        nativeSTT.initialize()
-
-        // Init native TTS as fallback
         nativeTTS = TextToSpeech(context) { status ->
             nativeTTSReady = status == TextToSpeech.SUCCESS
             if (nativeTTSReady) {
-                nativeTTS?.language = Locale("es", "MX")
+                // Ahora respeta el idioma nativo del sistema operativo (Global fallback)
+                nativeTTS?.language = Locale.getDefault()
             }
         }
-        Log.i(TAG, "Voice manager initialized (Deepgram key: ${if (hasApiKey) "YES" else "NO"})")
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            if (android.speech.SpeechRecognizer.isRecognitionAvailable(context)) {
+                nativeSTT = android.speech.SpeechRecognizer.createSpeechRecognizer(context)
+            }
+        }
     }
-
-    // ── STT (Listen) ──────────────────────────
 
     fun startListening(
         language: String = "es-MX",
@@ -75,43 +60,65 @@ class DeepgramVoiceManager(private val context: Context) {
         onState: ((Boolean) -> Unit)? = null
     ) {
         if (useDeepgramSTT) {
-            Log.i(TAG, "Using Deepgram STT")
-            deepgramSTT.startListening(
+            deepgramSTT?.startListening(
                 apiKey = apiKey,
-                language = language.substringBefore("-"), // "es-MX" -> "es"
+                language = language.substringBefore("-"),
                 onPartial = onPartial,
                 onResult = onResult,
                 onErrorCb = { error ->
-                    Log.w(TAG, "Deepgram STT failed: $error, falling back to native")
-                    // Fallback to native on error
-                    nativeSTT.startListening(
-                        language = language,
-                        onPartialResult = onPartial,
-                        onListeningState = onState,
-                        onErrorCallback = onError,
-                        onFinalResult = onResult
-                    )
+                    Log.w(TAG, "Deepgram STT failed: $error")
+                    onError?.invoke(error)
                 },
                 onState = onState
             )
         } else {
-            Log.i(TAG, "Using native STT")
-            nativeSTT.startListening(
-                language = language,
-                onPartialResult = onPartial,
-                onListeningState = onState,
-                onErrorCallback = onError,
-                onFinalResult = onResult
-            )
+            startNativeListening(language, onResult, onError)
+        }
+    }
+
+    private fun startNativeListening(
+        language: String,
+        onResult: (String) -> Unit,
+        onError: ((String) -> Unit)?
+    ) {
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            if (nativeSTT == null) {
+                onError?.invoke("No STT fallback connected. Deepgram not enabled.")
+                return@post
+            }
+            val intent = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, language)
+                putExtra(android.speech.RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+            }
+            nativeSTT?.setRecognitionListener(object : android.speech.RecognitionListener {
+                override fun onReadyForSpeech(params: android.os.Bundle?) {}
+                override fun onBeginningOfSpeech() {}
+                override fun onRmsChanged(rmsdB: Float) {}
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onEndOfSpeech() {}
+                override fun onError(error: Int) {
+                    onError?.invoke("Native STT Error: $error")
+                }
+                override fun onResults(results: android.os.Bundle?) {
+                    val matches = results?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)
+                    if (!matches.isNullOrEmpty()) {
+                        onResult(matches[0])
+                    }
+                }
+                override fun onPartialResults(partialResults: android.os.Bundle?) {}
+                override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
+            })
+            nativeSTT?.startListening(intent)
         }
     }
 
     fun stopListening() {
-        deepgramSTT.stopListening()
-        nativeSTT.stopListening()
+        deepgramSTT?.stopListening()
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            nativeSTT?.stopListening()
+        }
     }
-
-    // ── TTS (Speak) ──────────────────────────
 
     fun speak(
         text: String,
@@ -120,14 +127,10 @@ class DeepgramVoiceManager(private val context: Context) {
         onStart: (() -> Unit)? = null,
         onError: ((String) -> Unit)? = null
     ) {
-        // Deepgram Aura voices are English-only.
-        // For Spanish (or any non-English), always use native Android TTS
-        // which has native Spanish voices built in.
         val isEnglish = language.lowercase().startsWith("en")
 
         if (useDeepgramTTS && isEnglish) {
-            Log.i(TAG, "Using Deepgram TTS (voice: $selectedVoice, lang: $language)")
-            deepgramTTS.speak(
+            deepgramTTS?.speak(
                 text = text,
                 apiKey = apiKey,
                 voice = selectedVoice,
@@ -139,17 +142,14 @@ class DeepgramVoiceManager(private val context: Context) {
                 }
             )
         } else {
-            Log.i(TAG, "Using native TTS (Spanish content, Deepgram Aura is English-only)")
             speakNative(text, onDone)
         }
     }
 
     fun stopSpeaking() {
-        deepgramTTS.stop()
+        deepgramTTS?.stop()
         nativeTTS?.stop()
     }
-
-    val isSpeaking: Boolean get() = deepgramTTS.speaking || (nativeTTS?.isSpeaking == true)
 
     private fun speakNative(text: String, onDone: (() -> Unit)?) {
         if (!nativeTTSReady || nativeTTS == null) {
@@ -174,32 +174,13 @@ class DeepgramVoiceManager(private val context: Context) {
         nativeTTS?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, "bee_${System.currentTimeMillis()}")
     }
 
-    // ── Config ──────────────────────────
-
-    fun setApiKey(key: String) {
-        SecurePrefs.get(context).edit().putString(KEY_DEEPGRAM, key).apply()
-    }
-
-    fun setVoice(voiceId: String) {
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit().putString(KEY_VOICE, voiceId).apply()
-    }
-
-    fun setUseDeepgramSTT(enabled: Boolean) {
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit().putBoolean(KEY_USE_DEEPGRAM_STT, enabled).apply()
-    }
-
-    fun setUseDeepgramTTS(enabled: Boolean) {
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit().putBoolean(KEY_USE_DEEPGRAM_TTS, enabled).apply()
-    }
-
     fun destroy() {
-        deepgramSTT.destroy()
-        deepgramTTS.destroy()
-        nativeSTT.destroy()
+        deepgramSTT?.destroy()
+        deepgramTTS?.destroy()
         nativeTTS?.stop()
         nativeTTS?.shutdown()
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            nativeSTT?.destroy()
+        }
     }
 }

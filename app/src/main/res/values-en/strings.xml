@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">E.M.M.A. Ai</string>
+    <!-- Chat Screen -->
+    <string name="status_online">Online</string>
+    <string name="chat_input_placeholder">Message Emma...</string>
+    
+    <!-- Dashboard Screen -->
+    <string name="dashboard_subtitle">Central Operating System</string>
+    <string name="dashboard_section_access">Main Access</string>
+    
+    <string name="dash_card_emma_title">Emma Chat</string>
+    <string name="dash_card_emma_subtitle">Local Base Agent &amp; Koog API</string>
+    
+    <string name="dash_card_vision_title">Emma Vision</string>
+    <string name="dash_card_vision_subtitle">Real-time offline vision</string>
+    
+    <string name="dash_card_voice_title">Deep Voice</string>
+    <string name="dash_card_voice_subtitle">Walkie-talkie mode</string>
+    
+    <string name="dash_card_ops_title">Ops Inbox</string>
+    <string name="dash_card_ops_subtitle">Mail &amp; Notifications</string>
+</resources>

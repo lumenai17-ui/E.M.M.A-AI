@@ -1411,10 +1411,10 @@ fun SettingsScreen(
                 SectionTitle("DATOS Y ALMACENAMIENTO")
                 Spacer(modifier = Modifier.height(8.dp))
 
-                val msgCount = viewModel.chatHistoryDB?.getTotalMessageCount() ?: 0
+                val msgCount = "Swarm Activo"
                 val memCount = viewModel.memoryDB?.getMemoryCount() ?: 0
 
-                DataRow("Mensajes", "$msgCount")
+                DataRow("Mensajes", msgCount)
                 DataRow("Memorias RAG", "$memCount")
                 DataRow("Agentes", "${viewModel.availableAgents.size}")
 
@@ -1423,7 +1423,7 @@ fun SettingsScreen(
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(
                         onClick = {
-                            viewModel.chatHistoryDB?.clearAll()
+                            viewModel.clearAllHistory()
                             Toast.makeText(context, "Historial limpiado", Toast.LENGTH_SHORT).show()
                         },
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFF44336)),
