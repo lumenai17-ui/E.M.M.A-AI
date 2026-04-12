@@ -57,7 +57,17 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             dashboardInsight.value = "Koog Engine Cargado: Ollama conectando..."
             
             // Cargar Historial al Iniciar del Hilo Principal
-            val history = chatHistoryDB.chatHistoryDao().getHistory("main")
+            val prefs = application.getSharedPreferences("beemovil_session", Context.MODE_PRIVATE)
+            val lastThread = prefs.getString("last_active_thread", "main") ?: "main"
+            activeThreadId.value = lastThread
+            
+            val history = chatHistoryDB.chatHistoryDao().getHistory(lastThread)
+            
+            val allTh = chatHistoryDB.chatHistoryDao().getAllThreads()
+            val th = allTh.find { it.threadId == lastThread }
+            if (th != null) {
+                activeAgentName.value = th.title.replace("Chat con ", "")
+            }
             
             // 1. Restaurar Visor Visual
             history.forEach {
@@ -128,9 +138,21 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun updateAgentConfig(agent: com.beemovil.database.AgentConfigEntity) {
+        viewModelScope.launch {
+            chatHistoryDB.chatHistoryDao().insertAgent(agent) // Insert with conflict replace assumes id remains same or updates it
+            activeAgentConfig.value = agent
+            activeAgentName.value = agent.name
+            activeSystemPrompt.value = agent.systemPrompt
+            currentProvider.value = agent.fallbackModel
+            refreshSwarmData()
+        }
+    }
+
     val messages = mutableStateListOf<ChatUiMessage>()
     val searchResults = mutableStateListOf<ChatUiMessage>()
     val isSearchMode = mutableStateOf(false)
+    val swarmInsight = mutableStateOf("")
     val searchQuery = mutableStateOf("")
 
     fun refreshLiveDashboard() {
@@ -247,6 +269,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     val activeAgentId = mutableStateOf("emma")
     val activeAgentName = mutableStateOf("E.M.M.A.")
     val activeSystemPrompt = mutableStateOf("")
+    val activeAgentConfig = mutableStateOf<com.beemovil.database.AgentConfigEntity?>(null)
 
     // --- HERMES TUNNEL Y A2A ROUTING ---
     val isHermesConnected = mutableStateOf(false)
@@ -283,9 +306,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             activeAgentId.value = agent.agentId
             activeAgentName.value = agent.name
             activeSystemPrompt.value = agent.systemPrompt
+            activeAgentConfig.value = agent
             
             val newThreadId = "thread_${agent.agentId}_primary"
             activeThreadId.value = newThreadId
+            
+            val appPrefs = getApplication<Application>().getSharedPreferences("beemovil_session", Context.MODE_PRIVATE)
+            appPrefs.edit().putString("last_active_thread", newThreadId).apply()
             
             val threads = chatHistoryDB.chatHistoryDao().getAllThreads()
             if (threads.none { it.threadId == newThreadId }) {
@@ -323,6 +350,21 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun openThread(thread: com.beemovil.database.ChatThreadEntity) {
         viewModelScope.launch {
             activeThreadId.value = thread.threadId
+            activeAgentName.value = thread.title.replace("Chat con ", "")
+            
+            // Derive agent from thread
+            val prefix = "thread_"
+            val agentSuffix = "_primary"
+            if (thread.threadId.startsWith(prefix) && thread.threadId.endsWith(agentSuffix)) {
+                val derivedAgentId = thread.threadId.substring(prefix.length, thread.threadId.length - agentSuffix.length)
+                val agents = chatHistoryDB.chatHistoryDao().getAllAgents()
+                activeAgentConfig.value = agents.find { it.agentId == derivedAgentId }
+            } else {
+                activeAgentConfig.value = null
+            }
+
+            val appPrefs = getApplication<Application>().getSharedPreferences("beemovil_session", Context.MODE_PRIVATE)
+            appPrefs.edit().putString("last_active_thread", thread.threadId).apply()
             
             val pastMessages = chatHistoryDB.chatHistoryDao().getHistory(thread.threadId)
             messages.clear()
@@ -387,7 +429,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         } else null
         
         viewModelScope.launch {
-            val response = engine.processUserMessage(text)
+            swarmInsight.value = ""
+            val response = engine.processUserMessage(text, currentProvider.value, currentModel.value) { progress ->
+                swarmInsight.value = progress
+            }
+            swarmInsight.value = ""
             isLoading.value = false
             
             if (response.startsWith("TOOL_CALL::open_browser::")) {
@@ -400,12 +446,35 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 if (!isMuted.value) {
                     voiceManager.speak(feedback, language = Locale.getDefault().language)
                 }
+            } else if (response.startsWith("TOOL_CALL::file_generated::")) {
+                val filePath = response.removePrefix("TOOL_CALL::file_generated::")
+                val feedback = "He generado tu documento físico y lo he archivado aquí en la conversación."
+                
+                messages.add(ChatUiMessage(feedback, false, filePaths = listOf(filePath)))
+                
+                if (!isMuted.value) {
+                    voiceManager.speak(feedback, language = Locale.getDefault().language)
+                }
+                
+                val aiMetaJson = org.json.JSONObject().apply { put("file_path", filePath) }.toString()
+                chatHistoryDB.chatHistoryDao().insertMessage(com.beemovil.database.ChatMessageEntity( // Replaces the normal saving later
+                    threadId = activeThreadId.value,
+                    senderId = activeAgentId.value,
+                    timestamp = System.currentTimeMillis(),
+                    role = "assistant",
+                    content = feedback,
+                    metadataJson = aiMetaJson
+                ))
             } else {
                 messages.add(ChatUiMessage(response, false))
                 
                 // Hacer que Emma hable en voz alta leyendo el System Default Locale
                 if (!isMuted.value) {
-                    voiceManager.speak(response, language = Locale.getDefault().language)
+                    voiceManager.speak(response, language = Locale.getDefault().language, onError = { err ->
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            android.widget.Toast.makeText(application, "Avisos de Voz: $err", android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    })
                 }
             }
             
@@ -419,13 +488,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 metadataJson = metaJson
             ))
             
-            chatHistoryDB.chatHistoryDao().insertMessage(com.beemovil.database.ChatMessageEntity(
-                threadId = activeThreadId.value,
-                senderId = activeAgentId.value,
-                timestamp = System.currentTimeMillis(),
-                role = "assistant",
-                content = response
-            ))
+            
+            if (!response.startsWith("TOOL_CALL::file_generated::")) {
+                chatHistoryDB.chatHistoryDao().insertMessage(com.beemovil.database.ChatMessageEntity(
+                    threadId = activeThreadId.value,
+                    senderId = activeAgentId.value,
+                    timestamp = System.currentTimeMillis(),
+                    role = "assistant",
+                    content = response
+                ))
+            }
             refreshHistoryCount()
         }
     }

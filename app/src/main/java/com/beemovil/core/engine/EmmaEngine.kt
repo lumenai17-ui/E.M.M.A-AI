@@ -131,19 +131,44 @@ class EmmaEngine(private val context: Context) {
         Log.d(TAG, "LLM Cortex restaurado con total éxito.")
     }
 
-    suspend fun processUserMessage(message: String): String {
+    suspend fun processUserMessage(
+        message: String, 
+        forcedProvider: String? = null, 
+        forcedModel: String? = null,
+        onProgress: ((String) -> Unit)? = null
+    ): String {
         return withContext(Dispatchers.IO) {
             try {
                 messagesHistory.add(ChatMessage("user", message))
+
+                // Intercepción para Agentes de Nube Privada (Hermes A2A Individual)
+                if (forcedProvider?.startsWith("hermes-a2a") == true) {
+                    Log.i(TAG, "[A2A P2P] Agente configurado vía Túnel Hermes P2P. Desviando payload...")
+                    // forcedProvider = "hermes-a2a|wss://x.com|token" (si es efímero)
+                    val parts = forcedProvider.split("|")
+                    
+                    val response = if (parts.size >= 3) {
+                        val url = parts[1]
+                        val token = parts[2]
+                        com.beemovil.tunnel.HermesTunnelManager.executeDynamicA2ATask(url, token, "text_generation", message)
+                    } else {
+                        // Global Tunnel Fallback
+                        com.beemovil.tunnel.HermesTunnelManager.executeA2ATask("text_generation", message)
+                    }
+                    
+                    messagesHistory.add(ChatMessage("assistant", response))
+                    return@withContext response
+                }
 
                 // Build the tool definitions from active plugins
                 val activeTools = plugins.values.map { it.getToolDefinition() }
 
                 Log.d(TAG, "[PASO 1] Ejecutando Engine...")
-                val (response1, toolCalls1) = executeProvider(messagesHistory.toList(), activeTools)
+                val (response1, toolCalls1) = executeProvider(messagesHistory.toList(), activeTools, forcedProvider, forcedModel)
                 
                 if (toolCalls1.isNotEmpty()) {
                     Log.i(TAG, "[PASO 2] El modelo decidió llamar a ${toolCalls1.size} herramientas.")
+                    onProgress?.invoke("Evaluando uso de Herramientas Especializadas...")
                     // 1. Agregar la intención del assistant a la historia
                     messagesHistory.add(ChatMessage("assistant", null, toolCalls1, "call_" + System.currentTimeMillis()))
                     
@@ -174,7 +199,8 @@ class EmmaEngine(private val context: Context) {
                     
                     // 3. Segunda Llamada (Follow-up) -> El Paso 2
                     Log.d(TAG, "[PASO 3] Consultando de nuevo con resultados inyectados...")
-                    val (finalResponse, _) = executeProvider(messagesHistory.toList(), activeTools)
+                    onProgress?.invoke("Ensamblando respuesta de herramientas...")
+                    val (finalResponse, _) = executeProvider(messagesHistory.toList(), activeTools, forcedProvider, forcedModel)
                     messagesHistory.add(ChatMessage("assistant", finalResponse))
                     return@withContext finalResponse
                 }
@@ -190,7 +216,11 @@ class EmmaEngine(private val context: Context) {
         }
     }
 
-    suspend fun dispatchSwarmTask(threadId: String, userMessage: String): String {
+    suspend fun dispatchSwarmTask(
+        threadId: String, 
+        userMessage: String,
+        onProgress: ((String) -> Unit)? = null
+    ): String {
         return withContext(Dispatchers.IO) {
             try {
                 // 1. Obtener miembros del grupo
@@ -198,7 +228,11 @@ class EmmaEngine(private val context: Context) {
                 
                 // Si no hay miembros, o es chat individual (fallback normal)
                 if (members.isEmpty()) {
-                    return@withContext processUserMessage(userMessage)
+                    // Para derivarlo al proveedor específico, podríamos extraerlo del thread o pasar null y que lo agarre el ViewModel
+                    // Como el ViewModel ahora llama a dispatchSwarmTask en vez de processUserMessage directo
+                    // Necesitaríamos interceptar forcedProvider en dispatchSwarmTask, pero dispatchSwarmTask no lo recibe.
+                    // Oh, wait, we can just let dispatchSwarmTask take forcedProvider!
+                    return@withContext processUserMessage(userMessage, onProgress = onProgress)
                 }
 
                 val activeTools = plugins.values.map { it.getToolDefinition() }
@@ -218,6 +252,7 @@ class EmmaEngine(private val context: Context) {
                     val modelId = if(modelParts.size > 1) modelParts[1] else null
 
                     Log.i(TAG, "[SWARM] Handoff al Agente: ${agentConfig.name} [$providerId:$modelId]")
+                    onProgress?.invoke("Swarm: ${agentConfig.name} procesando túnel...")
 
                     // Armar Compressive Handoff
                     val handoffHistory = mutableListOf<ChatMessage>()

@@ -74,10 +74,10 @@ object HermesTunnelManager {
     }
 
     suspend fun executeA2ATask(taskType: String, content: String): String {
-        val c = client ?: return "Error: Túnel no conectado."
-        if (!c.isConnected()) return "Error: Túnel sin conexión a la red."
+        val c = client ?: return "Error: Túnel maestro no conectado."
+        if (!c.isConnected()) return "Error: Túnel maestro sin conexión a la red."
 
-        val taskId = "task_\${System.currentTimeMillis()}"
+        val taskId = "task_${System.currentTimeMillis()}"
         val deferred = CompletableDeferred<String>()
         pendingTasks[taskId] = deferred
 
@@ -95,6 +95,44 @@ object HermesTunnelManager {
         } ?: run {
             pendingTasks.remove(taskId)
             "Timeout: Hermes no respondió tras 45 segundos."
+        }
+    }
+
+    suspend fun executeDynamicA2ATask(url: String, token: String, taskType: String, content: String): String {
+        val taskId = "task_dyn_${System.currentTimeMillis()}"
+        val deferred = CompletableDeferred<String>()
+        
+        val ephemeralClient = HermesTunnelClient(serverUrl = url, deviceId = "emma-dynamic", token = token).apply {
+            onConnected = { Log.i("TunnelManager", "Tunnel Efímero Conectado a $url") }
+            onMessage = { msg ->
+                val event = msg.optString("event")
+                if (event == "task_complete" && msg.optString("task_id") == taskId) {
+                    val result = msg.optJSONObject("result")?.toString() ?: msg.optString("result", "Completado sin data")
+                    deferred.complete(result)
+                    this.disconnect()
+                }
+            }
+        }
+        
+        ephemeralClient.connect()
+        delay(1500) // Give it a second to handshake
+        
+        if (!ephemeralClient.isConnected()) {
+            return "Error: Túnel Efímero falló al conectar a $url"
+        }
+        
+        val taskJson = JSONObject().apply {
+            put("id", taskId)
+            put("type", taskType)
+            put("content", content)
+        }
+        ephemeralClient.sendA2ATask(taskJson)
+        
+        return withTimeoutOrNull(45_000L) {
+            deferred.await()
+        } ?: run {
+            ephemeralClient.disconnect()
+            "Timeout: Túnel Efímero Remoto no respondió tras 45 segundos."
         }
     }
 }

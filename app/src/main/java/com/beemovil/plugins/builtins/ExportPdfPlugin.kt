@@ -137,10 +137,7 @@ class ExportPdfPlugin(private val context: Context) : EmmaPlugin {
                 pdfDocument.close()
                 Log.d(TAG, "PDF Forjado con éxito: ${pdfFile.absolutePath}")
 
-                // Lanzar Share Intent
-                launchShareIntent(pdfFile, "application/pdf")
-
-                "He generado tu documento físico y te he abierto la ventana para que puedas enviarlo o descargarlo directamente."
+                return@withContext "TOOL_CALL::file_generated::${pdfFile.absolutePath}"
 
             } catch (e: Exception) {
                 Log.e(TAG, "Falla forjando PDF", e)
@@ -149,22 +146,4 @@ class ExportPdfPlugin(private val context: Context) : EmmaPlugin {
         }
     }
 
-    private fun launchShareIntent(file: File, mimeType: String) {
-        try {
-            val uri = FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.fileprovider",
-                file
-            )
-            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                type = mimeType
-                putExtra(Intent.EXTRA_STREAM, uri)
-                flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK
-            }
-            context.startActivity(Intent.createChooser(shareIntent, "Compartir E.M.M.A. Export")
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        } catch (e: Exception) {
-            Log.e(TAG, "Error Share Intent", e)
-        }
-    }
 }

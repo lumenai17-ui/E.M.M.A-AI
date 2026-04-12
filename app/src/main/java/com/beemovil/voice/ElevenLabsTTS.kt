@@ -60,8 +60,8 @@ class ElevenLabsTTS(private val context: Context) {
             } catch (e: CancellationException) {
                 // Expected
             } catch (e: Exception) {
-                Log.e(TAG, "Error TTS ElevenLabs: \${e.message}")
-                withContext(Dispatchers.Main) { onError?.invoke("Error ElevenLabs: \${e.message}") }
+                Log.e(TAG, "Error TTS ElevenLabs: ${e.message}")
+                withContext(Dispatchers.Main) { onError?.invoke("Error local ElevenLabs: ${e.message}") }
             } finally {
                 isSpeaking = false
             }
@@ -94,13 +94,13 @@ class ElevenLabsTTS(private val context: Context) {
             val response = BeeHttpClient.default.newCall(request).execute()
             if (!response.isSuccessful) {
                 val err = response.body?.string() ?: ""
-                Log.e(TAG, "Error \$response.code en ElevenLabs: \$err")
-                return null
+                Log.e(TAG, "Error HTTP ${response.code} en ElevenLabs: $err")
+                throw Exception("HTTP ${response.code}: $err")
             }
             response.body?.bytes()
         } catch (e: Exception) {
-            Log.e(TAG, "Http Exception: \${e.message}")
-            null
+            Log.e(TAG, "Http Exception ElevenLabs: ${e.message}")
+            throw e
         }
     }
 

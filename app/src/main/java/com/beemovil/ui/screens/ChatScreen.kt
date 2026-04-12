@@ -46,6 +46,9 @@ fun ChatScreen(
     var inputText by remember { mutableStateOf("") }
     var showMenuForMessage by remember { mutableStateOf<String?>(null) }
     var attachedFileUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    
+    var showTopMenu by remember { mutableStateOf(false) }
+    var showEditAgentDialog by remember { mutableStateOf(false) }
 
     val context = androidx.compose.ui.platform.LocalContext.current
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
@@ -56,6 +59,16 @@ fun ChatScreen(
     val filePickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
     ) { uri ->
+        if (uri != null) {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (e: Exception) {
+                // If the provider doesn't support persistable permissions, it will be skipped
+            }
+        }
         attachedFileUri = uri
     }
 
@@ -87,7 +100,27 @@ fun ChatScreen(
                             tint = if (viewModel.isMuted.value) Color.Red else BeeYellow
                         )
                     }
-                    IconButton(onClick = onSettingsClick) { Icon(Icons.Filled.MoreVert, "Settings", tint = BeeGray) }
+                    IconButton(onClick = { showTopMenu = true }) { Icon(Icons.Filled.MoreVert, "Settings", tint = BeeGray) }
+                    DropdownMenu(expanded = showTopMenu, onDismissRequest = { showTopMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Configurar Agente Mente") },
+                            onClick = { 
+                                showTopMenu = false
+                                if (viewModel.activeAgentConfig.value != null) {
+                                    showEditAgentDialog = true
+                                } else {
+                                    android.widget.Toast.makeText(context, "No es un Agente Editable", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Ajustes del Sistema") },
+                            onClick = {
+                                showTopMenu = false
+                                onSettingsClick()
+                            }
+                        )
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF161622))
             )
@@ -294,8 +327,18 @@ fun ChatScreen(
                 }
                 if (viewModel.isLoading.value) {
                     item {
-                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.Start) {
-                            CircularProgressIndicator(color = BeeYellow, modifier = Modifier.size(24.dp))
+                        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                            if (viewModel.swarmInsight.value.isNotBlank()) {
+                                Text(
+                                    text = viewModel.swarmInsight.value,
+                                    color = BeeYellow,
+                                    fontSize = 12.sp,
+                                    modifier = Modifier.padding(bottom = 6.dp)
+                                )
+                            }
+                            Row(horizontalArrangement = Arrangement.Start) {
+                                CircularProgressIndicator(color = BeeYellow, modifier = Modifier.size(24.dp))
+                            }
                         }
                     }
                 }
@@ -307,6 +350,59 @@ fun ChatScreen(
                 url = viewModel.browserUrl.value,
                 onDismiss = { viewModel.showBrowser.value = false }
             )
+        }
+        
+        if (showEditAgentDialog) {
+            val agent = viewModel.activeAgentConfig.value
+            if (agent != null) {
+                var editName by remember { mutableStateOf(agent.name) }
+                var editPrompt by remember { mutableStateOf(agent.systemPrompt) }
+                var editModel by remember { mutableStateOf(agent.fallbackModel) }
+
+                AlertDialog(
+                    onDismissRequest = { showEditAgentDialog = false },
+                    containerColor = Color(0xFF222234),
+                    title = { Text("ADN de ${agent.name}", color = BeeYellow, fontWeight = FontWeight.Bold) },
+                    text = {
+                        Column {
+                            OutlinedTextField(
+                                value = editName,
+                                onValueChange = { editName = it },
+                                label = { Text("Nombre del Agente", color = BeeGray) },
+                                colors = TextFieldDefaults.colors(focusedTextColor = BeeWhite, unfocusedTextColor = BeeWhite)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedTextField(
+                                value = editModel,
+                                onValueChange = { editModel = it },
+                                label = { Text("Motor LLM (o Túnel)", color = BeeGray) },
+                                colors = TextFieldDefaults.colors(focusedTextColor = BeeWhite, unfocusedTextColor = BeeWhite)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedTextField(
+                                value = editPrompt,
+                                onValueChange = { editPrompt = it },
+                                label = { Text("Directriz Primaria (System Prompt)", color = BeeGray) },
+                                modifier = Modifier.height(180.dp),
+                                maxLines = 8,
+                                colors = TextFieldDefaults.colors(focusedTextColor = BeeWhite, unfocusedTextColor = BeeWhite)
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text("Para Túnel Dinámico: hermes-a2a|wss://ip|token", fontSize = 10.sp, color = BeeGray)
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            val updated = agent.copy(name = editName, systemPrompt = editPrompt, fallbackModel = editModel)
+                            viewModel.updateAgentConfig(updated)
+                            showEditAgentDialog = false
+                        }) { Text("Aplicar Mutación", color = BeeYellow) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showEditAgentDialog = false }) { Text("Cancelar", color = BeeGray) }
+                    }
+                )
+            }
         }
     }
 }
