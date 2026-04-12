@@ -363,7 +363,10 @@ fun ThermalWeatherWidget(text: String, isLoading: Boolean) {
                             style = androidx.compose.ui.graphics.drawscope.Stroke(width = 8.dp.toPx())
                         )
                     }
-                    val tempText = if (isLoading) "--" else "22°C"
+                    val tempText = if (isLoading) "--" else {
+                        val extracted = text.substringAfter("(", "").substringBefore(")")
+                        if (extracted.isNotBlank()) extracted else "--°C"
+                    }
                     Text(
                         text = tempText, 
                         color = BeeWhite, 
@@ -375,7 +378,7 @@ fun ThermalWeatherWidget(text: String, isLoading: Boolean) {
                 
                 Spacer(modifier = Modifier.height(2.dp))
                 
-                val cleanDesc = if (isLoading) "Sintetizando..." else text.substringAfter(" ").take(22)
+                val cleanDesc = if (isLoading) "Sintetizando..." else text.substringAfter(" ").substringBefore("(").trim().take(22)
                 Text(
                     text = cleanDesc, 
                     color = BeeYellow, 

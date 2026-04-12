@@ -472,7 +472,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 if (!isMuted.value) {
                     voiceManager.speak(response, language = Locale.getDefault().language, onError = { err ->
                         android.os.Handler(android.os.Looper.getMainLooper()).post {
-                            android.widget.Toast.makeText(application, "Avisos de Voz: $err", android.widget.Toast.LENGTH_LONG).show()
+                            android.widget.Toast.makeText(getApplication(), "Avisos de Voz: $err", android.widget.Toast.LENGTH_LONG).show()
                         }
                     })
                 }
