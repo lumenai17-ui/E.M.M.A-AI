@@ -71,9 +71,9 @@ Este documento traza las fases precisas para convertir la herencia de Bee en una
 ## 💬 FASE 8: "The WhatsApp Experience" & Persistencia Viva - [COMPLETADO]
 *Meta: Que la pantalla de chat se sienta como una app de mensajería AAA pulida, rápida y que no pierda nunca el contexto al cerrarse.*
 
-- **Sub-fase 8.1: UI Insets & Fluidez Visual:** [Point 1] Ajustar el teclado (ime padding) para que mueva la barra orgánicamente. Incorporar acciones de "Copiar", "Pegar" (ClipboardManager) en las burbujas de chat.
-- **Sub-fase 8.2: Multimedia I/O Navivo:** [Point 1] Activar íconos de adjuntar (FilePicker), enviar archivos, renderizar previews de imágenes directamente dentro de las burbujas y grabar Voicenotes nativos en la UI.
-- **Sub-fase 8.3: Persistencia de Sesión Completa:** [Point 2] Conectar el `ChatViewModel` a la base de datos `ChatHistoryDB`. Al salir de la app y regresar, la conversación debe recargarse intacta desde la base de datos, manteniendo activo al agente cargado.
+- **Sub-fase 8.1: UI Insets & Fluidez Visual:** [COMPLETADO] Ajustar el teclado (ime padding) para que mueva la barra orgánicamente. Incorporar acciones de "Copiar", "Pegar" (ClipboardManager) en las burbujas de chat.
+- **Sub-fase 8.2: Multimedia I/O Nativo:** [COMPLETADO] Activar íconos de adjuntar (FilePicker), enviar archivos, renderizar previews de imágenes directamente dentro de las burbujas y grabar Voicenotes nativos en la UI.
+- **Sub-fase 8.3: Persistencia de Sesión Completa:** [COMPLETADO] Conectar el `ChatViewModel` a la base de datos `ChatHistoryDB`. Al salir de la app y regresar, la conversación debe recargarse intacta desde la base de datos, manteniendo activo al agente cargado.
 
 ---
 
@@ -96,8 +96,73 @@ Este documento traza las fases precisas para convertir la herencia de Bee en una
 
 ---
 
-## 🛠️ FASE 10: Herramientas Nativas de Clase Mundial (Ultra-Skills) - [REVISION PENDIENTE]
-*Meta: Extender los plugins de E.M.M.A para operaciones complejas (Business y Code).*
+## 🛠️ FASE 10: Herramientas Nativas de Clase Mundial (Ultra-Skills) - [EN PROGRESO]
+*Meta: Convertir a E.M.M.A. AI en la estación de trabajo móvil definitiva dotándola de I/O Multimodal, ejecución local determinista e integración a nivel Dios con las tripas de Android.*
 
-- **Sub-fase 10.1: Exportador de Documentos:** [Point 4] Skill para generar archivos PDF estructurados localmente o páginas HTML y guardarlas en el almacenamiento nativo de Android.
-- **Sub-fase 10.2: Coding Sandbox:** [Point 4] Área especial donde el LLM pueda tirar scripts en su propio ambiente o validar sintaxis de código de programación.
+- **Sub-fase 10.1: The Coding Sandbox (Cerebro Determinista)** [COMPLETADO]
+  - Motor Mozilla Rhino (V8) corriendo en paralelo. Ejecuta cálculos lógicos o matemáticos puros en JS en milisegundos evitando las "alucinaciones" del LLM y retornando outputs precisos al chat.
+
+- **Sub-fase 10.2: Módulo 1 "The Ingestors" (Lectura y Parseo Entrante) [COMPLETADO]**
+  - La capacidad del agente de recibir cualquier archivo o formato y convertirlo en vectores/texto entendible para su análisis.
+  - **Image Vision (OCR & Context):** Si envías una foto, E.M.M.A lee texto (OCR usando Google ML Kit) y el "Vision Model" describe de qué trata la imagen y su estructura sin que tengas que narrárselo.
+  - **PDF Reader (Parser Extractor):** Extraer el contenido literal (tablas y párrafos) de documentos legajos, permitiendo resúmenes instantáneos de PDFs de decenas de páginas.
+  - **Excel / CSV Reader:** Leer estructuradamente libros .xlsx, para extraer hojas, filas o buscar registros específicos en megadatos (Tablas de inventarios/precios).
+  - **VoiceNote Ingestor profunda:** No solo convertir lo que dices, sino escuchar audios reenviados de WhatsApp por tu jefe para resumirlos.
+  - **HTML DOM Reader (Web Scraper):** Abstraer una URL externa dada de internet, quitarle toda la chatarra (CSS, JS) y darle al agente sólo el contenido base de la noticia/artículo.
+  - **Camera Live Stream:** Módulo de visión continua procesando frames a N FPS.
+
+- **Sub-fase 10.3: Módulo 2 "The Generators" (Exportación y Creación Activa) [COMPLETADO]**
+  - Pasar de respuestas conversacionales a "Entregables Corporativos".
+  - **PDF Architect:** A partir de un borrador text/markdown devuelto por la IA, la app dibuja vectores un documento PDF con márgenes, colores u hojas membrete.
+  - **Excel / CSV Builder:** Capacidad de que E.M.M.A estructure columnas de datos tabulados y escupa un archivo .csv u .xlsx directo sin abrir apps externas.
+  - **HTML Landing Page Creator:** Programar el cascarón en HTML/CSS, guardarlo como un fichero interno, y abrir un WebView local (Visualizador) para que el usuario navegue el código Web generado (como la "Forja Web").
+  - **Visual Chart Generator:** El Agente dibuja gráficos de barras o pasteles localmente tras analizar datos.
+  - **HTML Email Formatter:** Diseñar un correo impecable con tablas HTML incrustadas directo en el Cliente de Correo.
+  - **ICS Event Generator:** Creación de archivos de invitación de calendario (.ics).
+
+- **Sub-fase 10.4: Módulo 3 "The Operators" (Acciones Sistema OS) [COMPLETADO]**
+  - Enlace profundo con los servicios base del androide. Pidiendo directamente al SO que altere su estado.
+  - **OS Contact Manager:** "Busca a Luis Felipe y dime su cel". (Lectura SQLite del sistema).
+  - **Calendar Injector:** Agendar reuniones, ver la disponibilidad de los próximos lunes.
+  - **Alarms & Timers:** "Avísame en 50 minutos para sacar el pavo". (Intent Nativo AlarmClock).
+  - **Silent Background Executor:** Tareas diferidas (Cronjobs). "Chequea el clima todos los días a las 6 AM y mándamelo por texto".
+  - **System Navigator (God Mode):** Prender linterna, activar WiFi, revisar estado térmico.
+
+- **Sub-fase 10.5: Módulo 4 "The Networkers" (Comunicaciones y Web Activa) [COMPLETADO]**
+  - **Send Email Direct:** Capacidad del agente de usar un protocolo SMTP o Intents para redactar y enviar sin intervención directa.
+  - **Web API Fetcher Síncrono:** La habilidad del LLM de armar y mandar una llamada GET o POST a una API externa dada por el usuario "Ve a este endpoint de mi CRM y tráeme mis datos".
+  - **WhatsApp Automator:** Redacción automática de mensajes vía Accessibility Service (Modo Super Dios) o Android Intents (Tú solo das a 'SEND').
+  - **Bluetooth/IoT Commander:** (Habilidad Extrema): El LLM emitiendo comandos seriales base para dispositivos periféricos.
+
+---
+
+## 🚀 FASE 11: The Spaceship HUD & Proactive RAG - [COMPLETADO]
+*Meta: Transformar el Dashboard estático en un Head-Up Display dinámico que respira telemetría viva, junto a un Agente Fantasma que predice necesidades usando información contextual profunda en segundo plano.*
+
+- **Sub-fase 11.1: Eye Candy HUD & Authentic Telemetry:** [COMPLETADO]
+  - **Aesthetic Polish:** Ralentización de animaciones, estelas difuminadas en el Radar, incrustación de animaciones meteorológicas (Sol/Nubes) en el termostato y fuentes `Monospace`.
+  - **Authentic Telemetry (GPS Real):** Inyección de `play-services-location` para que el escáner capture las verdaderas coordenadas del teléfono erradicando el placeholder (CDMX).
+- **Sub-fase 11.2: El Cerebro Silencioso (WorkManager Ghost):** [COMPLETADO]
+  - Instanciar un Worker asíncrono que se despierte periódicamnete para recolectar telemetría local de hardware, escanear el `ChatHistoryDB` para recuperar los últimos temas y consultar rápidamente el `MediaStore` o Descargas para notificar archivos nuevos.
+- **Sub-fase 11.3: The Deep Insight (Generador Contextual):** [COMPLETADO]
+  - Condensar todos los datos (Clima, Mapas, Batería... ) en un megacompilado que el LLM consume para escribir el 'Insight'. Implementar Glassmorphism.
+  - *Golden Polish:* Scroll vertical infinito en Dashboard nativo, Telemetría real síncrona (Open-Meteo), y candados lógicos Anti-Alucinaciones para la IA en segundo plano.
+
+---
+
+## 📡 FASE 11.5: Hermes Mobile Tunnel & Agent Hub Revival - [COMPLETADO]
+*Meta: Interconectar E.M.M.A. con el servidor maestro Hermes a través de WebSockets persistentes y dotar de vida (Glassmorphism e interactividad real) al Agent Hub.*
+
+- [x] **Sub-fase 11.5.1: UI/UX Agent Hub Polish:** Modificar `ConversationsScreen` para aplicar `Modifier.clickable` a los agentes (revivir botones), aplicar estilización Glassmorphism, y perfeccionar el FAB.
+- [x] **Sub-fase 11.5.2: The Forge Reality Hook:** Conectar el `AgentFactorySheet` a las listas funcionales de Modelos en lugar de enrutadores estáticos.
+- [x] **Sub-fase 11.5.3: Hermes Tunnel Protocol:** Implementar `HermesTunnelClient.kt` usando OkHttp WebSockets para bidireccionalidad.
+- [x] **Sub-fase 11.5.4: Foreground Tunnel Service:** Levantar `TunnelService.kt` con permisos de bloqueo (Wake Lock) para mantener la conexión push.
+- [x] **Sub-fase 11.5.5: EmmaEngine A2A Bridge:** Orquestaciones de delegación en `EmmaEngine` a través del flag A2A hacia WebSocket y toggle visual de estado.
+
+---
+
+## 📈 FASE 12: The App Store Premium Launch (ROADMAP GTM FUTURO)
+*Meta: Orquestar el Deployment Comercial y el Modelo Open-Core (Koog V2).*
+  - Empaquetamiento final (`.aab` release) con optimización de peso (R8/Minify) y prevención de colisión de LLM locales.
+  - Firma Criptográfica (`.signingConfig`) y vinculación con la matriz comercial BEE Smart Portal.
+  - Bloqueo de código y publicación estratégica.

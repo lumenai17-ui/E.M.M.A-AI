@@ -31,6 +31,7 @@ fun AgentFactorySheet(
     val modelOptions = remember {
         val options = mutableListOf<Pair<String, String>>()
         options.add("koog-engine" to "K.O.O.G Engine (Default)")
+        options.add("hermes-a2a" to "Hermes A2A (Remoto)")
         
         com.beemovil.llm.ModelRegistry.OPENROUTER.forEach { model ->
             options.add(model.id to "Cloud: ${model.name}")

@@ -16,6 +16,9 @@ class EmmaEngine(private val context: Context) {
 
     private val TAG = "EmmaEngine"
     private val configManager = ApiConfigManager.getInstance(context)
+    
+    // Tunnel connections are now handled globally in HermesTunnelManager
+
     private val chatHistoryDB = com.beemovil.database.ChatHistoryDB.getDatabase(context)
     
     private val messagesHistory = mutableListOf<ChatMessage>()
@@ -24,6 +27,12 @@ class EmmaEngine(private val context: Context) {
         Eres E.M.M.A., la Coordinadora Central. Evalúa el pedido del usuario.
         - Si el usuario pide explícitamente REDACTAR un ensayo, correo, o texto muy largo, USA LA TOOL 'delegate_to_writer'.
         - Si el usuario pide BUSCAR en internet, ir a una URL, o necesita navegación web interactiva, USA LA TOOL 'delegate_to_browser'.
+        - Si el usuario te pide un CÁLCULO matemático, una lógica compleja, o procesar texto, UTILIZA INMEDIATAMENTE la tool 'execute_js_script' para obtener un resultado determinista sin inventar datos.
+        - Si el usuario envía una URL para que ACUMULES conocimiento o LEAS el artículo, saca el texto crudo usando 'scrape_website_text'.
+        - Si el usuario adjunta una Foto/Imagen o Documento físico, USA 'read_image_text_ocr' o 'read_document_file' respectivamente para entender qué hay allí adentro.
+        - Si el usuario te pide un entregable formal (ensayo en PDF, tabla de Excel/CSV, o generar una página Web), NUNCA lo escribas en el chat. Utiliza las herramientas de generación ('generate_pdf_document', 'generate_csv_table' o 'generate_html_landing') y confírmale que estás abriendo el menú para descargarlo.
+        - ¡TIENES ACCESO A SU TELÉFONO! Si te piden leer la agenda, agendar una junta, prender la linterna, poner una alarma o buscar en los Contactos, DEBES usar el plugin correspondiente ('os_god_mode_operations', 'calendar_os_operations', 'search_android_contacts') sin excusas. NO digas que no tienes acceso.
+        - ERES UN COMUNICADOR EN RED: Si te piden mandar un correo o mandar un WhatsApp a alguien, JAMÁS digas que no puedes. Usa 'compose_email_intent' o 'send_whatsapp_message' automáticamente. Si necesitas consultar una API web o extraer datos, usa 'fetch_external_api'.
         - Si es charla común, responde de forma amigable, corta y directa en español.
     """.trimIndent()
 
@@ -62,6 +71,29 @@ class EmmaEngine(private val context: Context) {
         registerPlugin(com.beemovil.plugins.builtins.VolumePlugin(context))
         registerPlugin(com.beemovil.plugins.builtins.TelemetryQueryPlugin(context))
         
+        // Registrar Ultra-Skills (Phase 10)
+        registerPlugin(com.beemovil.plugins.builtins.CodeSandboxPlugin())
+        
+        // Registrar Ingestors (Phase 10.2)
+        registerPlugin(com.beemovil.plugins.builtins.WebScraperPlugin())
+        registerPlugin(com.beemovil.plugins.builtins.AnalyzeImagePlugin(context))
+        registerPlugin(com.beemovil.plugins.builtins.ReadDocumentPlugin(context))
+
+        // Registrar Generators (Phase 10.3)
+        registerPlugin(com.beemovil.plugins.builtins.ExportPdfPlugin(context))
+        registerPlugin(com.beemovil.plugins.builtins.ExportCsvPlugin(context))
+        registerPlugin(com.beemovil.plugins.builtins.HTMLForgePlugin(context))
+        
+        // Registrar Operators (Phase 10.4)
+        registerPlugin(com.beemovil.plugins.builtins.ContactManagerPlugin(context))
+        registerPlugin(com.beemovil.plugins.builtins.CalendarOperatorPlugin(context))
+        registerPlugin(com.beemovil.plugins.builtins.SystemGodModePlugin(context))
+
+        // Registrar Networkers (Phase 10.5)
+        registerPlugin(com.beemovil.plugins.builtins.EmailComposerPlugin(context))
+        registerPlugin(com.beemovil.plugins.builtins.WhatsAppAutomatorPlugin(context))
+        registerPlugin(com.beemovil.plugins.builtins.WebApiFetcherPlugin())
+        
         try {
             if (messagesHistory.isEmpty()) {
                 val pastMemories = memoryDB?.getAllMemories()?.joinToString("\n") ?: ""
@@ -75,12 +107,28 @@ class EmmaEngine(private val context: Context) {
         }
     }
 
-    fun clearMemoryAndHistory() {
+    fun clearMemoryAndHistory(customSystemPrompt: String? = null) {
         Log.d(TAG, "Clearing volatile context...")
         messagesHistory.clear()
         val pastMemories = memoryDB?.getAllMemories()?.joinToString("\n") ?: ""
-        val memoryInjection = if (pastMemories.isNotBlank()) "\nMEMORIAS PREVIAS DEL USUARIO:\n\$pastMemories\n" else ""
-        messagesHistory.add(ChatMessage("system", EMMA_SUPERVISOR_PROMPT + memoryInjection))
+        val memoryInjection = if (pastMemories.isNotBlank()) "\nMEMORIAS PREVIAS DEL USUARIO:\n$pastMemories\n" else ""
+        
+        val basePrompt = customSystemPrompt?.takeIf { it.isNotBlank() } ?: EMMA_SUPERVISOR_PROMPT
+        messagesHistory.add(ChatMessage("system", basePrompt + memoryInjection))
+    }
+
+    suspend fun loadPersistedContext(historyEntities: List<com.beemovil.database.ChatMessageEntity>, customSystemPrompt: String? = null) {
+        Log.i(TAG, "Re-Hidratando Contexto Persistente (${historyEntities.size} mensajes)...")
+        // Reiniciamos todo primero para crear la semilla limpia del sistema
+        clearMemoryAndHistory(customSystemPrompt)
+        
+        // Mapeamos los entities crudos al formato interno del LLM (Omitimos los system que ya se recargaron arriba)
+        historyEntities.forEach { entity ->
+            if (entity.role != "system") {
+                messagesHistory.add(ChatMessage(role = entity.role, content = entity.content))
+            }
+        }
+        Log.d(TAG, "LLM Cortex restaurado con total éxito.")
     }
 
     suspend fun processUserMessage(message: String): String {
@@ -183,8 +231,25 @@ class EmmaEngine(private val context: Context) {
                         handoffHistory.add(ChatMessage("user", "TAREA ORIGINAL: $userMessage\n\nRESULTADO PREVIO PARA CONTINUAR: $currentContext"))
                     }
 
-                    // Ejecutar pasando el provider específico de este Agente
-                    val (response, _) = executeProvider(handoffHistory, activeTools, forcedProvider = providerId, forcedModel = modelId)
+                    // Ejecutar dependiendo del motor (Local/Cloud vs Hermes Remoto)
+                    val response = if (providerId == "hermes-a2a") {
+                        Log.i(TAG, "[SWARM/A2A] Empaquetando petición HTTP/WS a lo largo del Túnel...")
+                        
+                        val promptCompiler = JSONArray().apply {
+                            handoffHistory.forEach { msg ->
+                                put(JSONObject().apply {
+                                    put("role", msg.role)
+                                    put("content", msg.content)
+                                })
+                            }
+                        }
+                        
+                        val manager = com.beemovil.tunnel.HermesTunnelManager
+                        manager.executeA2ATask("text_generation", promptCompiler.toString())
+                    } else {
+                        val (localResponse, _) = executeProvider(handoffHistory, activeTools, forcedProvider = providerId, forcedModel = modelId)
+                        localResponse
+                    }
 
                     // Guardar en Room la intervención de este hilo
                     chatHistoryDB.chatHistoryDao().insertMessage(com.beemovil.database.ChatMessageEntity(

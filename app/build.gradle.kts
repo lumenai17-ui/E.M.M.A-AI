@@ -96,8 +96,12 @@ dependencies {
     implementation("ai.koog:koog-agents:0.5.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
+    // JavaScript Engine (Coding Sandbox)
+    implementation("org.mozilla:rhino:1.7.14")
+
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.1")
 
     // Markdown rendering
     implementation("io.noties.markwon:core:4.6.2")
@@ -112,8 +116,9 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
     implementation("androidx.camera:camera-view:$cameraxVersion")
 
-    // ML Kit Face Detection
+    // ML Kit Face Detection & OCR
     implementation("com.google.mlkit:face-detection:16.1.6")
+    implementation("com.google.mlkit:text-recognition:16.0.0")
 
     // Document Reader (PDF text extraction + DOCX/XLSX parsing)
     implementation("org.apache.poi:poi-ooxml:5.2.5") {
@@ -121,6 +126,10 @@ dependencies {
         exclude(group = "org.apache.xmlbeans", module = "xmlbeans")
     }
     implementation("org.apache.xmlbeans:xmlbeans:5.1.1")
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
+
+    // HTML Parser (Web Scraper)
+    implementation("org.jsoup:jsoup:1.17.2")
 
 
 
@@ -146,6 +155,15 @@ dependencies {
 
     // WorkManager
     implementation("androidx.work:work-runtime-ktx:2.9.0")
+
+    // Location (Real GPS for Authentic Telemetry, Fase 11)
+    implementation("com.google.android.gms:play-services-location:21.2.0")
+
+    // Lottie Compose (AAA Animations)
+    implementation("com.airbnb.android:lottie-compose:6.0.0")
+
+    // Coil Compose (Dynamic Photo Widgets)
+    implementation("io.coil-kt:coil-compose:2.6.0")
 
     // Google Auth (OAuth2 token handling)
     implementation("com.google.auth:google-auth-library-oauth2-http:1.32.0") {

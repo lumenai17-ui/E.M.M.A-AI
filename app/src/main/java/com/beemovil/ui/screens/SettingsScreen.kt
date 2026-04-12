@@ -805,6 +805,75 @@ fun SettingsScreen(
                     )
                 }
             }
+            
+            // ═══════════════════════════════════════
+            // ELEVENLABS (CLONACION DE VOZ)
+            // ═══════════════════════════════════════
+            SectionCard {
+                SectionTitle("CLONACION DE VOZ (ELEVENLABS)")
+                Text("Voz hiper-realista por defecto para tu asistente", fontSize = 12.sp, color = BeeGray)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                var elKey by remember { mutableStateOf(securePrefs.getString("elevenlabs_api_key", "") ?: "") }
+                var showElKey by remember { mutableStateOf(false) }
+                var elVoiceId by remember { mutableStateOf(securePrefs.getString("elevenlabs_voice_id", "") ?: "") }
+
+                OutlinedTextField(
+                    value = elKey,
+                    onValueChange = { elKey = it },
+                    label = { Text("ElevenLabs API Key") },
+                    placeholder = { Text("sk_...", color = BeeGray) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    visualTransformation = if (showElKey) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { showElKey = !showElKey }) {
+                            Icon(if (showElKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Toggle", tint = BeeGrayLight)
+                        }
+                    },
+                    colors = fieldColors()
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                OutlinedTextField(
+                    value = elVoiceId,
+                    onValueChange = { elVoiceId = it },
+                    label = { Text("Voice ID (La voz de Emma)") },
+                    placeholder = { Text("ID alfanumerico", color = BeeGray) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    colors = fieldColors()
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Button(
+                    onClick = {
+                        securePrefs.edit()
+                            .putString("elevenlabs_api_key", elKey.trim())
+                            .putString("elevenlabs_voice_id", elVoiceId.trim())
+                            .apply()
+                        Toast.makeText(context, "Configuracion de voz viva guardada", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE91E63), contentColor = BeeWhite),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(Icons.Filled.RecordVoiceOver, "Save", modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Guardar ElevenLabs", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+
+                if (elKey.isBlank() || elVoiceId.isBlank()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "Inactivo: Se usará Deepgram o Nativa. Activa a Emma cuando estés listo.",
+                        fontSize = 11.sp, color = BeeYellow.copy(alpha = 0.8f)
+                    )
+                }
+            }
+
             // ═══════════════════════════════════════
             // MEDIA GENERATION (Phase 23)
             // ═══════════════════════════════════════

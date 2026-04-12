@@ -56,7 +56,7 @@ class MainActivity : ComponentActivity() {
                     containerColor = if (isDark) BeeBlack else LightBackground,
                     bottomBar = {
                         val screen = viewModel.currentScreen.value
-                        if (screen in listOf("dashboard", "conversations", "settings")) {
+                        if (screen in listOf("dashboard", "conversations", "tasks", "email_inbox", "settings")) {
                             PremiumBottomNav(
                                 currentScreen = screen,
                                 onNavigate = { viewModel.currentScreen.value = it }
@@ -87,6 +87,13 @@ class MainActivity : ComponentActivity() {
                                     viewModel = viewModel
                                 )
                                 "dashboard" -> DashboardScreen(
+                                    viewModel = viewModel,
+                                    onAgentClick = { viewModel.currentScreen.value = "chat" },
+                                    onSettingsClick = { viewModel.currentScreen.value = "settings" }
+                                )
+                                "tasks", "email_inbox" -> DashboardScreen(
+                                    // Todo: Crear TaskScreen y EmailInboxScreen para la fase 11. 
+                                    // Por ahora actúan como fallback orgánico sin flashear la app.
                                     viewModel = viewModel,
                                     onAgentClick = { viewModel.currentScreen.value = "chat" },
                                     onSettingsClick = { viewModel.currentScreen.value = "settings" }

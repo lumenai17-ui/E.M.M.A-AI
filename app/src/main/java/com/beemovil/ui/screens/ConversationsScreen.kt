@@ -1,6 +1,9 @@
 package com.beemovil.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Hub
@@ -42,6 +45,54 @@ fun ConversationsScreen(viewModel: ChatViewModel) {
         )
     }
 
+    if (viewModel.showHermesDialog.value) {
+        var serverUrl by remember { mutableStateOf("ws://10.0.2.2:8643/mobile/ws") }
+        var token by remember { mutableStateOf("") }
+        
+        AlertDialog(
+            onDismissRequest = { viewModel.showHermesDialog.value = false },
+            containerColor = Color(0xFF1E1E2C),
+            title = { Text("Conexión Hermes (A2A)", color = BeeWhite, fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = serverUrl,
+                        onValueChange = { serverUrl = it },
+                        label = { Text("URL del Servidor", color = BeeGray) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = BeeWhite, unfocusedTextColor = BeeWhite,
+                            focusedBorderColor = BeeYellow, unfocusedBorderColor = BeeGray
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = token,
+                        onValueChange = { token = it },
+                        label = { Text("Access Token", color = BeeGray) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = BeeWhite, unfocusedTextColor = BeeWhite,
+                            focusedBorderColor = BeeYellow, unfocusedBorderColor = BeeGray
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.connectHermes(serverUrl, token) }) {
+                    Text("Conectar", color = BeeYellow, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.showHermesDialog.value = false }) {
+                    Text("Cancelar", color = BeeGray)
+                }
+            }
+        )
+    }
+
     Scaffold(
         containerColor = Color(0xFF0F0F16), // Deep Space Black
         topBar = {
@@ -49,6 +100,29 @@ fun ConversationsScreen(viewModel: ChatViewModel) {
                 title = { Text("Agent Hub", fontWeight = FontWeight.Bold, color = BeeWhite) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 actions = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = if (viewModel.isHermesConnected.value) "Hermes On" else "Hermes Off", 
+                            color = if(viewModel.isHermesConnected.value) Color.Green else BeeGray, 
+                            fontSize = 12.sp
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Switch(
+                            checked = viewModel.isHermesConnected.value,
+                            onCheckedChange = { checked ->
+                                if (checked) {
+                                    viewModel.showHermesDialog.value = true
+                                } else {
+                                    viewModel.disconnectHermes()
+                                }
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = BeeYellow, 
+                                checkedTrackColor = Color(0xFF2A2A3D)
+                            ),
+                            modifier = Modifier.scale(0.8f)
+                        )
+                    }
                     IconButton(onClick = {}) {
                         Icon(Icons.Filled.Search, "Buscar", tint = BeeGray)
                     }
@@ -59,7 +133,8 @@ fun ConversationsScreen(viewModel: ChatViewModel) {
             FloatingActionButton(
                 onClick = { showFactorySheet = true },
                 containerColor = BeeYellow,
-                contentColor = BeeBlack
+                contentColor = BeeBlack,
+                shape = RoundedCornerShape(16.dp)
             ) {
                 Icon(Icons.Filled.Add, "Nuevo Enjambre")
             }
@@ -77,12 +152,16 @@ fun ConversationsScreen(viewModel: ChatViewModel) {
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     items(viewModel.allAgents) { agent ->
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.clickable { viewModel.openAgentChat(agent) }
+                        ) {
                             Box(
                                 modifier = Modifier
                                     .size(60.dp)
                                     .clip(CircleShape)
-                                    .background(Color(0xFF1E1E2C)),
+                                    .background(Color(0xFF1E1E2C).copy(alpha = 0.8f))
+                                    .border(1.dp, BeeYellow.copy(alpha = 0.3f), CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(agent.icon, fontSize = 24.sp)
@@ -116,6 +195,7 @@ fun ConversationsScreen(viewModel: ChatViewModel) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clickable { viewModel.openThread(thread) }
                             .padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {

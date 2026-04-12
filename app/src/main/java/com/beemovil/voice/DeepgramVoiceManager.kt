@@ -15,11 +15,14 @@ class DeepgramVoiceManager(private val context: Context) {
         private const val KEY_VOICE = "deepgram_voice"
         private const val KEY_USE_DEEPGRAM_STT = "use_deepgram_stt"
         private const val KEY_USE_DEEPGRAM_TTS = "use_deepgram_tts"
+        const val KEY_ELEVENLABS_API = "elevenlabs_api_key"
+        const val KEY_ELEVENLABS_VOICE = "elevenlabs_voice_id"
     }
 
     // Deepgram engines
     private val deepgramSTT = try { DeepgramSTT(context) } catch (e: Exception) { null }
     private val deepgramTTS = try { DeepgramTTS(context) } catch (e: Exception) { null }
+    private val elevenLabsTTS = try { ElevenLabsTTS(context) } catch (e: Exception) { null }
 
     private var nativeTTS: TextToSpeech? = null
     private var nativeTTSReady = false
@@ -36,6 +39,9 @@ class DeepgramVoiceManager(private val context: Context) {
 
     val useDeepgramTTS: Boolean get() = hasApiKey && context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         .getBoolean(KEY_USE_DEEPGRAM_TTS, true)
+        
+    val elevenLabsKey: String get() = SecurePrefs.get(context).getString(KEY_ELEVENLABS_API, "") ?: ""
+    val elevenLabsVoice: String get() = SecurePrefs.get(context).getString(KEY_ELEVENLABS_VOICE, "") ?: ""
 
     fun initialize() {
         nativeTTS = TextToSpeech(context) { status ->
@@ -127,6 +133,33 @@ class DeepgramVoiceManager(private val context: Context) {
         onStart: (() -> Unit)? = null,
         onError: ((String) -> Unit)? = null
     ) {
+        val eKey = elevenLabsKey
+        val eVoice = elevenLabsVoice
+
+        if (eKey.isNotBlank() && eVoice.isNotBlank()) {
+            elevenLabsTTS?.speak(
+                text = text,
+                apiKey = eKey,
+                voiceId = eVoice,
+                onDone = onDone,
+                onStart = onStart,
+                onError = { error ->
+                    Log.w(TAG, "ElevenLabs TTS failed: $error, falling back to Deepgram or Native")
+                    speakDeepgramOrNative(text, language, onDone, onStart, onError)
+                }
+            )
+        } else {
+            speakDeepgramOrNative(text, language, onDone, onStart, onError)
+        }
+    }
+
+    private fun speakDeepgramOrNative(
+        text: String,
+        language: String,
+        onDone: (() -> Unit)?,
+        onStart: (() -> Unit)?,
+        onError: ((String) -> Unit)?
+    ) {
         val isEnglish = language.lowercase().startsWith("en")
 
         if (useDeepgramTTS && isEnglish) {
@@ -147,6 +180,7 @@ class DeepgramVoiceManager(private val context: Context) {
     }
 
     fun stopSpeaking() {
+        elevenLabsTTS?.stop()
         deepgramTTS?.stop()
         nativeTTS?.stop()
     }
@@ -175,6 +209,7 @@ class DeepgramVoiceManager(private val context: Context) {
     }
 
     fun destroy() {
+        elevenLabsTTS?.destroy()
         deepgramSTT?.destroy()
         deepgramTTS?.destroy()
         nativeTTS?.stop()

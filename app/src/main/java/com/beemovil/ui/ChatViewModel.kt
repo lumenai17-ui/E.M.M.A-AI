@@ -35,8 +35,9 @@ data class DashboardMatrixState(
     val greetingName: String = "Arquitecto",
     val isMatrixLoading: Boolean = true,
     val capsuleLocation: String = "Cargando radar...",
-    val capsuleNetBattery: String = "Midiendo sistema...",
     val capsuleWeather: String = "Calculando biomas...",
+    val insightHeaderTop: String = "Midiendo sistema...",
+    val insightHeaderBottom: String = "Calibrando biomas...",
     val insightText: String = "Iniciando cognición de entorno. Escaneando la red y calibrando fotones. Dame un milisegundo..."
 )
 
@@ -57,9 +58,26 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             
             // Cargar Historial al Iniciar del Hilo Principal
             val history = chatHistoryDB.chatHistoryDao().getHistory("main")
+            
+            // 1. Restaurar Visor Visual
             history.forEach {
-                messages.add(ChatUiMessage(text = it.content, isUser = it.role == "user"))
+                // Filtramos "system" ni "tool" en la UI, solo user/assistant
+                if (it.role == "user" || it.role == "assistant") {
+                    var filePaths = emptyList<String>()
+                    if (!it.metadataJson.isNullOrBlank()) {
+                        try {
+                            val json = org.json.JSONObject(it.metadataJson)
+                            if (json.has("file_path")) {
+                                filePaths = listOf(json.getString("file_path"))
+                            }
+                        } catch (e: Exception) {}
+                    }
+                    messages.add(ChatUiMessage(text = it.content, isUser = it.role == "user", filePaths = filePaths))
+                }
             }
+            
+            // 2. Re-hidratar Corteza Neuronal (God Mode Persistencia)
+            engine.loadPersistedContext(history)
 
             // Iniciar Motor de Novedad Dinámica
             refreshLiveDashboard()
@@ -124,22 +142,56 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             // Leer de sensores fisicos en background
             val battery = envScanner.getBatteryLevel()
             val net = envScanner.getNetworkStatus()
-            val netBatCombined = if (battery > 20) "🔋 Energía $battery% | 📡 $net" else "⚠️ Batería Crítica $battery% | 📡 $net"
+            val batteryStatus = if (battery > 20) "🔋 Energía $battery%" else "⚠️ Batería Crítica $battery%"
+            val netStatus = if(net.contains("WIFI", true)) "📡 Wi-Fi" else "📶 Datos Conectados"
+            val netBatCombined = "$batteryStatus   |   $netStatus"
             
-            // Simular GPS por defecto si no tenemos lat/long activos del Engine
-            val locationSemantic = envScanner.getSemanticLocation(19.4326, -99.1332)
-            val weather = envScanner.fetchWeather(19.4326, -99.1332)
+            // Intentar obtener GPS real
+            val realLocation = envScanner.getCurrentLocation()
+            val lat = realLocation?.first ?: 19.4326
+            val lon = realLocation?.second ?: -99.1332
+            
+            val locationRaw = envScanner.getSemanticLocation(lat, lon)
+            val weatherRaw = envScanner.fetchWeather(lat, lon)
+
+            // Insight Headers Libres de Doble Emoji
+            val insightTop = "$batteryStatus   |   $netStatus"
+            val insightBottom = "$locationRaw   |   $weatherRaw" // locationRaw/weatherRaw ya traen emoji de DeviceScanner
+
+            // Capa 3: Reloj Local Temporal
+            val formatter = java.time.format.DateTimeFormatter.ofPattern("EEEE HH:mm", java.util.Locale("es", "ES"))
+            val sysTime = java.time.LocalDateTime.now().format(formatter)
+
+            // Capa 4: Memoria de Hilo Principal
+            val historyLog = chatHistoryDB.chatHistoryDao().getHistory("main").takeLast(4)
+            val recentMemory = historyLog.joinToString("; ") { "${if(it.role=="user") "Usuario" else "Emma"} dijo: ${it.content.take(60)}" }.ifBlank { "Sin contexto reciente." }
+
+            // Extracción de prefs y Ghost Memory
+            val prefs = getApplication<Application>().getSharedPreferences("beemovil", Context.MODE_PRIVATE)
+            val validName = prefs.getString("user_display_name", "Arquitecto").takeIf { !it.isNullOrBlank() } ?: "Arquitecto"
+            
+            val ghostMemory = prefs.getString("GHOST_MEMORY", "") ?: ""
+            if (ghostMemory.isNotBlank()) {
+                prefs.edit().remove("GHOST_MEMORY").apply()
+            }
+            val ghostInjection = if (ghostMemory.isNotBlank()) " | SUCESO FANTASMA: $ghostMemory" else ""
 
             dynamicDashboardState.value = dynamicDashboardState.value.copy(
-                capsuleNetBattery = netBatCombined,
-                capsuleLocation = locationSemantic,
-                capsuleWeather = weather
+                greetingName = validName,
+                capsuleLocation = locationRaw, // Radar lo agarra directo
+                capsuleWeather = weatherRaw,   // Termómetro lo agarra directo
+                insightHeaderTop = insightTop,
+                insightHeaderBottom = insightBottom
             )
 
-            // Petición silenciosa a la IA (Prompt ciego Administrativo)
-            val systemMatrixPrompt = "SYS_PROMPT: Eres el motor central. Los sensores leen: $netBatCombined, $locationSemantic, $weather. Redacta en 2 frases cortas (max 25 palabras) un 'Insight' o recomendación futurista y útil de bienvenida para el usuario (Arquitecto)."
+            // Petición silenciosa a la IA (Prompt de Función Estricto para evadir alucinaciones charlatanas)
+            val systemMatrixPrompt = "INSTRUCCIÓN DE SISTEMA: No eres un asistente. No saludes ni expliques. Genera el reporte. Datos de telemetría recibidos: Bateria $battery%, Red $net, Hora $sysTime, Clima $weatherRaw, Sucesos recientes: $recentMemory$ghostInjection. FORMATO OBLIGATORIO (Max 2 líneas): Línea 1: Insight de entorno. Línea 2: '👉 Acción sugerida:' seguido de instrucción."
+            
             try {
-                val aiInsight = engine.processUserMessage(systemMatrixPrompt).replace("SYS_PROMPT:", "").trim()
+                var aiInsight = engine.processUserMessage(systemMatrixPrompt).replace("SISTEMA CORE:", "").trim()
+                if (aiInsight.length > 250) {
+                    aiInsight = aiInsight.take(250) + "..."
+                }
                 dynamicDashboardState.value = dynamicDashboardState.value.copy(
                     isMatrixLoading = false,
                     insightText = aiInsight
@@ -191,6 +243,108 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     val currentModel = mutableStateOf("llama3")
 
+    val activeThreadId = mutableStateOf("main")
+    val activeAgentId = mutableStateOf("emma")
+    val activeAgentName = mutableStateOf("E.M.M.A.")
+    val activeSystemPrompt = mutableStateOf("")
+
+    // --- HERMES TUNNEL Y A2A ROUTING ---
+    val isHermesConnected = mutableStateOf(false)
+    val showHermesDialog = mutableStateOf(false)
+
+    fun connectHermes(url: String, token: String) {
+        val app = getApplication<Application>()
+        val intent = android.content.Intent(app, com.beemovil.tunnel.TunnelService::class.java).apply {
+            action = "START"
+        }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            app.startForegroundService(intent)
+        } else {
+            app.startService(intent)
+        }
+        com.beemovil.tunnel.HermesTunnelManager.startTunnel(app, url, token) { connected ->
+            isHermesConnected.value = connected
+        }
+        showHermesDialog.value = false
+    }
+
+    fun disconnectHermes() {
+        val app = getApplication<Application>()
+        val intent = android.content.Intent(app, com.beemovil.tunnel.TunnelService::class.java).apply {
+            action = "STOP"
+        }
+        app.startService(intent)
+        isHermesConnected.value = false
+    }
+
+
+    fun openAgentChat(agent: com.beemovil.database.AgentConfigEntity) {
+        viewModelScope.launch {
+            activeAgentId.value = agent.agentId
+            activeAgentName.value = agent.name
+            activeSystemPrompt.value = agent.systemPrompt
+            
+            val newThreadId = "thread_${agent.agentId}_primary"
+            activeThreadId.value = newThreadId
+            
+            val threads = chatHistoryDB.chatHistoryDao().getAllThreads()
+            if (threads.none { it.threadId == newThreadId }) {
+                chatHistoryDB.chatHistoryDao().createThread(com.beemovil.database.ChatThreadEntity(
+                    threadId = newThreadId,
+                    title = "Chat con ${agent.name}",
+                    type = "SINGLE",
+                    lastUpdateMillis = System.currentTimeMillis()
+                ))
+                refreshSwarmData()
+            }
+            
+            val pastMessages = chatHistoryDB.chatHistoryDao().getHistory(newThreadId)
+            messages.clear()
+            pastMessages.forEach { msg ->
+                var filePaths = emptyList<String>()
+                if (!msg.metadataJson.isNullOrBlank()) {
+                    try {
+                        val json = org.json.JSONObject(msg.metadataJson)
+                        if (json.has("file_path")) {
+                            filePaths = listOf(json.getString("file_path"))
+                        }
+                    } catch (e: Exception) {}
+                }
+                messages.add(ChatUiMessage(text = msg.content, isUser = msg.role == "user", filePaths = filePaths))
+            }
+            
+            engine.loadPersistedContext(pastMessages, agent.systemPrompt)
+            
+            currentProvider.value = agent.fallbackModel
+            currentScreen.value = "chat"
+        }
+    }
+
+    fun openThread(thread: com.beemovil.database.ChatThreadEntity) {
+        viewModelScope.launch {
+            activeThreadId.value = thread.threadId
+            
+            val pastMessages = chatHistoryDB.chatHistoryDao().getHistory(thread.threadId)
+            messages.clear()
+            pastMessages.forEach { msg ->
+                var filePaths = emptyList<String>()
+                if (!msg.metadataJson.isNullOrBlank()) {
+                    try {
+                        val json = org.json.JSONObject(msg.metadataJson)
+                        if (json.has("file_path")) {
+                            filePaths = listOf(json.getString("file_path"))
+                        }
+                    } catch (e: Exception) {}
+                }
+                messages.add(ChatUiMessage(text = msg.content, isUser = msg.role == "user", filePaths = filePaths))
+            }
+            
+            engine.loadPersistedContext(pastMessages)
+            currentScreen.value = "chat"
+        }
+    }
+    // ------------------------------------
+
     fun switchProvider(preset: String, model: String) {
         currentProvider.value = preset
         currentModel.value = model
@@ -221,10 +375,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     val isMuted = mutableStateOf(false)
 
     // STUBS de Integración Fuerte (A rellenar en Fase 3)
-    fun sendMessage(text: String) {
-        if (text.isBlank()) return
-        messages.add(ChatUiMessage(text, true))
+    fun sendMessage(text: String, fileUri: String? = null) {
+        if (text.isBlank() && fileUri == null) return
+        
+        val displayPaths = if (fileUri != null) listOf(fileUri) else emptyList()
+        messages.add(ChatUiMessage(text, true, filePaths = displayPaths))
         isLoading.value = true
+        
+        val metaJson = if (fileUri != null) {
+            org.json.JSONObject().apply { put("file_path", fileUri) }.toString()
+        } else null
         
         viewModelScope.launch {
             val response = engine.processUserMessage(text)
@@ -251,16 +411,17 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             
             // Insertar asíncronamente en Room DB el mensaje del usuario y la respuesta
             chatHistoryDB.chatHistoryDao().insertMessage(com.beemovil.database.ChatMessageEntity(
-                threadId = "main",
+                threadId = activeThreadId.value,
                 senderId = "user",
                 timestamp = System.currentTimeMillis() - 100, // usuario antes
                 role = "user",
-                content = text
+                content = text,
+                metadataJson = metaJson
             ))
             
             chatHistoryDB.chatHistoryDao().insertMessage(com.beemovil.database.ChatMessageEntity(
-                threadId = "main",
-                senderId = "emma", // asistente por defecto
+                threadId = activeThreadId.value,
+                senderId = activeAgentId.value,
                 timestamp = System.currentTimeMillis(),
                 role = "assistant",
                 content = response

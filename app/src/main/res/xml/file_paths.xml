@@ -1,9 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
-    <cache-path name="cache" path="." />
-    <files-path name="files" path="." />
-    <files-path name="attachments" path="email_attachments/" />
-    <external-path name="external" path="." />
-    <external-path name="documents" path="Documents/BeeMovil/" />
-    <external-files-path name="ext_files" path="." />
+    <!-- Mapea el acceso seguro a los archivos (PDF/CSV/HTML) autogenerados -->
+    <external-files-path name="emma_documents" path="Documents/" />
+    <!-- Por si acaso en algunos SOs lo guarda genérico en files -->
+    <external-files-path name="emma_files" path="." />
 </paths>

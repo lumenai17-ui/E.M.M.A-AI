@@ -10,6 +10,7 @@ import android.os.BatteryManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.Locale
+import kotlinx.coroutines.tasks.await
 
 class EnvironmentScanner(private val context: Context) {
 
@@ -40,6 +41,23 @@ class EnvironmentScanner(private val context: Context) {
         }
     }
 
+    suspend fun getCurrentLocation(): Pair<Double, Double>? = withContext(Dispatchers.IO) {
+        if (androidx.core.app.ActivityCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            return@withContext null
+        }
+        try {
+            val fusedLocationClient = com.google.android.gms.location.LocationServices.getFusedLocationProviderClient(context)
+            val locationTask = fusedLocationClient.getCurrentLocation(com.google.android.gms.location.Priority.PRIORITY_HIGH_ACCURACY, null)
+            val location = locationTask.await()
+            if (location != null) {
+                return@withContext Pair(location.latitude, location.longitude)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return@withContext null
+    }
+
     suspend fun getSemanticLocation(lat: Double, lon: Double): String = withContext(Dispatchers.IO) {
         try {
             val geocoder = Geocoder(context, Locale.getDefault())
@@ -55,12 +73,35 @@ class EnvironmentScanner(private val context: Context) {
         }
         return@withContext "🛰️ Triangulando coordenadas..."
     }
-
     suspend fun fetchWeather(lat: Double, lon: Double): String = withContext(Dispatchers.IO) {
-        // En un escenario real: Ktor / OpenMeteo request. 
-        // Para asegurar que funciona inmediatamente sin dependencias nuevas pesadas ni fallos de API limit:
-        // Simulamos la respuesta algorítmica por ahora, esperando integrar OpenMeteo real en refactor.
-        kotlinx.coroutines.delay(800) // fake network cost
-        return@withContext "🌤️ Cielo Parcialmente Nublado (22°C)"
+        try {
+            val url = java.net.URL("https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current_weather=true")
+            val connection = url.openConnection() as java.net.HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.connectTimeout = 5000
+            connection.readTimeout = 5000
+            if (connection.responseCode == 200) {
+                val response = connection.inputStream.bufferedReader().use { it.readText() }
+                val json = org.json.JSONObject(response)
+                val current = json.getJSONObject("current_weather")
+                val temp = current.getDouble("temperature").toInt()
+                val code = current.getInt("weathercode")
+                
+                val (desc, emoji) = when(code) {
+                    0, 1 -> "Soleado" to "☀️"
+                    2 -> "Parcialmente Nublado" to "⛅"
+                    3 -> "Nublado Mayormente" to "☁️"
+                    45, 48 -> "Niebla" to "🌫️"
+                    51, 53, 55, 61, 63, 65 -> "Lluvia" to "🌧️"
+                    71, 73, 75 -> "Nieve" to "❄️"
+                    95, 96, 99 -> "Tormenta" to "⛈️"
+                    else -> "Despejado" to "☀️"
+                }
+                return@withContext "$emoji $desc ($temp°C)"
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return@withContext "🌤️ Clima No Disponible (--°C)"
     }
 }

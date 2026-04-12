@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import com.beemovil.ui.ChatViewModel
 import com.beemovil.ui.theme.*
 import com.beemovil.ui.components.BrowserChatPanel
@@ -27,6 +28,12 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.draw.scale
+import android.content.Intent
+import coil.compose.AsyncImage
+
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -64,7 +71,7 @@ fun ChatScreen(
                         }
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
-                            Text(stringResource(R.string.app_name), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = BeeWhite)
+                            Text(viewModel.activeAgentName.value, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = BeeWhite)
                             Text("[$provider] $modelId", fontSize = 10.sp, color = BeeYellow.copy(alpha=0.8f))
                         }
                     }
@@ -114,27 +121,37 @@ fun ChatScreen(
                         IconButton(onClick = { filePickerLauncher.launch("*/*") }) {
                             Icon(Icons.Outlined.AttachFile, "Attach", tint = BeeGray)
                         }
-                        TextField(
-                            value = inputText,
-                            onValueChange = { inputText = it },
-                            modifier = Modifier.weight(1f),
-                            placeholder = { Text(stringResource(R.string.chat_input_placeholder), color = BeeGray) },
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = Color(0xFF222234),
-                                unfocusedContainerColor = Color(0xFF222234),
-                                focusedTextColor = BeeWhite,
-                                unfocusedTextColor = BeeWhite,
-                                focusedIndicatorColor = Color.Transparent,
-                                unfocusedIndicatorColor = Color.Transparent
-                            ),
-                            shape = RoundedCornerShape(24.dp)
-                        )
+                        AnimatedVisibility(
+                            visible = !viewModel.isRecording.value,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            TextField(
+                                value = inputText,
+                                onValueChange = { inputText = it },
+                                placeholder = { Text(stringResource(R.string.chat_input_placeholder), color = BeeGray) },
+                                colors = TextFieldDefaults.colors(
+                                    focusedContainerColor = Color(0xFF222234),
+                                    unfocusedContainerColor = Color(0xFF222234),
+                                    focusedTextColor = BeeWhite,
+                                    unfocusedTextColor = BeeWhite,
+                                    focusedIndicatorColor = Color.Transparent,
+                                    unfocusedIndicatorColor = Color.Transparent
+                                ),
+                                shape = RoundedCornerShape(24.dp)
+                            )
+                        }
+                        AnimatedVisibility(
+                            visible = viewModel.isRecording.value,
+                            modifier = Modifier.weight(1f).padding(horizontal = 16.dp)
+                        ) {
+                            Text("🔴 Grabando Audio...", color = Color.Red, fontSize = 14.sp)
+                        }
                         Box(contentAlignment = Alignment.Center) {
                             if (inputText.isNotBlank() || attachedFileUri != null) {
                                 IconButton(onClick = { 
                                     if (inputText.isNotBlank() || attachedFileUri != null) {
-                                        val sendingText = if (attachedFileUri != null) "[Archivo Adjunto] $inputText" else inputText
-                                        viewModel.sendMessage(sendingText)
+                                        val sendingUri = attachedFileUri?.toString()
+                                        viewModel.sendMessage(inputText, sendingUri)
                                         inputText = ""
                                         attachedFileUri = null
                                     }
@@ -161,10 +178,12 @@ fun ChatScreen(
                                             )
                                         }
                                 ) {
+                                    val scaleAnim by animateFloatAsState(targetValue = if (viewModel.isRecording.value) 1.3f else 1.0f)
                                     Icon(
                                         if (viewModel.isRecording.value) Icons.Filled.Stop else Icons.Filled.Mic, 
                                         "Voice", 
-                                        tint = if (viewModel.isRecording.value) Color.Red else BeeYellow
+                                        tint = if (viewModel.isRecording.value) Color.Red else BeeYellow,
+                                        modifier = Modifier.scale(scaleAnim)
                                     )
                                 }
                             }
@@ -177,11 +196,20 @@ fun ChatScreen(
         Box(
             modifier = Modifier.fillMaxSize().padding(padding).background(BeeBlack)
         ) {
+            val listState = rememberLazyListState()
+            val displayMessages = if (viewModel.isSearchMode.value) viewModel.searchResults else viewModel.messages
+            
+            LaunchedEffect(displayMessages.size) {
+                if (displayMessages.isNotEmpty()) {
+                    listState.animateScrollToItem(displayMessages.size - 1)
+                }
+            }
+
             LazyColumn(
+                state = listState,
                 modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
                 contentPadding = PaddingValues(top = 16.dp, bottom = 100.dp)
             ) {
-                val displayMessages = if (viewModel.isSearchMode.value) viewModel.searchResults else viewModel.messages
                 items(displayMessages) { msg ->
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
@@ -199,11 +227,38 @@ fun ChatScreen(
                                     )
                                     .padding(12.dp)
                             ) {
-                                Text(
-                                    text = msg.text,
-                                    color = if (msg.isUser) BeeBlack else BeeWhite,
-                                    fontSize = 15.sp
-                                )
+                                Column {
+                                    if (msg.filePaths.isNotEmpty()) {
+                                        Surface(
+                                            color = Color(0xFF1E1E2C).copy(alpha=0.6f),
+                                            shape = RoundedCornerShape(8.dp),
+                                            modifier = Modifier.padding(bottom = 6.dp).fillMaxWidth()
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(8.dp)) {
+                                                val fPath = msg.filePaths.first()
+                                                if (fPath.contains("image") || fPath.endsWith(".jpg") || fPath.endsWith(".png")) {
+                                                    AsyncImage(
+                                                        model = fPath,
+                                                        contentDescription = "Preview",
+                                                        modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)),
+                                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                                    )
+                                                } else {
+                                                    Icon(Icons.Filled.InsertDriveFile, "File", tint=BeeYellow, modifier = Modifier.size(32.dp))
+                                                }
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text("Adjunto", color = BeeWhite, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                    if (msg.text.isNotBlank()) {
+                                        Text(
+                                            text = msg.text,
+                                            color = if (msg.isUser) BeeBlack else BeeWhite,
+                                            fontSize = 15.sp
+                                        )
+                                    }
+                                }
                             }
                             
                             DropdownMenu(
@@ -218,6 +273,21 @@ fun ChatScreen(
                                         showMenuForMessage = null
                                     }
                                 )
+                                if (msg.filePaths.isNotEmpty()) {
+                                    DropdownMenuItem(
+                                        text = { Text("Compartir archivo") },
+                                        onClick = {
+                                            try {
+                                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                                    type = "*/*"
+                                                    putExtra(Intent.EXTRA_STREAM, android.net.Uri.parse(msg.filePaths.first()))
+                                                }
+                                                context.startActivity(Intent.createChooser(shareIntent, "Compartir con..."))
+                                            } catch(e: Exception) {}
+                                            showMenuForMessage = null
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
