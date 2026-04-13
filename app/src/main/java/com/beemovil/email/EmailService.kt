@@ -374,13 +374,18 @@ class EmailService(private val context: Context) {
 
         val email = securePrefs.getString("email_address", "") ?: ""
         val password = securePrefs.getString("email_password", "") ?: ""
-        val provider = prefs.getString("email_provider", "Gmail") ?: "Gmail"
 
         if (email.isBlank() || password.isBlank()) {
             throw Exception("Email not configured — set email and password in Settings")
         }
 
-        val config = PRESETS[provider] ?: PRESETS["Gmail"]!!
+        // S-12: Leer directamente los campos guardados por Settings
+        val config = EmailConfig(
+            imapHost = prefs.getString("email_imap_host", "imap.gmail.com") ?: "imap.gmail.com",
+            imapPort = prefs.getInt("email_imap_port", 993),
+            smtpHost = prefs.getString("email_smtp_host", "smtp.gmail.com") ?: "smtp.gmail.com",
+            smtpPort = prefs.getInt("email_smtp_port", 587)
+        )
         val success = sendEmail(email, password, config, to, subject, body)
         if (!success) throw Exception("SMTP send failed")
     }

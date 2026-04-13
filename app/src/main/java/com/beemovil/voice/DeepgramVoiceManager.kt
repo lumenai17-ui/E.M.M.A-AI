@@ -136,8 +136,8 @@ class DeepgramVoiceManager(private val context: Context) {
         val eKey = elevenLabsKey
         val eVoice = elevenLabsVoice
 
-        if (eKey.isNotBlank() && eVoice.isNotBlank()) {
-            elevenLabsTTS?.speak(
+        if (eKey.isNotBlank() && eVoice.isNotBlank() && elevenLabsTTS != null) {
+            elevenLabsTTS.speak(
                 text = text,
                 apiKey = eKey,
                 voiceId = eVoice,

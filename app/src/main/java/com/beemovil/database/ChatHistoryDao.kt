@@ -2,6 +2,7 @@ package com.beemovil.database
 
 import androidx.room.Dao
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 
 @Dao
@@ -23,7 +24,7 @@ interface ChatHistoryDao {
     suspend fun clearAll()
 
     // --- AGENTS & THREADS ---
-    @Insert
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAgent(agent: AgentConfigEntity)
 
     @Query("SELECT * FROM agent_config")
@@ -40,4 +41,8 @@ interface ChatHistoryDao {
 
     @Query("SELECT * FROM group_member WHERE threadId = :threadId ORDER BY executionOrder ASC")
     suspend fun getGroupMembers(threadId: String): List<GroupMemberEntity>
+
+    // UI-14: Limpiar threads al hacer clearAll
+    @Query("DELETE FROM chat_thread")
+    suspend fun clearAllThreads()
 }

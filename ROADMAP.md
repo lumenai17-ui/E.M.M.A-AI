@@ -161,8 +161,33 @@ Este documento traza las fases precisas para convertir la herencia de Bee en una
 
 ---
 
-## 📈 FASE 12: The App Store Premium Launch (ROADMAP GTM FUTURO)
-*Meta: Orquestar el Deployment Comercial y el Modelo Open-Core (Koog V2).*
-  - Empaquetamiento final (`.aab` release) con optimización de peso (R8/Minify) y prevención de colisión de LLM locales.
-  - Firma Criptográfica (`.signingConfig`) y vinculación con la matriz comercial BEE Smart Portal.
-  - Bloqueo de código y publicación estratégica.
+## 🔍 FASE 12.5: Auditoría Forense UI/UX & Estabilización - [COMPLETADO]
+*Meta: Revisar exhaustivamente cada pantalla, botón, flujo de datos y ciclo de vida de la app para garantizar que todo funcione como promete antes de producción.*
+
+- **Ronda 1 — Funcionalidad Rota:** [COMPLETADO]
+  - Persistencia de agentes (DAO conflict strategy), navegación por defecto (Dashboard), inyección de archivos al LLM, integridad de archivos generados.
+- **Ronda 2 — Experiencia de Adjuntos:** [COMPLETADO]
+  - Persistencia local de adjuntos, detección MIME, preview enriquecido, menú contextual "Abrir"/"Compartir".
+- **Ronda 3 — Integración + Polish:** [COMPLETADO]
+  - Share Target (ACTION_SEND), eliminación de pantallas fantasma, timestamps reales, clearAll con re-creación de threads.
+- **Fase S-1 — Proveedor AI:** [COMPLETADO]
+  - Provider/modelo restaurados de SharedPrefs al init (eliminado default "koog"/"llama3"). `updateApiKey()` conectado a SecurePrefs.
+- **Fase S-2 — Voice Pipeline:** [COMPLETADO]
+  - **Bug crítico:** ElevenLabs URL con `$` escapados → voz clonada jamás conectó. Corregida interpolación + `output_format` como query param. Null safety en fallback chain.
+- **Fase S-3 — Integraciones Externas:** [COMPLETADO]
+  - Telegram: stub crasheante desactivado, credenciales pre-guardadas. Email: `Thread {}` → coroutine segura, config de SMTP leída correctamente.
+- **Fase S-4 — Branding + Polish:** [COMPLETADO]
+  - Tema visual restaurado al reiniciar. Contadores reales del DB. Skills dinámicos (18 plugins). Branding "E.M.M.A. AI".
+
+---
+
+## 📈 FASE 13: The App Store Premium Launch (ROADMAP GTM)
+*Meta: Orquestar el Deployment Comercial y el Modelo Open-Core.*
+
+- [ ] Empaquetamiento final (`.aab` release) con optimización R8/Minify
+- [ ] Firma Criptográfica (`.signingConfig`) y vinculación con BEE Smart Portal
+- [ ] Implementación real del Telegram Bot Service (polling + foreground notification)
+- [ ] Plugin de generación de imágenes (fal.ai / Together AI) — keys ya pre-guardadas en SecurePrefs
+- [ ] Exportación de datos del chat (formato JSON/PDF)
+- [ ] Publicación en Play Store
+

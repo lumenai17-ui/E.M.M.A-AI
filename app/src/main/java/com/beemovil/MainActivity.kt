@@ -1,5 +1,6 @@
 package com.beemovil
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -48,6 +49,18 @@ class MainActivity : ComponentActivity() {
         }
 
         requestPermissionLauncher.launch(permissionsToRequest.toTypedArray())
+
+        // FILE-09: Manejar incoming Share Intent desde otras apps
+        handleIncomingShareIntent(intent)
+
+        // S-14: Restaurar tema visual guardado en prefs
+        val themePrefs = getSharedPreferences("beemovil", MODE_PRIVATE)
+        val savedTheme = themePrefs.getString("app_theme", null)
+        BeeThemeState.forceDark.value = when(savedTheme) {
+            "dark" -> true
+            "light" -> false
+            else -> null  // seguir sistema
+        }
 
         setContent {
             BeeMovilTheme {
@@ -110,13 +123,12 @@ class MainActivity : ComponentActivity() {
                                     viewModel = viewModel,
                                     onBack = { viewModel.currentScreen.value = "dashboard" }
                                 )
-                                "notifications" -> NotificationDashboardScreen(
-                                    viewModel = viewModel,
-                                    onBack = { viewModel.currentScreen.value = "dashboard" }
-                                )
+                                // UI-02: Eliminada ruta "notifications" huérfana (nadie navegaba a ella)
                                 else -> DashboardScreen(
                                     viewModel = viewModel,
-                                    onAgentClick = { viewModel.currentScreen.value = "chat" },
+                                    onAgentClick = { threadId ->
+                                        viewModel.navigateToThread(threadId)
+                                    },
                                     onSettingsClick = { viewModel.currentScreen.value = "settings" }
                                 )
                             }
@@ -125,5 +137,36 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    // FILE-09: Procesar archivos/texto compartidos desde otras apps
+    private fun handleIncomingShareIntent(incomingIntent: Intent?) {
+        if (incomingIntent?.action != Intent.ACTION_SEND) return
+        
+        val sharedText = incomingIntent.getStringExtra(Intent.EXTRA_TEXT)
+        val sharedUri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            incomingIntent.getParcelableExtra(Intent.EXTRA_STREAM, android.net.Uri::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            incomingIntent.getParcelableExtra(Intent.EXTRA_STREAM)
+        }
+
+        when {
+            sharedUri != null -> {
+                // Archivo compartido → abrir chat con adjunto pre-cargado
+                viewModel.currentScreen.value = "chat"
+                viewModel.sendMessage(sharedText ?: "Archivo compartido desde otra app", sharedUri.toString())
+            }
+            !sharedText.isNullOrBlank() -> {
+                // Texto/Link compartido → abrir chat con texto pre-cargado
+                viewModel.currentScreen.value = "chat"
+                viewModel.sendMessage(sharedText)
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleIncomingShareIntent(intent)
     }
 }

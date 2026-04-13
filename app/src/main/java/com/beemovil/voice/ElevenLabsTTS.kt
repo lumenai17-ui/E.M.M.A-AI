@@ -72,7 +72,6 @@ class ElevenLabsTTS(private val context: Context) {
         val payload = JSONObject().apply {
             put("text", text)
             put("model_id", "eleven_multilingual_v2")
-            put("output_format", "pcm_24000")
             // Opcional: configuracion de voz
             put("voice_settings", JSONObject().apply {
                 put("similarity_boost", 0.7)
@@ -82,7 +81,7 @@ class ElevenLabsTTS(private val context: Context) {
             })
         }
 
-        val url = "\$BASE_URL\$voiceId"
+        val url = "${BASE_URL}${voiceId}?output_format=pcm_24000"
         val body = payload.toString().toRequestBody("application/json".toMediaType())
         val request = Request.Builder()
             .url(url)

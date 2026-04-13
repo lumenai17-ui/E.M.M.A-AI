@@ -19,7 +19,8 @@ data class ChatUiMessage(
     val isLoading: Boolean = false,
     val toolsUsed: List<String> = emptyList(),
     val filePaths: List<String> = emptyList(),
-    val attachmentNames: List<String> = emptyList()
+    val attachmentNames: List<String> = emptyList(),
+    val attachmentMimeTypes: List<String> = emptyList()
 )
 
 data class AgentConfigStub(
@@ -62,9 +63,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             // Cargar Historial al Iniciar del Hilo Principal
             val prefs = application.getSharedPreferences("beemovil_session", Context.MODE_PRIVATE)
             val lastThread = prefs.getString("last_active_thread", "main") ?: "main"
-            activeThreadId.value = lastThread
             
-            val history = chatHistoryDB.chatHistoryDao().getHistory(lastThread)
+            // UI-09: Validar que el thread existe antes de intentar cargarlo
+            val allExistingThreads = chatHistoryDB.chatHistoryDao().getAllThreads()
+            val validThread = if (allExistingThreads.any { it.threadId == lastThread }) lastThread else "main"
+            activeThreadId.value = validThread
+            
+            val history = chatHistoryDB.chatHistoryDao().getHistory(validThread)
             
             val allTh = chatHistoryDB.chatHistoryDao().getAllThreads()
             val th = allTh.find { it.threadId == lastThread }
@@ -74,18 +79,21 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             
             // 1. Restaurar Visor Visual
             history.forEach {
-                // Filtramos "system" ni "tool" en la UI, solo user/assistant
                 if (it.role == "user" || it.role == "assistant") {
                     var filePaths = emptyList<String>()
+                    var fileNames = emptyList<String>()
+                    var mimeTypes = emptyList<String>()
                     if (!it.metadataJson.isNullOrBlank()) {
                         try {
                             val json = org.json.JSONObject(it.metadataJson)
                             if (json.has("file_path")) {
                                 filePaths = listOf(json.getString("file_path"))
+                                fileNames = listOf(json.optString("file_name", "Adjunto"))
+                                mimeTypes = listOf(json.optString("mime_type", ""))
                             }
                         } catch (e: Exception) {}
                     }
-                    messages.add(ChatUiMessage(text = it.content, isUser = it.role == "user", filePaths = filePaths))
+                    messages.add(ChatUiMessage(text = it.content, isUser = it.role == "user", filePaths = filePaths, attachmentNames = fileNames, attachmentMimeTypes = mimeTypes))
                 }
             }
             
@@ -154,11 +162,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateAgentConfig(agent: com.beemovil.database.AgentConfigEntity) {
         viewModelScope.launch {
-            chatHistoryDB.chatHistoryDao().insertAgent(agent) // Insert with conflict replace assumes id remains same or updates it
+            chatHistoryDB.chatHistoryDao().insertAgent(agent)
             activeAgentConfig.value = agent
             activeAgentName.value = agent.name
             activeSystemPrompt.value = agent.systemPrompt
-            currentProvider.value = agent.fallbackModel
+            // UI-06 fix: parse fallbackModel correctamente igual que openAgentChat
+            if (agent.fallbackModel.startsWith("hermes-a2a")) {
+                currentProvider.value = agent.fallbackModel
+                currentModel.value = ""
+            } else {
+                val parts = agent.fallbackModel.split(":", limit = 2)
+                currentProvider.value = if (parts.isNotEmpty()) parts[0] else "openrouter"
+                currentModel.value = if (parts.size > 1) parts[1] else agent.fallbackModel
+            }
             refreshSwarmData()
         }
     }
@@ -261,7 +277,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     val availableAgents = mutableStateListOf<AgentConfigStub>().apply { add(AgentConfigStub()) }
 
     // Navigation and status
-    val currentScreen = mutableStateOf("chat")
+    // UI-08: Boot siempre en Dashboard. Share Intent lo sobreescribe en MainActivity.
+    val currentScreen = mutableStateOf("dashboard")
     val browserUrl = mutableStateOf("https://www.google.com")
     val showBrowser = mutableStateOf(false)
     val browserAgentStatusText = mutableStateOf("Desconectado")
@@ -273,11 +290,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     // UI states
     val dashboardInsight = mutableStateOf("Sistema base reiniciado. Esperando motor Koog...")
     val dashboardInsightLoading = mutableStateOf(false)
-    val currentProvider = mutableStateOf("koog")
+    // S-01/S-02/S-04: Provider y modelo restaurados de SharedPrefs al inicializar
+    private val _bootPrefs = getApplication<Application>().getSharedPreferences("beemovil", Context.MODE_PRIVATE)
+    val currentProvider = mutableStateOf(_bootPrefs.getString("selected_provider", "openrouter") ?: "openrouter")
     
     val pendingPrompt = mutableStateOf("")
 
-    val currentModel = mutableStateOf("llama3")
+    val currentModel = mutableStateOf(_bootPrefs.getString("selected_model", "openai/gpt-4o-mini") ?: "openai/gpt-4o-mini")
 
     val activeThreadId = mutableStateOf("main")
     val activeAgentId = mutableStateOf("emma")
@@ -343,15 +362,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             messages.clear()
             pastMessages.forEach { msg ->
                 var filePaths = emptyList<String>()
+                var fileNames = emptyList<String>()
+                var mimeTypes = emptyList<String>()
                 if (!msg.metadataJson.isNullOrBlank()) {
                     try {
                         val json = org.json.JSONObject(msg.metadataJson)
                         if (json.has("file_path")) {
                             filePaths = listOf(json.getString("file_path"))
+                            fileNames = listOf(json.optString("file_name", "Adjunto"))
+                            mimeTypes = listOf(json.optString("mime_type", ""))
                         }
                     } catch (e: Exception) {}
                 }
-                messages.add(ChatUiMessage(text = msg.content, isUser = msg.role == "user", filePaths = filePaths))
+                messages.add(ChatUiMessage(text = msg.content, isUser = msg.role == "user", filePaths = filePaths, attachmentNames = fileNames, attachmentMimeTypes = mimeTypes))
             }
             
             engine.loadPersistedContext(pastMessages, agent.systemPrompt)
@@ -392,15 +415,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             messages.clear()
             pastMessages.forEach { msg ->
                 var filePaths = emptyList<String>()
+                var fileNames = emptyList<String>()
+                var mimeTypes = emptyList<String>()
                 if (!msg.metadataJson.isNullOrBlank()) {
                     try {
                         val json = org.json.JSONObject(msg.metadataJson)
                         if (json.has("file_path")) {
                             filePaths = listOf(json.getString("file_path"))
+                            fileNames = listOf(json.optString("file_name", "Adjunto"))
+                            mimeTypes = listOf(json.optString("mime_type", ""))
                         }
                     } catch (e: Exception) {}
                 }
-                messages.add(ChatUiMessage(text = msg.content, isUser = msg.role == "user", filePaths = filePaths))
+                messages.add(ChatUiMessage(text = msg.content, isUser = msg.role == "user", filePaths = filePaths, attachmentNames = fileNames, attachmentMimeTypes = mimeTypes))
             }
             
             engine.loadPersistedContext(pastMessages)
@@ -428,8 +455,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         dashboardInsight.value = "Motor conmutador a $preset: $model cargado."
     }
 
+    // S-03: Actualizar key en SecurePrefs y refrescar el engine context
     fun updateApiKey(provider: String, key: String) {
-        // Dummy implementation for SettingsScreen compatibility
+        val securePrefs = com.beemovil.security.SecurePrefs.get(getApplication())
+        val prefKey = when(provider) {
+            "openrouter" -> "openrouter_api_key"
+            "ollama" -> "ollama_api_key"
+            else -> "openrouter_api_key"
+        }
+        securePrefs.edit().putString(prefKey, key).apply()
     }
 
     val chatHistoryDB = com.beemovil.database.ChatHistoryDB.getDatabase(application)
@@ -441,8 +475,22 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun clearAllHistory() {
         viewModelScope.launch {
             chatHistoryDB.chatHistoryDao().clearAll()
+            // UI-14: Limpiar también threads (mantener solo 'main') 
+            chatHistoryDB.chatHistoryDao().clearAllThreads()
             messages.clear()
+            allThreads.clear()
             engine.clearMemoryAndHistory()
+            activeThreadId.value = "main"
+            activeAgentName.value = "E.M.M.A. Ai"
+            activeAgentConfig.value = null
+            // Re-crear thread main
+            chatHistoryDB.chatHistoryDao().createThread(com.beemovil.database.ChatThreadEntity(
+                threadId = "main",
+                title = "Chat con E.M.M.A.",
+                type = "SINGLE",
+                lastUpdateMillis = System.currentTimeMillis()
+            ))
+            refreshSwarmData()
         }
     }
 
@@ -451,27 +499,113 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     val isMuted = mutableStateOf(false)
 
     // STUBS de Integración Fuerte (A rellenar en Fase 3)
+    /**
+     * FILE-02: Copia un content:// URI al almacenamiento privado de la app
+     * para que persista después de reiniciar.
+     */
+    private fun copyToLocalStorage(context: android.content.Context, uri: android.net.Uri): Pair<String, String?> {
+        val attachDir = java.io.File(context.filesDir, "attachments")
+        if (!attachDir.exists()) attachDir.mkdirs()
+        
+        // Obtener nombre original
+        var fileName = "file_${System.currentTimeMillis()}"
+        var mimeType: String? = null
+        try {
+            context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                val nameIdx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (cursor.moveToFirst() && nameIdx >= 0) {
+                    fileName = cursor.getString(nameIdx) ?: fileName
+                }
+            }
+            mimeType = context.contentResolver.getType(uri)
+        } catch (_: Exception) {}
+        
+        val localFile = java.io.File(attachDir, fileName)
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            localFile.outputStream().use { output -> input.copyTo(output) }
+        }
+        return Pair(localFile.absolutePath, mimeType)
+    }
+
+    /**
+     * FILE-01: Lee el contenido de texto de un archivo para inyectarlo al prompt del LLM.
+     */
+    private fun extractTextContent(context: android.content.Context, filePath: String, mimeType: String?): String? {
+        return try {
+            val file = java.io.File(filePath)
+            if (!file.exists() || file.length() > 500_000) return null // Max 500KB de texto
+            
+            val isTextBased = mimeType?.let {
+                it.startsWith("text/") || it.contains("json") || it.contains("xml") || 
+                it.contains("csv") || it.contains("javascript")
+            } ?: filePath.let {
+                it.endsWith(".txt") || it.endsWith(".md") || it.endsWith(".csv") || 
+                it.endsWith(".json") || it.endsWith(".xml") || it.endsWith(".html")
+            }
+            
+            if (isTextBased) {
+                val content = file.readText().take(8000) // Max 8K chars para no volar el contexto
+                content
+            } else null // PDFs, imágenes, etc. requieren procesamiento especial
+        } catch (_: Exception) { null }
+    }
+
     fun sendMessage(text: String, fileUri: String? = null) {
         if (text.isBlank() && fileUri == null) return
         
-        // Capturar el agentId en este momento exacto para evitar race condition
-        // si el usuario cambia de agente mientras la coroutine del request previo sigue activa
         val capturedAgentId = activeAgentId.value
         val capturedThreadId = activeThreadId.value
         val capturedProvider = currentProvider.value
         val capturedModel = currentModel.value
+        val context = getApplication<Application>()
         
-        val displayPaths = if (fileUri != null) listOf(fileUri) else emptyList()
+        // FILE-02: Copiar archivo localmente si es content:// URI
+        var localPath: String? = null
+        var fileMimeType: String? = null
+        var originalFileName: String? = null
+        if (fileUri != null) {
+            try {
+                val uri = android.net.Uri.parse(fileUri)
+                if (fileUri.startsWith("content://")) {
+                    val (path, mime) = copyToLocalStorage(context, uri)
+                    localPath = path
+                    fileMimeType = mime
+                    originalFileName = java.io.File(path).name
+                } else {
+                    localPath = fileUri
+                    originalFileName = java.io.File(fileUri).name
+                }
+            } catch (e: Exception) {
+                localPath = fileUri // fallback al URI original
+            }
+        }
+        
+        val displayPaths = if (localPath != null) listOf(localPath) else emptyList()
         messages.add(ChatUiMessage(text, true, filePaths = displayPaths))
         isLoading.value = true
         
-        val metaJson = if (fileUri != null) {
-            org.json.JSONObject().apply { put("file_path", fileUri) }.toString()
+        val metaJson = if (localPath != null) {
+            org.json.JSONObject().apply {
+                put("file_path", localPath)
+                if (originalFileName != null) put("file_name", originalFileName)
+                if (fileMimeType != null) put("mime_type", fileMimeType)
+            }.toString()
         } else null
+        
+        // FILE-01: Inyectar contenido del archivo al prompt si es texto legible
+        val enrichedText = if (localPath != null) {
+            val fileContent = extractTextContent(context, localPath, fileMimeType)
+            if (fileContent != null) {
+                "$text\n\n[Contenido del archivo adjunto '$originalFileName':]\n$fileContent"
+            } else {
+                val label = originalFileName ?: "archivo"
+                "$text\n\n[Archivo adjunto: $label (tipo: ${fileMimeType ?: "desconocido"}) — contenido binario no extraíble]"
+            }
+        } else text
         
         viewModelScope.launch {
             swarmInsight.value = ""
-            val response = engine.processUserMessage(text, capturedProvider, capturedModel) { progress ->
+            val response = engine.processUserMessage(enrichedText, capturedProvider, capturedModel) { progress ->
                 swarmInsight.value = progress
             }
             swarmInsight.value = ""
@@ -489,7 +623,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } else if (response.startsWith("TOOL_CALL::file_generated::")) {
                 val filePath = response.removePrefix("TOOL_CALL::file_generated::")
-                val feedback = "He generado tu documento físico y lo he archivado aquí en la conversación."
+                val generatedName = java.io.File(filePath).name
+                val feedback = "He generado tu documento '$generatedName' y lo he archivado aquí en la conversación."
                 
                 messages.add(ChatUiMessage(feedback, false, filePaths = listOf(filePath)))
                 
@@ -497,10 +632,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     voiceManager.speak(feedback, language = Locale.getDefault().language)
                 }
                 
-                val aiMetaJson = org.json.JSONObject().apply { put("file_path", filePath) }.toString()
-                chatHistoryDB.chatHistoryDao().insertMessage(com.beemovil.database.ChatMessageEntity( // Replaces the normal saving later
-                    threadId = activeThreadId.value,
-                    senderId = activeAgentId.value,
+                // FILE-07 fix: usar IDs capturados, no los mutables
+                val aiMetaJson = org.json.JSONObject().apply {
+                    put("file_path", filePath)
+                    put("file_name", generatedName)
+                }.toString()
+                chatHistoryDB.chatHistoryDao().insertMessage(com.beemovil.database.ChatMessageEntity(
+                    threadId = capturedThreadId,
+                    senderId = capturedAgentId,
                     timestamp = System.currentTimeMillis(),
                     role = "assistant",
                     content = feedback,

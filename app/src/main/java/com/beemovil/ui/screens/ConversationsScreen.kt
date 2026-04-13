@@ -123,9 +123,6 @@ fun ConversationsScreen(viewModel: ChatViewModel) {
                             modifier = Modifier.scale(0.8f)
                         )
                     }
-                    IconButton(onClick = {}) {
-                        Icon(Icons.Filled.Search, "Buscar", tint = BeeGray)
-                    }
                 }
             )
         },
@@ -211,9 +208,28 @@ fun ConversationsScreen(viewModel: ChatViewModel) {
                         Spacer(modifier = Modifier.width(16.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(thread.title, color = BeeWhite, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                            Text("Último estado...", color = BeeGray, fontSize = 13.sp, maxLines = 1)
+                            // UI-12: Subtítulo descriptivo en vez de genérico
+                            val subtitle = when (thread.type) {
+                                "GROUP" -> "Grupo de agentes"
+                                else -> if (thread.threadId == "main") "Chat principal" else "Conversación directa"
+                            }
+                            Text(subtitle, color = BeeGray, fontSize = 13.sp, maxLines = 1)
                         }
-                        Text("Ahora", color = BeeYellow, fontSize = 11.sp)
+                        // UI-11: Timestamp relativo real
+                        val timeAgo = remember(thread.lastUpdateMillis) {
+                            val diff = System.currentTimeMillis() - thread.lastUpdateMillis
+                            val mins = diff / 60_000
+                            val hours = mins / 60
+                            val days = hours / 24
+                            when {
+                                mins < 1 -> "Ahora"
+                                mins < 60 -> "${mins}m"
+                                hours < 24 -> "${hours}h"
+                                days < 7 -> "${days}d"
+                                else -> "${days / 7}sem"
+                            }
+                        }
+                        Text(timeAgo, color = BeeYellow, fontSize = 11.sp)
                     }
                 }
             }

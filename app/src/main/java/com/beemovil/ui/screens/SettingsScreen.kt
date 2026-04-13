@@ -476,56 +476,15 @@ fun SettingsScreen(
             // ═══════════════════════════════════════
             SectionCard {
                 SectionTitle("TELEGRAM BOT")
-                Text("Conecta un bot de Telegram a tu agente principal", fontSize = 12.sp, color = BeeGray)
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Status
-                if (botStatus != "offline") {
-                    Surface(
-                        color = when (botStatus) {
-                            "online" -> Color(0xFF4CAF50).copy(alpha = 0.12f)
-                            "connecting" -> BeeYellow.copy(alpha = 0.12f)
-                            else -> Color(0xFFF44336).copy(alpha = 0.12f)
-                        },
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                when (botStatus) {
-                                    "online" -> "ON"
-                                    "connecting" -> "..."
-                                    else -> "ERR"
-                                }, fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = when (botStatus) {
-                                    "online" -> Color(0xFF4CAF50)
-                                    "connecting" -> BeeYellow
-                                    else -> Color(0xFFF44336)
-                                }
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Column {
-                                Text(
-                                    when (botStatus) {
-                                        "online" -> if (botName.isNotBlank()) "@$botName conectado" else "Bot conectado"
-                                        "connecting" -> "Conectando..."
-                                        else -> "Error de conexión"
-                                    },
-                                    fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE0E0E0)
-                                )
-                                if (botStatus == "online" && viewModel.telegramBotMessages.value > 0) {
-                                    Text("${viewModel.telegramBotMessages.value} mensajes procesados",
-                                        fontSize = 11.sp, color = BeeGray)
-                                }
-                            }
-                        }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Conecta un bot de Telegram a tu agente", fontSize = 12.sp, color = BeeGray,
+                        modifier = Modifier.weight(1f))
+                    Surface(color = Color(0xFFFF9800).copy(alpha = 0.2f), shape = RoundedCornerShape(4.dp)) {
+                        Text("PRÓXIMAMENTE", fontSize = 9.sp, color = Color(0xFFFF9800), fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
                 }
+                Spacer(modifier = Modifier.height(8.dp))
 
                 OutlinedTextField(
                     value = telegramToken,
@@ -542,64 +501,6 @@ fun SettingsScreen(
                     colors = fieldColors()
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = {
-                            securePrefs.edit().putString("telegram_bot_token", telegramToken).apply()
-                            viewModel.telegramBotStatus.value = "connecting"
-                            val intent = Intent(context, TelegramBotService::class.java).apply {
-                                action = TelegramBotService.ACTION_START
-                                putExtra(TelegramBotService.EXTRA_BOT_TOKEN, telegramToken)
-                                putExtra(TelegramBotService.EXTRA_PROVIDER, selectedProvider)
-                                putExtra(TelegramBotService.EXTRA_MODEL, selectedModel)
-                                putExtra(TelegramBotService.EXTRA_API_KEY,
-                                    if (selectedProvider == "ollama") ollamaKey else openRouterKey)
-                            }
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                context.startForegroundService(intent)
-                            } else context.startService(intent)
-                        },
-                        enabled = telegramToken.isNotBlank() && botStatus != "online" && botStatus != "connecting",
-                        colors = ButtonDefaults.buttonColors(containerColor = BeeYellow, contentColor = BeeBlack),
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Text(when (botStatus) {
-                            "online" -> "Conectado"
-                            "connecting" -> "Espera..."
-                            else -> "Conectar"
-                        }, fontSize = 13.sp)
-                    }
-
-                    if (botStatus == "online" || botStatus == "connecting") {
-                        Button(
-                            onClick = {
-                                context.startService(
-                                    Intent(context, TelegramBotService::class.java)
-                                        .apply { action = TelegramBotService.ACTION_STOP }
-                                )
-                                viewModel.telegramBotStatus.value = "offline"
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = BeeGray.copy(alpha = 0.5f)),
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Text("Detener", color = BeeWhite, fontSize = 13.sp)
-                        }
-                    }
-                }
-
-                // Allowlist section
-                Spacer(modifier = Modifier.height(12.dp))
-                HorizontalDivider(color = BeeGray.copy(alpha = 0.2f))
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text("USUARIOS PERMITIDOS", fontSize = 11.sp, color = BeeYellow,
-                    fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                Text("El primer usuario en escribirle al bot se registra como dueño automáticamente.",
-                    fontSize = 11.sp, color = BeeGray)
                 Spacer(modifier = Modifier.height(6.dp))
 
                 OutlinedTextField(
@@ -612,46 +513,41 @@ fun SettingsScreen(
                     colors = fieldColors()
                 )
 
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+
                 Button(
                     onClick = {
-                        securePrefs.edit().putString("telegram_owner_username", telegramUsername.trim()).apply()
-                        Toast.makeText(context, "Username guardado", Toast.LENGTH_SHORT).show()
+                        securePrefs.edit()
+                            .putString("telegram_bot_token", telegramToken.trim())
+                            .putString("telegram_owner_username", telegramUsername.trim())
+                            .apply()
+                        Toast.makeText(context, "Credenciales de Telegram guardadas", Toast.LENGTH_SHORT).show()
                     },
+                    enabled = telegramToken.isNotBlank(),
                     colors = ButtonDefaults.buttonColors(containerColor = BeeGray.copy(alpha = 0.5f)),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("Guardar Username", color = BeeWhite, fontSize = 13.sp)
+                    Text("Guardar Credenciales", color = BeeWhite, fontSize = 13.sp)
                 }
 
-                if (allowedChatsStr.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    val ids = allowedChatsStr.split(",").filter { it.isNotBlank() }
-                    ids.forEachIndexed { i, id ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Filled.Person, "User", tint = BeeGray, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Chat ID: $id", fontSize = 13.sp, color = Color(0xFFE0E0E0),
-                                modifier = Modifier.weight(1f))
-                            if (i == 0) {
-                                Surface(color = BeeYellow.copy(alpha = 0.15f), shape = RoundedCornerShape(4.dp)) {
-                                    Text("Dueño", fontSize = 10.sp, color = BeeYellow,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
-                                }
-                            }
-                        }
+                Spacer(modifier = Modifier.height(6.dp))
+                Surface(
+                    color = Color(0xFF1A1A2E),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text("Preparando integración", fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp, color = Color(0xFFFF9800))
+                        Text(
+                            "Guarda tu token aquí para que esté listo cuando la integración se active.\n" +
+                            "1. Abre Telegram → @BotFather → /newbot\n" +
+                            "2. Copia el token → pega aquí → Guardar",
+                            fontSize = 11.sp, color = BeeGray
+                        )
                     }
                 }
-
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    "1. Abre Telegram → @BotFather → /newbot\n2. Copia el token → pega aquí → Conectar\n3. Escríbele al bot y te registra automáticamente",
-                    fontSize = 11.sp, color = BeeGray
-                )
             }
 
             // ═══════════════════════════════════════
@@ -879,7 +775,14 @@ fun SettingsScreen(
             // ═══════════════════════════════════════
             SectionCard {
                 SectionTitle("MEDIA IA (Imagenes + Video)")
-                Text("Genera imagenes y videos con IA desde cualquier chat", fontSize = 12.sp, color = BeeGray)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Genera imagenes y videos con IA desde cualquier chat", fontSize = 12.sp, color = BeeGray,
+                        modifier = Modifier.weight(1f))
+                    Surface(color = Color(0xFFFF9800).copy(alpha = 0.2f), shape = RoundedCornerShape(4.dp)) {
+                        Text("PRÓXIMAMENTE", fontSize = 9.sp, color = Color(0xFFFF9800), fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                    }
+                }
                 Spacer(modifier = Modifier.height(8.dp))
 
                 var falKey by remember { mutableStateOf(securePrefs.getString("fal_api_key", "") ?: "") }
@@ -1415,7 +1318,7 @@ fun SettingsScreen(
                                 .putString("email_smtp_host", emailSmtpHost)
                                 .putInt("email_smtp_port", emailSmtpPort.toIntOrNull() ?: 587)
                                 .apply()
-                            Thread {
+                            scope.launch(kotlinx.coroutines.Dispatchers.IO) {
                                 try {
                                     val config = com.beemovil.email.EmailService.EmailConfig(
                                         emailImapHost, emailImapPort.toIntOrNull() ?: 993,
@@ -1423,20 +1326,24 @@ fun SettingsScreen(
                                     )
                                     val result = com.beemovil.email.EmailService(context)
                                         .testConnection(emailAddr.trim(), emailPasswd, config)
-                                    emailTestResult = "OK Conectado - $result"
+                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                        emailTestResult = "OK Conectado - $result"
+                                    }
                                 } catch (e: Exception) {
                                     val msg = e.message ?: "Error desconocido"
-                                    emailTestResult = when {
-                                        msg.contains("Authentication", true) || msg.contains("AUTHENTICATE", true) ->
-                                            "Error: Credenciales incorrectas. Gmail necesita App Password"
-                                        msg.contains("connect", true) || msg.contains("timeout", true) ->
-                                            "Error: No pudo conectar a $emailImapHost. Verifica el servidor"
-                                        msg.contains("SSL", true) || msg.contains("TLS", true) ->
-                                            "Error: SSL. Prueba otro puerto (993 para IMAP)"
-                                        else -> "Error: ${msg.take(80)}"
+                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                        emailTestResult = when {
+                                            msg.contains("Authentication", true) || msg.contains("AUTHENTICATE", true) ->
+                                                "Error: Credenciales incorrectas. Gmail necesita App Password"
+                                            msg.contains("connect", true) || msg.contains("timeout", true) ->
+                                                "Error: No pudo conectar a $emailImapHost. Verifica el servidor"
+                                            msg.contains("SSL", true) || msg.contains("TLS", true) ->
+                                                "Error: SSL. Prueba otro puerto (993 para IMAP)"
+                                            else -> "Error: ${msg.take(80)}"
+                                        }
                                     }
                                 }
-                            }.start()
+                            }
                         },
                         enabled = emailAddr.isNotBlank() && emailPasswd.isNotBlank(),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1565C0)),
@@ -1480,12 +1387,14 @@ fun SettingsScreen(
                 SectionTitle("DATOS Y ALMACENAMIENTO")
                 Spacer(modifier = Modifier.height(8.dp))
 
-                val msgCount = "Swarm Activo"
-                val memCount = 0 // memoryDB se gestiona internamente en el Engine
+                // S-15: Contadores reales desde la base de datos
+                val threadCount by androidx.compose.runtime.produceState(initialValue = 0) {
+                    value = viewModel.chatHistoryDB.chatHistoryDao().getAllThreads().size
+                }
+                val agentCount = viewModel.availableAgents.size
 
-                DataRow("Mensajes", msgCount)
-                DataRow("Memorias RAG", "$memCount")
-                DataRow("Agentes", "${viewModel.availableAgents.size}")
+                DataRow("Hilos de chat", "$threadCount")
+                DataRow("Agentes", "$agentCount")
 
                 Spacer(modifier = Modifier.height(10.dp))
 
@@ -1518,18 +1427,17 @@ fun SettingsScreen(
             // SKILLS
             // ═══════════════════════════════════════
             SectionCard {
-                SectionTitle("SKILLS NATIVOS (35)")
-                Spacer(modifier = Modifier.height(6.dp))
-
                 val skillGroups = listOf(
-                    "Core" to listOf("device_info", "clipboard", "notify", "tts", "browser", "share", "file"),
-                    "Inteligencia" to listOf("memory", "calculator", "datetime"),
-                    "Multimedia" to listOf("camera", "image_gen"),
-                    "Sistema" to listOf("flashlight", "volume", "alarm", "app_launcher", "contacts", "connectivity"),
-                    "Productividad" to listOf("calendar", "email", "music", "weather", "search", "brightness", "battery", "qr_gen"),
-                    "Documentos" to listOf("web_fetch", "generate_pdf", "generate_html", "spreadsheet", "read_document"),
-                    "Agent Core" to listOf("run_code", "file_manager", "git", "browser_agent")
+                    "Core" to listOf("datetime", "web_search", "memory", "flashlight", "volume", "telemetry"),
+                    "Código" to listOf("code_sandbox"),
+                    "Web + Docs" to listOf("web_scraper", "analyze_image", "read_document"),
+                    "Generadores" to listOf("export_pdf", "export_csv", "html_forge"),
+                    "OS + Contacts" to listOf("contacts", "calendar", "god_mode"),
+                    "Comunicación" to listOf("email", "whatsapp", "web_api_fetch")
                 )
+                val totalSkills = skillGroups.sumOf { it.second.size }
+                SectionTitle("SKILLS NATIVOS ($totalSkills)")
+                Spacer(modifier = Modifier.height(6.dp))
 
                 skillGroups.forEach { (group, skills) ->
                     Text(group, fontSize = 11.sp, color = BeeYellow, fontWeight = FontWeight.Bold)
@@ -1544,13 +1452,13 @@ fun SettingsScreen(
             SectionCard {
                 SectionTitle("ACERCA DE")
                 Spacer(modifier = Modifier.height(6.dp))
-                Text("Bee-Movil v4.2.1", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = BeeWhite)
-                Text("35 skills · 15 screens · Kotlin nativo · Edge AI", fontSize = 12.sp, color = BeeGray)
+                Text("E.M.M.A. AI", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = BeeWhite)
+                Text("v4.2.1 · Kotlin nativo · Edge AI · Multi-Agent", fontSize = 12.sp, color = BeeGray)
                 Spacer(modifier = Modifier.height(4.dp))
-                Text("Asistente AI que vive en tu teléfono.\nSin servidores. Sin tracking. 100% tuyo.",
+                Text("Enhanced Multi-Modal Mobile Assistant.\nTu asistente AI personal que vive en tu teléfono.\nSin servidores externos. Sin tracking. 100% tuyo.",
                     fontSize = 12.sp, color = Color(0xFFB0B0B0))
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("BEE Powered by Bee-Movil Team", fontSize = 11.sp, color = BeeYellow)
+                Text("Powered by Bee-Movil", fontSize = 11.sp, color = BeeYellow)
             }
 
             Spacer(modifier = Modifier.height(40.dp))

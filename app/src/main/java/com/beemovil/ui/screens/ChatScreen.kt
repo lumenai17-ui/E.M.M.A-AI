@@ -262,25 +262,74 @@ fun ChatScreen(
                             ) {
                                 Column {
                                     if (msg.filePaths.isNotEmpty()) {
+                                        val fPath = msg.filePaths.first()
+                                        val fName = msg.attachmentNames.firstOrNull() ?: java.io.File(fPath).name
+                                        val fMime = msg.attachmentMimeTypes.firstOrNull() ?: ""
+                                        
+                                        // FILE-04: Detectar imagen por MIME type, no por extensión
+                                        val isImage = fMime.startsWith("image/") || 
+                                            fPath.endsWith(".jpg") || fPath.endsWith(".jpeg") || 
+                                            fPath.endsWith(".png") || fPath.endsWith(".webp") || 
+                                            fPath.endsWith(".gif")
+
+                                        // FILE-06: Tap-to-open en el preview
                                         Surface(
                                             color = Color(0xFF1E1E2C).copy(alpha=0.6f),
                                             shape = RoundedCornerShape(8.dp),
-                                            modifier = Modifier.padding(bottom = 6.dp).fillMaxWidth()
+                                            modifier = Modifier
+                                                .padding(bottom = 6.dp)
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .combinedClickable(
+                                                    onClick = {
+                                                        // FILE-06: Abrir archivo con el visor del sistema
+                                                        try {
+                                                            val viewUri = if (fPath.startsWith("content://")) {
+                                                                android.net.Uri.parse(fPath)
+                                                            } else {
+                                                                androidx.core.content.FileProvider.getUriForFile(
+                                                                    context, "${context.packageName}.fileprovider",
+                                                                    java.io.File(fPath)
+                                                                )
+                                                            }
+                                                            val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                                                                setDataAndType(viewUri, if (fMime.isNotBlank()) fMime else "*/*")
+                                                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                            }
+                                                            context.startActivity(viewIntent)
+                                                        } catch (e: Exception) {
+                                                            android.widget.Toast.makeText(context, "No se pudo abrir: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                                                        }
+                                                    },
+                                                    onLongClick = { showMenuForMessage = msg.text }
+                                                )
                                         ) {
                                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(8.dp)) {
-                                                val fPath = msg.filePaths.first()
-                                                if (fPath.contains("image") || fPath.endsWith(".jpg") || fPath.endsWith(".png")) {
+                                                if (isImage) {
                                                     AsyncImage(
                                                         model = fPath,
-                                                        contentDescription = "Preview",
+                                                        contentDescription = fName,
                                                         modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)),
                                                         contentScale = androidx.compose.ui.layout.ContentScale.Crop
                                                     )
                                                 } else {
-                                                    Icon(Icons.Filled.InsertDriveFile, "File", tint=BeeYellow, modifier = Modifier.size(32.dp))
+                                                    // Ícono diferenciado por tipo
+                                                    val fileIcon = when {
+                                                        fMime.contains("pdf") || fName.endsWith(".pdf") -> Icons.Filled.PictureAsPdf
+                                                        fMime.startsWith("audio/") -> Icons.Filled.AudioFile
+                                                        fMime.startsWith("video/") -> Icons.Filled.VideoFile
+                                                        else -> Icons.Filled.InsertDriveFile
+                                                    }
+                                                    Icon(fileIcon, "File", tint=BeeYellow, modifier = Modifier.size(32.dp))
                                                 }
                                                 Spacer(modifier = Modifier.width(8.dp))
-                                                Text("Adjunto", color = BeeWhite, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                // FILE-03: Mostrar nombre real del archivo
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(fName, color = BeeWhite, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                                                    if (fMime.isNotBlank()) {
+                                                        Text(fMime.uppercase(), color = BeeGray, fontSize = 9.sp)
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -307,24 +356,47 @@ fun ChatScreen(
                                     }
                                 )
                                 if (msg.filePaths.isNotEmpty()) {
+                                    val rawPath = msg.filePaths.first()
+                                    val fileMime = msg.attachmentMimeTypes.firstOrNull() ?: "*/*"
+                                    
+                                    // FILE-05: Opción "Abrir archivo" 
+                                    DropdownMenuItem(
+                                        text = { Text("Abrir archivo") },
+                                        onClick = {
+                                            try {
+                                                val viewUri = if (rawPath.startsWith("content://")) {
+                                                    android.net.Uri.parse(rawPath)
+                                                } else {
+                                                    androidx.core.content.FileProvider.getUriForFile(
+                                                        context, "${context.packageName}.fileprovider",
+                                                        java.io.File(rawPath)
+                                                    )
+                                                }
+                                                val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                                                    setDataAndType(viewUri, if (fileMime.isNotBlank()) fileMime else "*/*")
+                                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                }
+                                                context.startActivity(viewIntent)
+                                            } catch (e: Exception) {
+                                                android.widget.Toast.makeText(context, "No se pudo abrir: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                                            }
+                                            showMenuForMessage = null
+                                        }
+                                    )
                                     DropdownMenuItem(
                                         text = { Text("Compartir archivo") },
                                         onClick = {
                                             try {
-                                                val rawPath = msg.filePaths.first()
                                                 val shareUri = if (rawPath.startsWith("content://")) {
                                                     android.net.Uri.parse(rawPath)
                                                 } else {
-                                                    // Ruta absoluta del filesystem -> requiere FileProvider en Android 7+
-                                                    val file = java.io.File(rawPath)
                                                     androidx.core.content.FileProvider.getUriForFile(
-                                                        context,
-                                                        "${context.packageName}.fileprovider",
-                                                        file
+                                                        context, "${context.packageName}.fileprovider",
+                                                        java.io.File(rawPath)
                                                     )
                                                 }
                                                 val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                                    type = "*/*"
+                                                    type = if (fileMime.isNotBlank()) fileMime else "*/*"
                                                     putExtra(Intent.EXTRA_STREAM, shareUri)
                                                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                                 }
