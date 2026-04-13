@@ -43,6 +43,8 @@ data class DashboardMatrixState(
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val engine = EmmaEngine(application)
+    // Motor aislado para el Dashboard — nunca contamina el contexto del chat del usuario
+    private val dashboardEngine = EmmaEngine(application)
     private val voiceManager = DeepgramVoiceManager(application)
     private val envScanner = com.beemovil.core.EnvironmentScanner(application)
 
@@ -54,6 +56,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         
         viewModelScope.launch {
             engine.initialize()
+            dashboardEngine.initialize() // Engine aislado para telemetría
             dashboardInsight.value = "Koog Engine Cargado: Ollama conectando..."
             
             // Cargar Historial al Iniciar del Hilo Principal
@@ -88,6 +91,17 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             
             // 2. Re-hidratar Corteza Neuronal (God Mode Persistencia)
             engine.loadPersistedContext(history)
+
+            // Garantizar que el thread 'main' exista en Room
+            val allExisting = chatHistoryDB.chatHistoryDao().getAllThreads()
+            if (allExisting.none { it.threadId == "main" }) {
+                chatHistoryDB.chatHistoryDao().createThread(com.beemovil.database.ChatThreadEntity(
+                    threadId = "main",
+                    title = "Chat con E.M.M.A.",
+                    type = "SINGLE",
+                    lastUpdateMillis = System.currentTimeMillis()
+                ))
+            }
 
             // Iniciar Motor de Novedad Dinámica
             refreshLiveDashboard()
@@ -210,7 +224,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val systemMatrixPrompt = "INSTRUCCIÓN DE SISTEMA: No eres un asistente. No saludes ni expliques. Genera el reporte. Datos de telemetría recibidos: Bateria $battery%, Red $net, Hora $sysTime, Clima $weatherRaw, Sucesos recientes: $recentMemory$ghostInjection. FORMATO OBLIGATORIO (Max 2 líneas): Línea 1: Insight de entorno. Línea 2: '👉 Acción sugerida:' seguido de instrucción."
             
             try {
-                var aiInsight = engine.processUserMessage(systemMatrixPrompt).replace("SISTEMA CORE:", "").trim()
+                var aiInsight = dashboardEngine.processUserMessage(systemMatrixPrompt).replace("SISTEMA CORE:", "").trim()
                 if (aiInsight.length > 250) {
                     aiInsight = aiInsight.take(250) + "..."
                 }
@@ -342,7 +356,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             
             engine.loadPersistedContext(pastMessages, agent.systemPrompt)
             
-            currentProvider.value = agent.fallbackModel
+            // Parse fallbackModel correctamente (formato "provider:modelId" o "hermes-a2a|url|token")
+            if (agent.fallbackModel.startsWith("hermes-a2a")) {
+                currentProvider.value = agent.fallbackModel  // pass through completo para hermes
+                currentModel.value = ""
+            } else {
+                val parts = agent.fallbackModel.split(":", limit = 2)
+                currentProvider.value = if (parts.isNotEmpty()) parts[0] else "openrouter"
+                currentModel.value = if (parts.size > 1) parts[1] else agent.fallbackModel
+            }
             currentScreen.value = "chat"
         }
     }
@@ -387,6 +409,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
     // ------------------------------------
 
+    fun navigateToThread(threadId: String) {
+        if (threadId == "main") {
+            currentScreen.value = "chat"
+        } else {
+            viewModelScope.launch {
+                val thread = chatHistoryDB.chatHistoryDao().getAllThreads()
+                    .find { it.threadId == threadId }
+                if (thread != null) openThread(thread)
+                else currentScreen.value = "chat"
+            }
+        }
+    }
+
     fun switchProvider(preset: String, model: String) {
         currentProvider.value = preset
         currentModel.value = model
@@ -397,7 +432,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         // Dummy implementation for SettingsScreen compatibility
     }
 
-    val memoryDB: com.beemovil.memory.BeeMemoryDB? = null
     val chatHistoryDB = com.beemovil.database.ChatHistoryDB.getDatabase(application)
     
     fun refreshHistoryCount() {
@@ -420,6 +454,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun sendMessage(text: String, fileUri: String? = null) {
         if (text.isBlank() && fileUri == null) return
         
+        // Capturar el agentId en este momento exacto para evitar race condition
+        // si el usuario cambia de agente mientras la coroutine del request previo sigue activa
+        val capturedAgentId = activeAgentId.value
+        val capturedThreadId = activeThreadId.value
+        val capturedProvider = currentProvider.value
+        val capturedModel = currentModel.value
+        
         val displayPaths = if (fileUri != null) listOf(fileUri) else emptyList()
         messages.add(ChatUiMessage(text, true, filePaths = displayPaths))
         isLoading.value = true
@@ -430,7 +471,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         
         viewModelScope.launch {
             swarmInsight.value = ""
-            val response = engine.processUserMessage(text, currentProvider.value, currentModel.value) { progress ->
+            val response = engine.processUserMessage(text, capturedProvider, capturedModel) { progress ->
                 swarmInsight.value = progress
             }
             swarmInsight.value = ""
@@ -480,19 +521,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             
             // Insertar asíncronamente en Room DB el mensaje del usuario y la respuesta
             chatHistoryDB.chatHistoryDao().insertMessage(com.beemovil.database.ChatMessageEntity(
-                threadId = activeThreadId.value,
+                threadId = capturedThreadId,
                 senderId = "user",
-                timestamp = System.currentTimeMillis() - 100, // usuario antes
+                timestamp = System.currentTimeMillis() - 100,
                 role = "user",
                 content = text,
                 metadataJson = metaJson
             ))
             
-            
             if (!response.startsWith("TOOL_CALL::file_generated::")) {
                 chatHistoryDB.chatHistoryDao().insertMessage(com.beemovil.database.ChatMessageEntity(
-                    threadId = activeThreadId.value,
-                    senderId = activeAgentId.value,
+                    threadId = capturedThreadId,
+                    senderId = capturedAgentId,
                     timestamp = System.currentTimeMillis(),
                     role = "assistant",
                     content = response
@@ -503,7 +543,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
     
     fun sendMessageWithAttachments(text: String, attachments: List<Any>) {
-        sendMessage(text)
+        // Pasa el primer attachment como fileUri si es un String (URI)
+        val uri = attachments.filterIsInstance<String>().firstOrNull()
+            ?: attachments.filterIsInstance<android.net.Uri>().firstOrNull()?.toString()
+        sendMessage(text, uri)
     }
     
     fun prefillAgentChat(agentId: String, prompt: String) {

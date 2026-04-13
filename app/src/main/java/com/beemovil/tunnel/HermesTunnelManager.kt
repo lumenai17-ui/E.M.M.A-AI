@@ -34,6 +34,10 @@ object HermesTunnelManager {
 
         // Guardamos las configuraciones para re-hidratado si el servicio reinicia
         saveConfig(context, url, token)
+        // BUG-15: guardar token también en SecurePrefs para no exponerlo en Room
+        com.beemovil.security.SecurePrefs.get(context).edit()
+            .putString("hermes_master_token", token)
+            .apply()
 
         val deviceId = com.beemovil.security.SecurePrefs.get(context).getString("device_id", "") ?: "emma-phone"
 
@@ -94,7 +98,7 @@ object HermesTunnelManager {
             deferred.await()
         } ?: run {
             pendingTasks.remove(taskId)
-            "Timeout: Hermes no respondió tras 45 segundos."
+            "Timeout: Hermes no respondió tras 45 segundos. Verifica la conexión de red y el estado del servidor."
         }
     }
 
@@ -132,7 +136,7 @@ object HermesTunnelManager {
             deferred.await()
         } ?: run {
             ephemeralClient.disconnect()
-            "Timeout: Túnel Efímero Remoto no respondió tras 45 segundos."
+            "Timeout: Túnel Efímero no respondió en 45s. Verifica URL y token del servidor Hermes."
         }
     }
 }

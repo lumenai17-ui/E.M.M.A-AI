@@ -311,12 +311,27 @@ fun ChatScreen(
                                         text = { Text("Compartir archivo") },
                                         onClick = {
                                             try {
+                                                val rawPath = msg.filePaths.first()
+                                                val shareUri = if (rawPath.startsWith("content://")) {
+                                                    android.net.Uri.parse(rawPath)
+                                                } else {
+                                                    // Ruta absoluta del filesystem -> requiere FileProvider en Android 7+
+                                                    val file = java.io.File(rawPath)
+                                                    androidx.core.content.FileProvider.getUriForFile(
+                                                        context,
+                                                        "${context.packageName}.fileprovider",
+                                                        file
+                                                    )
+                                                }
                                                 val shareIntent = Intent(Intent.ACTION_SEND).apply {
                                                     type = "*/*"
-                                                    putExtra(Intent.EXTRA_STREAM, android.net.Uri.parse(msg.filePaths.first()))
+                                                    putExtra(Intent.EXTRA_STREAM, shareUri)
+                                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                                 }
                                                 context.startActivity(Intent.createChooser(shareIntent, "Compartir con..."))
-                                            } catch(e: Exception) {}
+                                            } catch (e: Exception) {
+                                                android.widget.Toast.makeText(context, "Error al compartir: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                                            }
                                             showMenuForMessage = null
                                         }
                                     )

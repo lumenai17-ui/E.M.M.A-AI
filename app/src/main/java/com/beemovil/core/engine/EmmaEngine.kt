@@ -4,6 +4,8 @@ import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -21,6 +23,7 @@ class EmmaEngine(private val context: Context) {
 
     private val chatHistoryDB = com.beemovil.database.ChatHistoryDB.getDatabase(context)
     
+    private val historyMutex = Mutex()
     private val messagesHistory = mutableListOf<ChatMessage>()
 
     private val EMMA_SUPERVISOR_PROMPT = """
@@ -109,23 +112,24 @@ class EmmaEngine(private val context: Context) {
 
     fun clearMemoryAndHistory(customSystemPrompt: String? = null) {
         Log.d(TAG, "Clearing volatile context...")
-        messagesHistory.clear()
-        val pastMemories = memoryDB?.getAllMemories()?.joinToString("\n") ?: ""
-        val memoryInjection = if (pastMemories.isNotBlank()) "\nMEMORIAS PREVIAS DEL USUARIO:\n$pastMemories\n" else ""
-        
-        val basePrompt = customSystemPrompt?.takeIf { it.isNotBlank() } ?: EMMA_SUPERVISOR_PROMPT
-        messagesHistory.add(ChatMessage("system", basePrompt + memoryInjection))
+        // Sync clear — called from coroutine context, safe with historyMutex callers
+        synchronized(messagesHistory) {
+            messagesHistory.clear()
+            val pastMemories = memoryDB?.getAllMemories()?.joinToString("\n") ?: ""
+            val memoryInjection = if (pastMemories.isNotBlank()) "\nMEMORIAS PREVIAS DEL USUARIO:\n$pastMemories\n" else ""
+            val basePrompt = customSystemPrompt?.takeIf { it.isNotBlank() } ?: EMMA_SUPERVISOR_PROMPT
+            messagesHistory.add(ChatMessage("system", basePrompt + memoryInjection))
+        }
     }
 
     suspend fun loadPersistedContext(historyEntities: List<com.beemovil.database.ChatMessageEntity>, customSystemPrompt: String? = null) {
         Log.i(TAG, "Re-Hidratando Contexto Persistente (${historyEntities.size} mensajes)...")
-        // Reiniciamos todo primero para crear la semilla limpia del sistema
         clearMemoryAndHistory(customSystemPrompt)
-        
-        // Mapeamos los entities crudos al formato interno del LLM (Omitimos los system que ya se recargaron arriba)
-        historyEntities.forEach { entity ->
-            if (entity.role != "system") {
-                messagesHistory.add(ChatMessage(role = entity.role, content = entity.content))
+        historyMutex.withLock {
+            historyEntities.forEach { entity ->
+                if (entity.role != "system") {
+                    messagesHistory.add(ChatMessage(role = entity.role, content = entity.content))
+                }
             }
         }
         Log.d(TAG, "LLM Cortex restaurado con total éxito.")
@@ -139,7 +143,7 @@ class EmmaEngine(private val context: Context) {
     ): String {
         return withContext(Dispatchers.IO) {
             try {
-                messagesHistory.add(ChatMessage("user", message))
+                historyMutex.withLock { messagesHistory.add(ChatMessage("user", message)) }
 
                 // Intercepción para Agentes de Nube Privada (Hermes A2A Individual)
                 if (forcedProvider?.startsWith("hermes-a2a") == true) {
@@ -156,7 +160,7 @@ class EmmaEngine(private val context: Context) {
                         com.beemovil.tunnel.HermesTunnelManager.executeA2ATask("text_generation", message)
                     }
                     
-                    messagesHistory.add(ChatMessage("assistant", response))
+                    historyMutex.withLock { messagesHistory.add(ChatMessage("assistant", response)) }
                     return@withContext response
                 }
 
@@ -169,8 +173,7 @@ class EmmaEngine(private val context: Context) {
                 if (toolCalls1.isNotEmpty()) {
                     Log.i(TAG, "[PASO 2] El modelo decidió llamar a ${toolCalls1.size} herramientas.")
                     onProgress?.invoke("Evaluando uso de Herramientas Especializadas...")
-                    // 1. Agregar la intención del assistant a la historia
-                    messagesHistory.add(ChatMessage("assistant", null, toolCalls1, "call_" + System.currentTimeMillis()))
+                    historyMutex.withLock { messagesHistory.add(ChatMessage("assistant", null, toolCalls1, "call_" + System.currentTimeMillis())) }
                     
                     // 2. Ejecutar cada herramienta
                     for (call in toolCalls1) {
@@ -183,30 +186,29 @@ class EmmaEngine(private val context: Context) {
                                     map
                                 }
                                 val result = plugin.execute(argsMap)
-                                messagesHistory.add(ChatMessage("tool", result, toolCallId = call.id))
+                                historyMutex.withLock { messagesHistory.add(ChatMessage("tool", result, toolCallId = call.id)) }
                             } catch (e: Exception) {
-                                messagesHistory.add(ChatMessage("tool", "Error interno en herramienta: ${e.message}", toolCallId = call.id))
+                                historyMutex.withLock { messagesHistory.add(ChatMessage("tool", "Error interno en herramienta: ${e.message}", toolCallId = call.id)) }
                             }
                         } else {
-                            // Si la herramienta no existe (e.g. alucinación temporal o legacy call)
                             if (call.name == "delegate_to_browser") {
                                 val url = call.params.optString("url", "https://google.com")
                                 return@withContext "TOOL_CALL::open_browser::$url"
                             }
-                            messagesHistory.add(ChatMessage("tool", "Error: Herramienta no encontrada", toolCallId = call.id))
+                            historyMutex.withLock { messagesHistory.add(ChatMessage("tool", "Error: Herramienta no encontrada", toolCallId = call.id)) }
                         }
                     }
                     
-                    // 3. Segunda Llamada (Follow-up) -> El Paso 2
                     Log.d(TAG, "[PASO 3] Consultando de nuevo con resultados inyectados...")
                     onProgress?.invoke("Ensamblando respuesta de herramientas...")
-                    val (finalResponse, _) = executeProvider(messagesHistory.toList(), activeTools, forcedProvider, forcedModel)
-                    messagesHistory.add(ChatMessage("assistant", finalResponse))
+                    val historySnapshot = historyMutex.withLock { messagesHistory.toList() }
+                    val (finalResponse, _) = executeProvider(historySnapshot, activeTools, forcedProvider, forcedModel)
+                    historyMutex.withLock { messagesHistory.add(ChatMessage("assistant", finalResponse)) }
                     return@withContext finalResponse
                 }
 
                 // Sin herramientas
-                messagesHistory.add(ChatMessage("assistant", response1))
+                historyMutex.withLock { messagesHistory.add(ChatMessage("assistant", response1)) }
                 return@withContext response1
 
             } catch (e: Exception) {
@@ -241,10 +243,11 @@ class EmmaEngine(private val context: Context) {
 
                 Log.d(TAG, "[SWARM] Iniciando automatización para Thread: $threadId con ${members.size} agentes")
 
+                // BUG-03 fix: obtener todos los agentes UNA vez fuera del loop
+                val allAgents = chatHistoryDB.chatHistoryDao().getAllAgents()
+
                 for ((index, member) in members.sortedBy { it.executionOrder }.withIndex()) {
-                    // Fetch Agent Config
-                    val agents = chatHistoryDB.chatHistoryDao().getAllAgents()
-                    val agentConfig = agents.find { it.agentId == member.agentId } ?: continue
+                    val agentConfig = allAgents.find { it.agentId == member.agentId } ?: continue
 
                     // Parse Fallback Model (format -> "provider:modelId")
                     val modelParts = agentConfig.fallbackModel.split(":", limit = 2)
@@ -310,6 +313,11 @@ class EmmaEngine(private val context: Context) {
         }
     }
 
+    /**
+     * @Deprecated Usar dispatchSwarmTask() para enrutamiento de sub-agentes.
+     * Este método queda como referencia de la arquitectura mono-agente anterior.
+     */
+    @Deprecated("Use dispatchSwarmTask instead", ReplaceWith("dispatchSwarmTask(threadId, userMessage)"))
     private fun executeSpecialist(agentId: String, userMessage: String, priorToolCall: com.beemovil.llm.ToolCall): String {
         val specialistHistory = mutableListOf<ChatMessage>()
         val tools = mutableListOf<ToolDefinition>()
@@ -363,29 +371,25 @@ class EmmaEngine(private val context: Context) {
         forcedProvider: String? = null,
         forcedModel: String? = null
     ): Pair<String, List<com.beemovil.llm.ToolCall>> {
+        // Fuente única de verdad: SecurePrefs (BUG-16)
         val prefs = context.getSharedPreferences("beemovil", Context.MODE_PRIVATE)
         val securePrefs = com.beemovil.security.SecurePrefs.get(context)
         
         val preset = forcedProvider ?: prefs.getString("selected_provider", "openrouter") ?: "openrouter"
         val model = forcedModel ?: prefs.getString("selected_model", "openai/gpt-4o-mini") ?: "openai/gpt-4o-mini"
         
-        val key = when(preset) {
-            "openrouter" -> securePrefs.getString("openrouter_api_key", "") ?: ""
-            "ollama" -> securePrefs.getString("ollama_api_key", "") ?: ""
-            else -> ""
-        }
+        val key = securePrefs.getString(when(preset) {
+            "openrouter" -> "openrouter_api_key"
+            "ollama" -> "ollama_api_key"
+            else -> "openrouter_api_key"
+        }, "") ?: ""
 
-        var provider: com.beemovil.llm.LlmProvider? = null
-
-        try {
-            provider = LlmFactory.createProvider(preset, key, model)
-            // LlmFactory abstrae la configuración final.
-            // pero LlmFactory abstrae esto. Para Custom podemos inyectarlo o solo usar OpenAI compatible.
+        return try {
+            val provider = LlmFactory.createProvider(preset, key, model)
+            val result = provider.complete(messages, tools)
+            Pair(result.text ?: "", result.toolCalls)
         } catch (e: Exception) {
-            return Pair("Error instanciando LLM: ${e.message}", emptyList())
+            Pair("Error instanciando LLM: ${e.message}", emptyList())
         }
-
-        val result = provider.complete(messages, tools)
-        return Pair(result.text ?: "", result.toolCalls)
     }
 }

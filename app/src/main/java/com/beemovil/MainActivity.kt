@@ -88,15 +88,15 @@ class MainActivity : ComponentActivity() {
                                 )
                                 "dashboard" -> DashboardScreen(
                                     viewModel = viewModel,
-                                    onAgentClick = { viewModel.currentScreen.value = "chat" },
+                                    onAgentClick = { threadId ->
+                                        viewModel.navigateToThread(threadId)
+                                    },
                                     onSettingsClick = { viewModel.currentScreen.value = "settings" }
                                 )
-                                "tasks", "email_inbox" -> DashboardScreen(
-                                    // Todo: Crear TaskScreen y EmailInboxScreen para la fase 11. 
-                                    // Por ahora actúan como fallback orgánico sin flashear la app.
-                                    viewModel = viewModel,
-                                    onAgentClick = { viewModel.currentScreen.value = "chat" },
-                                    onSettingsClick = { viewModel.currentScreen.value = "settings" }
+                                "tasks", "email_inbox" -> com.beemovil.ui.screens.PlaceholderScreen(
+                                    title = if (currentScreen == "tasks") "Tareas" else "Bandeja de Correos",
+                                    message = "Esta sección llega en la próxima fase 🚀",
+                                    onBack = { viewModel.currentScreen.value = "dashboard" }
                                 )
                                 "settings" -> SettingsScreen(
                                     viewModel = viewModel,

@@ -46,6 +46,11 @@ fun DashboardScreen(
     ) {
         val dynamicState = viewModel.dynamicDashboardState.value
 
+        // BUG-12 fix: Refrescar datos cada vez que se muestra el Dashboard
+        androidx.compose.runtime.LaunchedEffect(Unit) {
+            viewModel.refreshLiveDashboard()
+        }
+
         TopAppBar(
             title = {
                 Text("Hola, ${dynamicState.greetingName}", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, color = BeeWhite)

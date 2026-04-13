@@ -1481,7 +1481,7 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 val msgCount = "Swarm Activo"
-                val memCount = viewModel.memoryDB?.getMemoryCount() ?: 0
+                val memCount = 0 // memoryDB se gestiona internamente en el Engine
 
                 DataRow("Mensajes", msgCount)
                 DataRow("Memorias RAG", "$memCount")
