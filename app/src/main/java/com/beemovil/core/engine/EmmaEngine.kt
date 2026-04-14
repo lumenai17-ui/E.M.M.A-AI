@@ -36,6 +36,8 @@ class EmmaEngine(private val context: Context) {
         - Si el usuario te pide un entregable formal (ensayo en PDF, tabla de Excel/CSV, o generar una página Web), NUNCA lo escribas en el chat. Utiliza las herramientas de generación ('generate_pdf_document', 'generate_csv_table' o 'generate_html_landing') y confírmale que estás abriendo el menú para descargarlo.
         - ¡TIENES ACCESO A SU TELÉFONO! Si te piden leer la agenda, agendar una junta, prender la linterna, poner una alarma o buscar en los Contactos, DEBES usar el plugin correspondiente ('os_god_mode_operations', 'calendar_os_operations', 'search_android_contacts') sin excusas. NO digas que no tienes acceso.
         - ERES UN COMUNICADOR EN RED: Si te piden mandar un correo o mandar un WhatsApp a alguien, JAMÁS digas que no puedes. Usa 'compose_email_intent' o 'send_whatsapp_message' automáticamente. Si necesitas consultar una API web o extraer datos, usa 'fetch_external_api'.
+        - TIENES ACCESO AL ECOSISTEMA GOOGLE DEL USUARIO: Si preguntan por sus emails, usa 'google_gmail'. Si preguntan por su agenda o quieren crear un evento, usa 'google_calendar'. Si preguntan por tareas pendientes, usa 'google_tasks'. Si el usuario NO está conectado a Google, dile que vaya a Settings → Google.
+        - PUEDES GENERAR IMÁGENES CON IA: Si el usuario pide 'genera una imagen', 'dibuja', 'crea una ilustración', 'hazme un logo' o cualquier variación, usa 'generate_ai_image'. Traduce el prompt a inglés para mejores resultados y elige el estilo más adecuado.
         - Si es charla común, responde de forma amigable, corta y directa en español.
     """.trimIndent()
 
@@ -96,6 +98,14 @@ class EmmaEngine(private val context: Context) {
         registerPlugin(com.beemovil.plugins.builtins.EmailComposerPlugin(context))
         registerPlugin(com.beemovil.plugins.builtins.WhatsAppAutomatorPlugin(context))
         registerPlugin(com.beemovil.plugins.builtins.WebApiFetcherPlugin())
+
+        // Registrar Google Ecosystem (Sprint 4)
+        registerPlugin(com.beemovil.plugins.builtins.GmailPlugin(context))
+        registerPlugin(com.beemovil.plugins.builtins.GoogleCalendarPlugin(context))
+        registerPlugin(com.beemovil.plugins.builtins.GoogleTasksPlugin(context))
+
+        // Registrar Image Generation (Sprint 6)
+        registerPlugin(com.beemovil.plugins.builtins.ImageGenerationPlugin(context))
         
         try {
             if (messagesHistory.isEmpty()) {
@@ -168,6 +178,21 @@ class EmmaEngine(private val context: Context) {
                 val activeTools = plugins.values.map { it.getToolDefinition() }
 
                 Log.d(TAG, "[PASO 1] Ejecutando Engine...")
+                
+                // Sprint 6 polish: Auto-trim context window to prevent OOM on long sessions
+                historyMutex.withLock {
+                    if (messagesHistory.size > 60) {
+                        val systemMsg = messagesHistory.firstOrNull { it.role == "system" }
+                        val trimmed = messagesHistory.takeLast(40).toMutableList()
+                        if (systemMsg != null && trimmed.firstOrNull()?.role != "system") {
+                            trimmed.add(0, systemMsg)
+                        }
+                        messagesHistory.clear()
+                        messagesHistory.addAll(trimmed)
+                        Log.i(TAG, "Context window trimmed to ${messagesHistory.size} messages")
+                    }
+                }
+                
                 val (response1, toolCalls1) = executeProvider(messagesHistory.toList(), activeTools, forcedProvider, forcedModel)
                 
                 if (toolCalls1.isNotEmpty()) {
@@ -199,6 +224,19 @@ class EmmaEngine(private val context: Context) {
                         }
                     }
                     
+                    // U-02 fix: Interceptar señales de archivo generado ANTES de la segunda pasada
+                    // Si algún plugin generó un archivo, retornarlo directamente sin pasar por el LLM otra vez
+                    val fileGeneratedResult = historyMutex.withLock {
+                        messagesHistory.lastOrNull { 
+                            it.role == "tool" && it.content?.startsWith("TOOL_CALL::file_generated::") == true 
+                        }?.content
+                    }
+                    if (fileGeneratedResult != null) {
+                        Log.i(TAG, "[PASO 2.5] Archivo generado detectado. Saltando segunda inferencia.")
+                        historyMutex.withLock { messagesHistory.add(ChatMessage("assistant", "Archivo generado exitosamente.")) }
+                        return@withContext fileGeneratedResult
+                    }
+                    
                     Log.d(TAG, "[PASO 3] Consultando de nuevo con resultados inyectados...")
                     onProgress?.invoke("Ensamblando respuesta de herramientas...")
                     val historySnapshot = historyMutex.withLock { messagesHistory.toList() }
@@ -213,7 +251,20 @@ class EmmaEngine(private val context: Context) {
 
             } catch (e: Exception) {
                 Log.e(TAG, "Excepción en el Pipeline", e)
-                return@withContext "Error de red neuronal local: ${e.message}"
+                val friendlyError = when {
+                    e.message?.contains("Unable to resolve host", true) == true -> 
+                        "Sin conexión a internet. Verifica tu red e intenta de nuevo."
+                    e.message?.contains("timeout", true) == true -> 
+                        "El servidor tardó demasiado en responder. Intenta de nuevo."
+                    e.message?.contains("401", false) == true || e.message?.contains("Unauthorized", true) == true -> 
+                        "API Key inválida o expirada. Ve a Settings para verificar."
+                    e.message?.contains("429", false) == true -> 
+                        "Límite de peticiones alcanzado. Espera un momento e intenta de nuevo."
+                    e.message?.contains("model", true) == true -> 
+                        "Modelo no disponible. Intenta con otro modelo en Settings."
+                    else -> "Error procesando tu mensaje: ${e.message?.take(100)}"
+                }
+                return@withContext "⚠️ $friendlyError"
             }
         }
     }

@@ -181,13 +181,36 @@ Este documento traza las fases precisas para convertir la herencia de Bee en una
 
 ---
 
-## 📈 FASE 13: The App Store Premium Launch (ROADMAP GTM)
-*Meta: Orquestar el Deployment Comercial y el Modelo Open-Core.*
+## 🏆 FASE 13: Lanzamiento Comercial — [COMPLETADO]
+*Meta: Orquestar la estabilización final, integración de ecosistemas, y producción del APK/AAB release.*
 
-- [ ] Empaquetamiento final (`.aab` release) con optimización R8/Minify
-- [ ] Firma Criptográfica (`.signingConfig`) y vinculación con BEE Smart Portal
-- [ ] Implementación real del Telegram Bot Service (polling + foreground notification)
-- [ ] Plugin de generación de imágenes (fal.ai / Together AI) — keys ya pre-guardadas en SecurePrefs
-- [ ] Exportación de datos del chat (formato JSON/PDF)
-- [ ] Publicación en Play Store
+- **Sprint 0: Hotfixes Inmediatos** [COMPLETADO]
+  - Scroll instantáneo en chat (`scrollToItem`), búsqueda global cross-thread, flag real `isAlive` en Hermes.
+- **Sprint 1: Persistencia y Archivos** [COMPLETADO]
+  - Guardado del mensaje del usuario ANTES del LLM, archivos visibles en Downloads/EMMA/ vía MediaStore, adjuntos funcionales en WhatsApp/Email.
+- **Sprint 2: Modelos Dinámicos** [COMPLETADO]
+  - `DynamicModelFetcher.kt` consultando APIs en vivo (OpenRouter `/models`, Ollama `/tags`) con caché de 4 horas.
+- **Sprint 3: Telegram Bot Service** [COMPLETADO]
+  - Foreground service completo con long-polling, routing a EmmaEngine, seguridad por `@username`, notificación persistente, UI de control en Settings.
+- **Sprint 4: Google Ecosystem** [COMPLETADO]
+  - `GoogleGmailService` (inbox, send, search), `GoogleCalendarService` (list, create, delete events), `GoogleTasksService` (list, create, complete tasks). 3 EmmaPlugins para tool calling.
+- **Sprint 6: Imágenes + Polish** [COMPLETADO]
+  - `ImageGenerationPlugin` via Pollinations.ai (10 estilos artísticos), image preview full-width en chat, context window auto-trimming, error messages amigables.
+- **Sprint 7: Build Release** [COMPLETADO]
+  - ProGuard/R8 rules (15+ dependencias), version bump a v6.0.0, debug/release build types, signing config template, MultiDex, lint non-blocking. APK exitoso: 184 MB.
 
+---
+
+## 🔮 PRÓXIMAS FASES
+
+### FASE 14: Monetización y Distribución
+- [ ] Firma criptográfica con keystore de producción
+- [ ] Generación de AAB para Play Store
+- [ ] Vinculación con BEE Smart Portal (suscripciones)
+- [ ] Play Store listing (screenshots, descripción, assets)
+
+### FASE 15: Expansión de Capacidades
+- [ ] Integración Google Drive completa (browse, upload, download desde chat)
+- [ ] Modo offline mejorado (caché de respuestas, queue de acciones)
+- [ ] Widget de Home Screen con insight del dashboard
+- [ ] Notificaciones proactivas (clima, recordatorios, emails)

@@ -51,6 +51,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     val dynamicDashboardState = mutableStateOf(DashboardMatrixState())
 
+
     init {
         // Inicializamos los oídos y la boca local
         voiceManager.initialize()
@@ -264,7 +265,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         viewModelScope.launch {
-            val results = chatHistoryDB.chatHistoryDao().searchHistory("default_session", query)
+            // C-05 fix: buscar en TODOS los threads, no en uno hardcodeado
+            val results = chatHistoryDB.chatHistoryDao().searchAllHistory(query)
             searchResults.clear()
             results.forEach {
                 searchResults.add(ChatUiMessage(text = it.content, isUser = it.role == "user"))
@@ -604,6 +606,17 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         } else text
         
         viewModelScope.launch {
+            // U-06 fix: Guardar mensaje del usuario ANTES de llamar al LLM
+            // Si la app se cierra o el LLM falla, al menos el mensaje del usuario NO se pierde
+            chatHistoryDB.chatHistoryDao().insertMessage(com.beemovil.database.ChatMessageEntity(
+                threadId = capturedThreadId,
+                senderId = "user",
+                timestamp = System.currentTimeMillis(),
+                role = "user",
+                content = text,
+                metadataJson = metaJson
+            ))
+            
             swarmInsight.value = ""
             val response = engine.processUserMessage(enrichedText, capturedProvider, capturedModel) { progress ->
                 swarmInsight.value = progress
@@ -624,9 +637,30 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             } else if (response.startsWith("TOOL_CALL::file_generated::")) {
                 val filePath = response.removePrefix("TOOL_CALL::file_generated::")
                 val generatedName = java.io.File(filePath).name
-                val feedback = "He generado tu documento '$generatedName' y lo he archivado aquí en la conversación."
+                val extension = generatedName.substringAfterLast('.', "").lowercase()
+                val isImage = extension in listOf("png", "jpg", "jpeg", "webp", "gif")
+                val mimeType = when (extension) {
+                    "png" -> "image/png"
+                    "jpg", "jpeg" -> "image/jpeg"
+                    "webp" -> "image/webp"
+                    "gif" -> "image/gif"
+                    "pdf" -> "application/pdf"
+                    "csv" -> "text/csv"
+                    "html" -> "text/html"
+                    else -> "application/octet-stream"
+                }
+                val feedback = if (isImage) {
+                    "🎨 ¡Listo! He generado tu imagen '$generatedName'. La puedes ver aquí abajo y también está guardada en Downloads/EMMA/."
+                } else {
+                    "He generado tu documento '$generatedName' y lo he archivado aquí en la conversación."
+                }
                 
-                messages.add(ChatUiMessage(feedback, false, filePaths = listOf(filePath)))
+                messages.add(ChatUiMessage(
+                    feedback, false, 
+                    filePaths = listOf(filePath),
+                    attachmentNames = listOf(generatedName),
+                    attachmentMimeTypes = listOf(mimeType)
+                ))
                 
                 if (!isMuted.value) {
                     voiceManager.speak(feedback, language = Locale.getDefault().language)
@@ -658,16 +692,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             
-            // Insertar asíncronamente en Room DB el mensaje del usuario y la respuesta
-            chatHistoryDB.chatHistoryDao().insertMessage(com.beemovil.database.ChatMessageEntity(
-                threadId = capturedThreadId,
-                senderId = "user",
-                timestamp = System.currentTimeMillis() - 100,
-                role = "user",
-                content = text,
-                metadataJson = metaJson
-            ))
-            
+            // Guardar respuesta del asistente (el mensaje del usuario ya se guardó arriba)
             if (!response.startsWith("TOOL_CALL::file_generated::")) {
                 chatHistoryDB.chatHistoryDao().insertMessage(com.beemovil.database.ChatMessageEntity(
                     threadId = capturedThreadId,
@@ -693,7 +718,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun navigateToConversations() { currentScreen.value = "conversations" }
-    fun forceRefreshInsight() {}
+    // C-07 fix: Conectar al motor real de refresh
+    fun forceRefreshInsight() { refreshLiveDashboard() }
     fun toggleVoiceInput(onText: (String) -> Unit) {
         if (isRecording.value) {
             isRecording.value = false

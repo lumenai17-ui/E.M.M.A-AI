@@ -278,12 +278,93 @@ fun SettingsScreen(
             SectionCard {
                 SectionTitle("MODELO LLM")
                 Spacer(modifier = Modifier.height(8.dp))
-
-                val models = when (selectedProvider) {
-                    "openrouter" -> LlmFactory.OPENROUTER.models
-                    "ollama" -> LlmFactory.OLLAMA_CLOUD.models
-                    "local" -> LlmFactory.LOCAL.models
-                    else -> LlmFactory.OPENROUTER.models
+                
+                // U-03 fix: Modelos dinámicos desde el servidor
+                var dynamicModels by remember { mutableStateOf<List<LlmFactory.ModelOption>>(emptyList()) }
+                var isRefreshing by remember { mutableStateOf(false) }
+                var refreshStatus by remember { mutableStateOf("") }
+                
+                // Cargar modelos iniciales (cache o estáticos)
+                LaunchedEffect(selectedProvider) {
+                    dynamicModels = when (selectedProvider) {
+                        "openrouter" -> {
+                            val cached = com.beemovil.llm.DynamicModelFetcher.getCachedOpenRouterModels(context)
+                            cached.map { LlmFactory.ModelOption(it.id, it.name, it.free) }
+                        }
+                        "ollama" -> {
+                            val cached = com.beemovil.llm.DynamicModelFetcher.getCachedOllamaModels(context)
+                            cached.map { LlmFactory.ModelOption(it.id, it.name, it.free) }
+                        }
+                        "local" -> LlmFactory.LOCAL.models
+                        else -> LlmFactory.OPENROUTER.models
+                    }
+                }
+                
+                val models = dynamicModels.ifEmpty {
+                    when (selectedProvider) {
+                        "openrouter" -> LlmFactory.OPENROUTER.models
+                        "ollama" -> LlmFactory.OLLAMA_CLOUD.models
+                        "local" -> LlmFactory.LOCAL.models
+                        else -> LlmFactory.OPENROUTER.models
+                    }
+                }
+                
+                // Botón de actualizar modelos (solo para cloud providers)
+                if (selectedProvider != "local") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "${models.size} modelos disponibles",
+                            fontSize = 11.sp, color = BeeGray
+                        )
+                        Button(
+                            onClick = {
+                                isRefreshing = true
+                                refreshStatus = "Consultando servidor..."
+                                scope.launch {
+                                    try {
+                                        val fetched = when (selectedProvider) {
+                                            "openrouter" -> {
+                                                val key = securePrefs.getString("openrouter_api_key", "") ?: ""
+                                                com.beemovil.llm.DynamicModelFetcher.fetchOpenRouterModels(context, key)
+                                            }
+                                            "ollama" -> {
+                                                val ollamaUrl = securePrefs.getString("ollama_base_url", "https://ollama.com") ?: "https://ollama.com"
+                                                com.beemovil.llm.DynamicModelFetcher.fetchOllamaModels(context, ollamaUrl)
+                                            }
+                                            else -> emptyList()
+                                        }
+                                        dynamicModels = fetched.map { LlmFactory.ModelOption(it.id, it.name, it.free) }
+                                        refreshStatus = "✅ ${fetched.size} modelos actualizados"
+                                    } catch (e: Exception) {
+                                        refreshStatus = "❌ Error: ${e.message}"
+                                    } finally {
+                                        isRefreshing = false
+                                    }
+                                }
+                            },
+                            enabled = !isRefreshing,
+                            colors = ButtonDefaults.buttonColors(containerColor = BeeGray.copy(alpha = 0.5f)),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                            modifier = Modifier.height(32.dp)
+                        ) {
+                            if (isRefreshing) {
+                                CircularProgressIndicator(color = BeeYellow, modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                                Spacer(modifier = Modifier.width(6.dp))
+                            } else {
+                                Icon(Icons.Filled.Refresh, "Refresh", tint = BeeYellow, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                            }
+                            Text("Actualizar", fontSize = 11.sp, color = BeeWhite)
+                        }
+                    }
+                    if (refreshStatus.isNotBlank()) {
+                        Text(refreshStatus, fontSize = 10.sp, color = BeeGray, modifier = Modifier.padding(top = 4.dp))
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
 
                 if (selectedProvider == "local") {
@@ -476,12 +557,52 @@ fun SettingsScreen(
             // ═══════════════════════════════════════
             SectionCard {
                 SectionTitle("TELEGRAM BOT")
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Conecta un bot de Telegram a tu agente", fontSize = 12.sp, color = BeeGray,
-                        modifier = Modifier.weight(1f))
-                    Surface(color = Color(0xFFFF9800).copy(alpha = 0.2f), shape = RoundedCornerShape(4.dp)) {
-                        Text("PRÓXIMAMENTE", fontSize = 9.sp, color = Color(0xFFFF9800), fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                Text("Conecta un bot de Telegram a tu agente E.M.M.A.", fontSize = 12.sp, color = BeeGray)
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Live status indicator
+                Surface(
+                    color = when {
+                        botStatus.contains("Activo") -> Color(0xFF4CAF50).copy(alpha = 0.12f)
+                        botStatus.contains("Error") -> Color(0xFFF44336).copy(alpha = 0.12f)
+                        botStatus.contains("Procesando") -> BeeYellow.copy(alpha = 0.12f)
+                        else -> BeeGray.copy(alpha = 0.1f)
+                    },
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(
+                            when {
+                                botStatus.contains("Activo") -> Color(0xFF4CAF50)
+                                botStatus.contains("Error") -> Color(0xFFF44336)
+                                botStatus.contains("Procesando") -> BeeYellow
+                                else -> BeeGray
+                            }
+                        ))
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                if (botStatus.isBlank()) "Desconectado" else botStatus,
+                                fontSize = 13.sp, fontWeight = FontWeight.Bold, color = BeeWhite
+                            )
+                            if (botName.isNotBlank()) {
+                                Text("@$botName", fontSize = 11.sp, color = BeeGray)
+                            }
+                        }
+                        if (viewModel.telegramBotMessages.value > 0) {
+                            Surface(color = BeeYellow, shape = RoundedCornerShape(12.dp)) {
+                                Text(
+                                    "${viewModel.telegramBotMessages.value} msgs",
+                                    fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                                    color = BeeBlack,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
                     }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
@@ -512,6 +633,10 @@ fun SettingsScreen(
                     singleLine = true,
                     colors = fieldColors()
                 )
+                Text(
+                    "Solo responderá a mensajes de este usuario. Déjalo vacío para modo abierto.",
+                    fontSize = 9.sp, color = BeeGray.copy(alpha = 0.7f)
+                )
 
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -532,18 +657,88 @@ fun SettingsScreen(
                 }
 
                 Spacer(modifier = Modifier.height(6.dp))
+
+                // Start / Stop buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val isRunning = botStatus.contains("Activo") || botStatus.contains("Procesando") || botStatus.contains("Reconectando")
+
+                    Button(
+                        onClick = {
+                            if (telegramToken.isBlank()) {
+                                Toast.makeText(context, "Primero guarda el token del bot", Toast.LENGTH_SHORT).show()
+                                return@Button
+                            }
+                            securePrefs.edit()
+                                .putString("telegram_bot_token", telegramToken.trim())
+                                .putString("telegram_owner_username", telegramUsername.trim())
+                                .apply()
+                            val intent = Intent(context, TelegramBotService::class.java).apply {
+                                action = TelegramBotService.ACTION_START
+                                putExtra(TelegramBotService.EXTRA_BOT_TOKEN, telegramToken.trim())
+                                putExtra(TelegramBotService.EXTRA_PROVIDER, selectedProvider)
+                                putExtra(TelegramBotService.EXTRA_MODEL, selectedModel)
+                                putExtra(TelegramBotService.EXTRA_API_KEY,
+                                    if (selectedProvider == "openrouter") openRouterKey else ollamaKey)
+                            }
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                context.startForegroundService(intent)
+                            } else {
+                                context.startService(intent)
+                            }
+                            Toast.makeText(context, "Iniciando bot de Telegram...", Toast.LENGTH_SHORT).show()
+                        },
+                        enabled = !isRunning && telegramToken.isNotBlank(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF4CAF50),
+                            disabledContainerColor = Color(0xFF4CAF50).copy(alpha = 0.3f)
+                        ),
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(Icons.Filled.PlayArrow, "Start", modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Iniciar Bot", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+
+                    Button(
+                        onClick = {
+                            val intent = Intent(context, TelegramBotService::class.java).apply {
+                                action = TelegramBotService.ACTION_STOP
+                            }
+                            context.startService(intent)
+                            Toast.makeText(context, "Bot detenido", Toast.LENGTH_SHORT).show()
+                        },
+                        enabled = isRunning,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFF44336),
+                            disabledContainerColor = Color(0xFFF44336).copy(alpha = 0.3f)
+                        ),
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(Icons.Filled.Stop, "Stop", modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Detener", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
                 Surface(
                     color = Color(0xFF1A1A2E),
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(10.dp)) {
-                        Text("Preparando integración", fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp, color = Color(0xFFFF9800))
+                        Text("Cómo configurar", fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp, color = BeeYellow)
                         Text(
-                            "Guarda tu token aquí para que esté listo cuando la integración se active.\n" +
-                            "1. Abre Telegram → @BotFather → /newbot\n" +
-                            "2. Copia el token → pega aquí → Guardar",
+                            "1. Abre Telegram → busca @BotFather → /newbot\n" +
+                            "2. Copia el token → pégalo arriba\n" +
+                            "3. Pon tu @username para que solo tú puedas usarlo\n" +
+                            "4. Toca 'Iniciar Bot' → ¡listo! Háblale a tu bot.",
                             fontSize = 11.sp, color = BeeGray
                         )
                     }

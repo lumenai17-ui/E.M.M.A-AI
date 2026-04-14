@@ -92,6 +92,13 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- Servicio del Bot de Telegram (Sprint 3) -->
+        <service
+            android:name=".telegram.TelegramBotService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
         <!-- FileProvider para compartir archivos exportables autogenerados seguros (Fase 10.3) -->
         <provider
             android:name="androidx.core.content.FileProvider"

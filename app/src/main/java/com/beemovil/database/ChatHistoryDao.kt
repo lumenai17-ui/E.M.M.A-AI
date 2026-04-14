@@ -17,6 +17,10 @@ interface ChatHistoryDao {
     @Query("SELECT * FROM chat_history WHERE threadId = :threadId AND content LIKE '%' || :query || '%' ORDER BY timestamp ASC")
     suspend fun searchHistory(threadId: String, query: String): List<ChatMessageEntity>
 
+    // C-05 fix: Búsqueda global cross-thread
+    @Query("SELECT * FROM chat_history WHERE content LIKE '%' || :query || '%' ORDER BY timestamp DESC LIMIT 50")
+    suspend fun searchAllHistory(query: String): List<ChatMessageEntity>
+
     @Query("DELETE FROM chat_history WHERE threadId = :threadId")
     suspend fun clearHistory(threadId: String)
 

@@ -232,9 +232,18 @@ fun ChatScreen(
             val listState = rememberLazyListState()
             val displayMessages = if (viewModel.isSearchMode.value) viewModel.searchResults else viewModel.messages
             
+            // U-01 fix: Salto instantáneo en carga inicial, animación solo para mensajes nuevos
+            var previousSize by remember { mutableIntStateOf(0) }
             LaunchedEffect(displayMessages.size) {
                 if (displayMessages.isNotEmpty()) {
-                    listState.animateScrollToItem(displayMessages.size - 1)
+                    if (previousSize == 0) {
+                        // Carga inicial: salto directo sin animación (evita mareo)
+                        listState.scrollToItem(displayMessages.size - 1)
+                    } else {
+                        // Mensaje nuevo en tiempo real: animación suave
+                        listState.animateScrollToItem(displayMessages.size - 1)
+                    }
+                    previousSize = displayMessages.size
                 }
             }
 
@@ -306,11 +315,16 @@ fun ChatScreen(
                                         ) {
                                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(8.dp)) {
                                                 if (isImage) {
+                                                    // Sprint 6 polish: Larger preview for AI-generated images
+                                                    val imageFile = java.io.File(fPath)
                                                     AsyncImage(
-                                                        model = fPath,
+                                                        model = if (fPath.startsWith("content://")) fPath else imageFile,
                                                         contentDescription = fName,
-                                                        modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)),
-                                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .heightIn(max = 280.dp)
+                                                            .clip(RoundedCornerShape(8.dp)),
+                                                        contentScale = androidx.compose.ui.layout.ContentScale.FillWidth
                                                     )
                                                 } else {
                                                     // Ícono diferenciado por tipo

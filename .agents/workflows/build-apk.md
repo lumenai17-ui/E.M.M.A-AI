@@ -1,17 +1,16 @@
 ---
-description: Build the Bee-Movil APK and deliver it to the user's Desktop
+description: Build the E.M.M.A. AI APK and deliver it to the user's Desktop
 ---
 
 # Build APK & Deliver to Desktop
 
-This is the standard workflow for building and delivering the Bee-Movil Android APK after any code changes.
+This is the standard workflow for building and delivering the E.M.M.A. AI Android APK after any code changes.
 
 ## Prerequisites
 
 - Android SDK is installed at: `C:\Users\Usuario\android-sdk`
 - SDK path is configured in `local.properties`: `sdk.dir=C:\\Users\\Usuario\\android-sdk`
-- Project root: `C:\Users\Usuario\.gemini\antigravity\scratch\bee-movil-native`
-- **IMPORTANT**: The real project is `bee-movil-native`, NOT `bee-movil` (which is an abandoned prototype)
+- Project root: `C:\Users\Usuario\.gemini\antigravity\scratch\E.M.M.A. Ai`
 
 ## Steps
 
@@ -33,22 +32,49 @@ git push origin main
 .\gradlew.bat assembleDebug
 ```
 - The APK output is at: `app\build\outputs\apk\debug\app-debug.apk`
-- Build logs can be saved to `build_output.txt` if needed
 
 4. Copy the APK to the user's Desktop with a descriptive name:
 ```powershell
-Copy-Item "app\build\outputs\apk\debug\app-debug.apk" -Destination "C:\Users\Usuario\Desktop\BeeMovil-<version>.apk"
+Copy-Item "app\build\outputs\apk\debug\app-debug.apk" -Destination "C:\Users\Usuario\Desktop\EMMA_Ai_v6.0.0-debug.apk"
 ```
-- Use the current version tag (e.g., `v4.2.5`, `v4.3.0`)
-- The user transfers this APK to their phone for installation
 
 5. Confirm delivery to the user with:
    - Version name
    - What changed in this build
    - File location on Desktop
 
+## Release Build (Signed APK / AAB)
+
+For a production release:
+
+1. Generate a keystore (one-time):
+```powershell
+keytool -genkey -v -keystore emma-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias emma
+```
+
+2. Create `keystore.properties` in project root:
+```
+storePassword=your_store_password
+keyPassword=your_key_password
+keyAlias=emma
+storeFile=../emma-release.jks
+```
+
+3. Build signed APK:
+```powershell
+.\gradlew.bat assembleRelease
+```
+Output: `app\build\outputs\apk\release\app-release.apk`
+
+4. Build AAB for Play Store:
+```powershell
+.\gradlew.bat bundleRelease
+```
+Output: `app\build\outputs\bundle\release\app-release.aab`
+
 ## Notes
 
-- The APK is ~135 MB (debug build with all dependencies)
-- Build time is ~20-30 seconds (incremental) or ~2-3 min (clean)
-- Always deliver the APK to Desktop after ANY code change — the user expects this
+- Debug APK is ~194 MB (full dependencies, no minification)
+- Release APK will be significantly smaller with R8 + resource shrinking
+- Build time: ~20-30 seconds (incremental) or ~2-3 min (clean)
+- Always deliver the APK to Desktop after ANY code change

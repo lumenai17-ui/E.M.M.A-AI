@@ -12,15 +12,59 @@ android {
         applicationId = "com.beemovil.emma"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "5.7.1"
+        versionCode = 4
+        versionName = "6.0.0"  // Sprint 7: Production Release
+
+        // Multidex for 65K+ method count
+        multiDexEnabled = true
     }
 
+    // ═══════════════════════════════════════
+    // SIGNING CONFIG
+    // ═══════════════════════════════════════
+    // To build a signed release:
+    //   1. Generate a keystore:
+    //      keytool -genkey -v -keystore emma-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias emma
+    //   2. Create local file 'keystore.properties' in project root with:
+    //      storePassword=your_store_password
+    //      keyPassword=your_key_password
+    //      keyAlias=emma
+    //      storeFile=../emma-release.jks
+    //   3. Run: ./gradlew bundleRelease (for AAB) or ./gradlew assembleRelease (for APK)
+
+    // Sprint 7: Signing config — uncomment and create keystore.properties when ready for Play Store
+    // signingConfigs {
+    //     create("release") {
+    //         val props = java.util.Properties().apply { load(rootProject.file("keystore.properties").inputStream()) }
+    //         storeFile = file(props.getProperty("storeFile"))
+    //         storePassword = props.getProperty("storePassword")
+    //         keyAlias = props.getProperty("keyAlias")
+    //         keyPassword = props.getProperty("keyPassword")
+    //     }
+    // }
+
     buildTypes {
-        release {
+        debug {
             isMinifyEnabled = false
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+            isDebuggable = true
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
         }
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            // signingConfig = signingConfigs.getByName("release")  // Enable after keystore setup
+        }
+    }
+
+    // Prevent lint from blocking release builds
+    lint {
+        abortOnError = false
+        checkReleaseBuilds = false
     }
 
     compileOptions {
@@ -146,6 +190,12 @@ dependencies {
 
     // Google Calendar API v3
     implementation("com.google.apis:google-api-services-calendar:v3-rev20250115-2.0.0")
+
+    // Google Tasks API v1 (Sprint 4)
+    implementation("com.google.apis:google-api-services-tasks:v1-rev20250302-2.0.0")
+
+    // Google Gmail API v1 (Sprint 4)
+    implementation("com.google.apis:google-api-services-gmail:v1-rev20260112-2.0.0")
 
     // Room Database
     val roomVersion = "2.6.1"

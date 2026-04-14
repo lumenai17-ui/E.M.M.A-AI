@@ -180,8 +180,9 @@ class GoogleAuthManager(private val context: Context) {
     }
 
     fun hasDriveScope(): Boolean = getGrantedScopes().any { it.contains("drive") }
-    fun hasGmailScope(): Boolean = getGrantedScopes().any { it.contains("mail.google.com") }
+    fun hasGmailScope(): Boolean = getGrantedScopes().any { it.contains("mail.google.com") || it.contains("gmail") }
     fun hasCalendarScope(): Boolean = getGrantedScopes().any { it.contains("calendar") }
+    fun hasTasksScope(): Boolean = getGrantedScopes().any { it.contains("tasks") }
 
     fun getCurrentUser(): GoogleUser? {
         if (!isSignedIn()) return null

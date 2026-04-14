@@ -62,8 +62,13 @@ class HTMLForgePlugin(private val context: Context) : EmmaPlugin {
 
                 Log.d(TAG, "Website local completado.")
                 launchViewIntent(webFile)
+                
+                // U-04 fix: Copiar a Downloads/EMMA/ para visibilidad
+                com.beemovil.files.PublicFileWriter.copyToPublicDownloads(
+                    context, webFile, "text/html"
+                )
 
-                "He programado la Landing Page interactiva. Acabo de forzar que se abra en tu navegador del móvil para que puedas jugarla y usarla plenamente."
+                return@withContext "TOOL_CALL::file_generated::${webFile.absolutePath}"
                 
             } catch (e: Exception) {
                 Log.e(TAG, "Falla exportando HTML", e)

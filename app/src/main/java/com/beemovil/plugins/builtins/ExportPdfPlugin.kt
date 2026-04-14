@@ -136,6 +136,11 @@ class ExportPdfPlugin(private val context: Context) : EmmaPlugin {
                 }
                 pdfDocument.close()
                 Log.d(TAG, "PDF Forjado con éxito: ${pdfFile.absolutePath}")
+                
+                // U-04 fix: Copiar a Downloads/EMMA/ para que el usuario lo encuentre en el explorador
+                com.beemovil.files.PublicFileWriter.copyToPublicDownloads(
+                    context, pdfFile, "application/pdf"
+                )
 
                 return@withContext "TOOL_CALL::file_generated::${pdfFile.absolutePath}"
 

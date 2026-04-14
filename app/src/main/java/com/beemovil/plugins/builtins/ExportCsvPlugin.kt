@@ -61,9 +61,13 @@ class ExportCsvPlugin(private val context: Context) : EmmaPlugin {
                 }
 
                 Log.d(TAG, "CSV Fabrícado.")
-                launchShareIntent(csvFile, "text/comma-separated-values")
+                
+                // U-04 fix: Copiar a Downloads/EMMA/ para visibilidad
+                com.beemovil.files.PublicFileWriter.copyToPublicDownloads(
+                    context, csvFile, "text/comma-separated-values"
+                )
 
-                "He forjado la tabla Excel (.csv) correctamente y te abrí el menú para que la mandes por Whatsapp a tu equipo."
+                return@withContext "TOOL_CALL::file_generated::${csvFile.absolutePath}"
                 
             } catch (e: Exception) {
                 Log.e(TAG, "Falla exportando CSV", e)

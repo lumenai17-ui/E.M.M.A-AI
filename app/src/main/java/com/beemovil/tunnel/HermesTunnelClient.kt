@@ -12,6 +12,8 @@ class HermesTunnelClient(
     private val token: String
 ) {
     private var webSocket: WebSocket? = null
+    // C-02 fix: flag real de conexión actualizado por callbacks del socket
+    @Volatile private var isAlive = false
     private val client = OkHttpClient.Builder()
         .pingInterval(30, TimeUnit.SECONDS)
         .build()
@@ -39,6 +41,7 @@ class HermesTunnelClient(
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 Log.i("HermesTunnel", "Conexión Túnel Abierta.")
                 reconnectAttempts = 0
+                isAlive = true
                 onConnected?.invoke()
             }
             
@@ -52,11 +55,13 @@ class HermesTunnelClient(
             }
             
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                isAlive = false
                 webSocket.close(1000, null)
                 onDisconnected?.invoke()
             }
             
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                isAlive = false
                 onError?.invoke("Error de conexión: ${t.message}")
                 onDisconnected?.invoke()
                 
@@ -73,11 +78,13 @@ class HermesTunnelClient(
     }
     
     fun disconnect() {
+        isAlive = false
         webSocket?.close(1000, "Usuario desconectó")
         webSocket = null
     }
     
-    fun isConnected(): Boolean = webSocket != null
+    // C-02 fix: usa flag real en lugar de solo verificar que el objeto exista
+    fun isConnected(): Boolean = isAlive
     
     fun sendMessage(data: JSONObject) {
         val msg = JSONObject().apply {
