@@ -1,5 +1,6 @@
 package com.beemovil.google
 
+import android.app.Activity
 import android.content.Context
 import android.util.Log
 import androidx.credentials.ClearCredentialStateRequest
@@ -7,9 +8,13 @@ import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.GetCredentialResponse
+import com.google.android.gms.auth.api.identity.AuthorizationRequest
+import com.google.android.gms.auth.api.identity.Identity
+import com.google.android.gms.common.api.Scope
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.beemovil.security.SecurePrefs
+import kotlinx.coroutines.tasks.await
 
 /**
  * GoogleAuthManager — handles Google Sign-In via Credential Manager
@@ -23,9 +28,10 @@ import com.beemovil.security.SecurePrefs
  *   3. User selects account
  *   4. We get idToken + user info (email, name, photo)
  *   5. Stored in SecurePrefs for persistent session
+ *   6. requestScopes() gets access token via AuthorizationClient
  *
  * Note: Additional scopes (Drive, Gmail, Calendar) are requested
- *       incrementally via AuthorizationClient when first needed.
+ *       via AuthorizationClient after sign-in.
  */
 class GoogleAuthManager(private val context: Context) {
 
@@ -46,6 +52,16 @@ class GoogleAuthManager(private val context: Context) {
         private const val KEY_PHOTO_URL = "google_photo_url"
         private const val KEY_ACCESS_TOKEN = "google_access_token"
         private const val KEY_GRANTED_SCOPES = "google_granted_scopes"
+        
+        // Required scopes for Google Workspace integration
+        val REQUIRED_SCOPES = listOf(
+            "https://www.googleapis.com/auth/gmail.readonly",
+            "https://www.googleapis.com/auth/gmail.send",
+            "https://www.googleapis.com/auth/calendar",
+            "https://www.googleapis.com/auth/calendar.events",
+            "https://www.googleapis.com/auth/tasks",
+            "https://www.googleapis.com/auth/drive.file"
+        )
     }
 
     data class GoogleUser(
@@ -132,6 +148,47 @@ class GoogleAuthManager(private val context: Context) {
 
         Log.w(TAG, "Unexpected credential type: ${credential.javaClass.simpleName}")
         return null
+    }
+
+    // ═══════════════════════════════════════
+    // REQUEST SCOPES (OAuth2 Access Token)
+    // ═══════════════════════════════════════
+
+    /**
+     * Request OAuth2 access token with required scopes via AuthorizationClient.
+     * This must be called AFTER signIn() succeeds.
+     * Requires an Activity context.
+     *
+     * @return access token string, or null on failure
+     */
+    suspend fun requestScopes(activityContext: Activity): String? {
+        return try {
+            val scopes = REQUIRED_SCOPES.map { Scope(it) }
+            
+            val authRequest = AuthorizationRequest.builder()
+                .setRequestedScopes(scopes)
+                .build()
+            
+            val authorizationResult = Identity.getAuthorizationClient(activityContext)
+                .authorize(authRequest)
+                .await()
+            
+            val token = authorizationResult.accessToken
+            if (token != null) {
+                setAccessToken(token)
+                // Record granted scopes
+                REQUIRED_SCOPES.forEach { addGrantedScope(it) }
+                Log.i(TAG, "Access token obtained with ${REQUIRED_SCOPES.size} scopes")
+            } else {
+                Log.w(TAG, "AuthorizationResult returned null access token. May need to resolve intent.")
+                // If there's a pending intent to resolve, the caller needs to handle it
+                // For now, log and return null
+            }
+            token
+        } catch (e: Exception) {
+            Log.e(TAG, "Request scopes error: ${e.message}", e)
+            null
+        }
     }
 
     // ═══════════════════════════════════════

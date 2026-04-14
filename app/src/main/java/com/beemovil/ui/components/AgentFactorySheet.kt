@@ -34,13 +34,13 @@ fun AgentFactorySheet(
         options.add("hermes-a2a" to "Hermes A2A (Remoto)")
         
         com.beemovil.llm.ModelRegistry.OPENROUTER.forEach { model ->
-            options.add(model.id to "Cloud: ${model.name}")
+            options.add("openrouter:${model.id}" to "Cloud: ${model.name}")
         }
         com.beemovil.llm.ModelRegistry.OLLAMA_CLOUD.forEach { model ->
-            options.add(model.id to "Ollama: ${model.name}")
+            options.add("ollama:${model.id}" to "Ollama: ${model.name}")
         }
         com.beemovil.llm.ModelRegistry.LOCAL.forEach { model ->
-            options.add(model.id to "Native Offline: ${model.name}")
+            options.add("local:${model.id}" to "Native Offline: ${model.name}")
         }
         options
     }

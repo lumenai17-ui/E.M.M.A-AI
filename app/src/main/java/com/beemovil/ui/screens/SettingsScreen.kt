@@ -1266,6 +1266,21 @@ fun SettingsScreen(
                                             memDb.setSoul("email", user.email)
                                         }
                                     } catch (_: Exception) {}
+                                    
+                                    // Request OAuth2 scopes to get access token for APIs
+                                    try {
+                                        val activity = context as? android.app.Activity
+                                        if (activity != null) {
+                                            val accessToken = googleAuth.requestScopes(activity)
+                                            if (accessToken != null) {
+                                                android.widget.Toast.makeText(context, "Google conectado con permisos ✅", android.widget.Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                android.widget.Toast.makeText(context, "Conectado, pero sin permisos de API. Reintenta.", android.widget.Toast.LENGTH_LONG).show()
+                                            }
+                                        }
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("GoogleSettings", "Scope request failed: ${e.message}")
+                                    }
                                 }
                                 googleLoading = false
                             }

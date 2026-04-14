@@ -106,10 +106,11 @@ class MainActivity : ComponentActivity() {
                                     },
                                     onSettingsClick = { viewModel.currentScreen.value = "settings" }
                                 )
-                                "tasks", "email_inbox" -> com.beemovil.ui.screens.PlaceholderScreen(
-                                    title = if (currentScreen == "tasks") "Tareas" else "Bandeja de Correos",
-                                    message = "Esta sección llega en la próxima fase 🚀",
-                                    onBack = { viewModel.currentScreen.value = "dashboard" }
+                                "tasks" -> com.beemovil.ui.screens.TasksScreen(
+                                    viewModel = viewModel
+                                )
+                                "email_inbox" -> com.beemovil.ui.screens.EmailInboxScreen(
+                                    viewModel = viewModel
                                 )
                                 "settings" -> SettingsScreen(
                                     viewModel = viewModel,

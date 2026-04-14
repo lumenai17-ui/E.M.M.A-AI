@@ -110,10 +110,9 @@
     private void readObject(java.io.ObjectInputStream);
 }
 
-# Don't warn about missing annotations
--dontwarn javax.annotation.**
--dontwarn javax.inject.**
--dontwarn sun.misc.Unsafe
+-dontwarn org.osgi.framework.**
+-dontwarn org.apache.logging.log4j.**
+-dontwarn reactor.blockhound.**
 
 # Keep stack traces readable
 -keepattributes SourceFile,LineNumberTable

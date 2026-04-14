@@ -1,7 +1,17 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp") version "1.9.22-1.0.17"
+}
+
+// Move keystore loading outside to avoid scope issues in KTS
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
 android {
@@ -19,29 +29,15 @@ android {
         multiDexEnabled = true
     }
 
-    // ═══════════════════════════════════════
-    // SIGNING CONFIG
-    // ═══════════════════════════════════════
-    // To build a signed release:
-    //   1. Generate a keystore:
-    //      keytool -genkey -v -keystore emma-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias emma
-    //   2. Create local file 'keystore.properties' in project root with:
-    //      storePassword=your_store_password
-    //      keyPassword=your_key_password
-    //      keyAlias=emma
-    //      storeFile=../emma-release.jks
-    //   3. Run: ./gradlew bundleRelease (for AAB) or ./gradlew assembleRelease (for APK)
-
-    // Sprint 7: Signing config — uncomment and create keystore.properties when ready for Play Store
-    // signingConfigs {
-    //     create("release") {
-    //         val props = java.util.Properties().apply { load(rootProject.file("keystore.properties").inputStream()) }
-    //         storeFile = file(props.getProperty("storeFile"))
-    //         storePassword = props.getProperty("storePassword")
-    //         keyAlias = props.getProperty("keyAlias")
-    //         keyPassword = props.getProperty("keyPassword")
-    //     }
-    // }
+    // Sprint 7: Signing config
+    signingConfigs {
+        create("release") {
+            storeFile = file(keystoreProperties.getProperty("storeFile", ""))
+            storePassword = keystoreProperties.getProperty("storePassword", "")
+            keyAlias = keystoreProperties.getProperty("keyAlias", "")
+            keyPassword = keystoreProperties.getProperty("keyPassword", "")
+        }
+    }
 
     buildTypes {
         debug {
@@ -57,7 +53,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // signingConfig = signingConfigs.getByName("release")  // Enable after keystore setup
+            signingConfig = signingConfigs.getByName("release")  // Enable after keystore setup
         }
     }
 
@@ -181,6 +177,8 @@ dependencies {
     implementation("androidx.credentials:credentials:1.5.0-alpha05")
     implementation("androidx.credentials:credentials-play-services-auth:1.5.0-alpha05")
     implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
+    // Google Identity Services (AuthorizationClient for OAuth2 scope requests)
+    implementation("com.google.android.gms:play-services-auth:21.3.0")
 
     // Google Drive API v3
     implementation("com.google.api-client:google-api-client-android:2.7.0") {

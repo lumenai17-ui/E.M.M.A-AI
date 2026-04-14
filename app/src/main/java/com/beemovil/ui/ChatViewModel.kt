@@ -440,7 +440,44 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun navigateToThread(threadId: String) {
         if (threadId == "main") {
-            currentScreen.value = "chat"
+            // Bug 2 fix: full state reset when returning to main Emma chat
+            viewModelScope.launch {
+                activeThreadId.value = "main"
+                activeAgentId.value = "emma"
+                activeAgentName.value = "E.M.M.A."
+                activeSystemPrompt.value = ""
+                activeAgentConfig.value = null
+                
+                val appPrefs = getApplication<Application>().getSharedPreferences("beemovil_session", Context.MODE_PRIVATE)
+                appPrefs.edit().putString("last_active_thread", "main").apply()
+                
+                // Restore global provider/model from prefs
+                val globalPrefs = getApplication<Application>().getSharedPreferences("beemovil", Context.MODE_PRIVATE)
+                currentProvider.value = globalPrefs.getString("selected_provider", "openrouter") ?: "openrouter"
+                currentModel.value = globalPrefs.getString("selected_model", "openai/gpt-4o-mini") ?: "openai/gpt-4o-mini"
+                
+                // Reload main thread messages
+                val pastMessages = chatHistoryDB.chatHistoryDao().getHistory("main")
+                messages.clear()
+                pastMessages.forEach { msg ->
+                    var filePaths = emptyList<String>()
+                    var fileNames = emptyList<String>()
+                    var mimeTypes = emptyList<String>()
+                    if (!msg.metadataJson.isNullOrBlank()) {
+                        try {
+                            val json = org.json.JSONObject(msg.metadataJson)
+                            if (json.has("file_path")) {
+                                filePaths = listOf(json.getString("file_path"))
+                                fileNames = listOf(json.optString("file_name", "Adjunto"))
+                                mimeTypes = listOf(json.optString("mime_type", ""))
+                            }
+                        } catch (e: Exception) {}
+                    }
+                    messages.add(ChatUiMessage(text = msg.content, isUser = msg.role == "user", filePaths = filePaths, attachmentNames = fileNames, attachmentMimeTypes = mimeTypes))
+                }
+                engine.loadPersistedContext(pastMessages)
+                currentScreen.value = "chat"
+            }
         } else {
             viewModelScope.launch {
                 val thread = chatHistoryDB.chatHistoryDao().getAllThreads()
@@ -557,9 +594,20 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         
         val capturedAgentId = activeAgentId.value
         val capturedThreadId = activeThreadId.value
-        val capturedProvider = currentProvider.value
-        val capturedModel = currentModel.value
         val context = getApplication<Application>()
+        
+        // Bug 1 fix: Use the agent's own model if there's an active agent config
+        val agentConfig = activeAgentConfig.value
+        val capturedProvider: String
+        val capturedModel: String
+        if (agentConfig != null && agentConfig.fallbackModel.isNotBlank()) {
+            val parts = agentConfig.fallbackModel.split(":", limit = 2)
+            capturedProvider = if (parts.isNotEmpty()) parts[0] else "openrouter"
+            capturedModel = if (parts.size > 1) parts[1] else agentConfig.fallbackModel
+        } else {
+            capturedProvider = currentProvider.value
+            capturedModel = currentModel.value
+        }
         
         // FILE-02: Copiar archivo localmente si es content:// URI
         var localPath: String? = null
