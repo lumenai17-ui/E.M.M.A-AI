@@ -84,17 +84,13 @@ class GoogleAuthManager(private val context: Context) {
      * Returns GoogleUser on success, null on failure.
      */
     suspend fun signIn(activityContext: Context): GoogleUser? {
-        return try {
-            // Try authorized accounts first (returning user)
-            val user = trySignIn(activityContext, filterByAuthorized = true)
-            if (user != null) return user
+        // Try authorized accounts first (returning user)
+        val user = trySignIn(activityContext, filterByAuthorized = true)
+        if (user != null) return user
 
-            // If no authorized account, show all accounts
-            trySignIn(activityContext, filterByAuthorized = false)
-        } catch (e: Exception) {
-            Log.e(TAG, "Sign-in failed: ${e.message}", e)
-            null
-        }
+        // If no authorized account, show all accounts
+        // Let exception propagate so UI can show the real error
+        return trySignIn(activityContext, filterByAuthorized = false)
     }
 
     private suspend fun trySignIn(activityContext: Context, filterByAuthorized: Boolean): GoogleUser? {
@@ -109,6 +105,8 @@ class GoogleAuthManager(private val context: Context) {
                 .addCredentialOption(googleIdOption)
                 .build()
 
+            Log.i(TAG, "Attempting getCredential (filterByAuthorized=$filterByAuthorized)...")
+            
             val result: GetCredentialResponse = credentialManager.getCredential(
                 context = activityContext,
                 request = request
@@ -118,10 +116,10 @@ class GoogleAuthManager(private val context: Context) {
         } catch (e: Exception) {
             if (filterByAuthorized) {
                 Log.d(TAG, "No authorized accounts, will try all: ${e.message}")
-                null
+                null  // Silently fall through to the non-filtered attempt
             } else {
-                Log.e(TAG, "Sign-in error: ${e.message}", e)
-                null
+                Log.e(TAG, "Sign-in error (final): ${e.javaClass.simpleName}: ${e.message}", e)
+                throw e  // Let the caller handle and display this error
             }
         }
     }

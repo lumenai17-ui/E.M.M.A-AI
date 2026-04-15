@@ -323,12 +323,30 @@ class EmailService(private val context: Context) {
     }
 
     private fun smtpProperties(config: EmailConfig) = Properties().apply {
-        put("mail.smtp.host", config.smtpHost)
-        put("mail.smtp.port", config.smtpPort.toString())
-        put("mail.smtp.auth", "true")
-        put("mail.smtp.starttls.enable", "true")
-        put("mail.smtp.ssl.trust", "*")
-        put("mail.smtp.timeout", "15000")
+        val useSSL = config.smtpPort == 465
+        
+        if (useSSL) {
+            // Port 465: SMTPS — SSL from the start
+            put("mail.smtp.host", config.smtpHost)
+            put("mail.smtp.port", "465")
+            put("mail.smtp.auth", "true")
+            put("mail.smtp.ssl.enable", "true")
+            put("mail.smtp.ssl.trust", "*")
+            put("mail.smtp.socketFactory.port", "465")
+            put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory")
+            put("mail.smtp.socketFactory.fallback", "false")
+            put("mail.smtp.timeout", "15000")
+            put("mail.smtp.connectiontimeout", "15000")
+        } else {
+            // Port 587 (or other): STARTTLS
+            put("mail.smtp.host", config.smtpHost)
+            put("mail.smtp.port", config.smtpPort.toString())
+            put("mail.smtp.auth", "true")
+            put("mail.smtp.starttls.enable", "true")
+            put("mail.smtp.ssl.trust", "*")
+            put("mail.smtp.timeout", "15000")
+            put("mail.smtp.connectiontimeout", "15000")
+        }
     }
 
     /**
