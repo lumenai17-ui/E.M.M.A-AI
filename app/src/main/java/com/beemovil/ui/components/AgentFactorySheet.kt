@@ -12,10 +12,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.beemovil.ui.theme.BeeBlack
-import com.beemovil.ui.theme.BeeGray
-import com.beemovil.ui.theme.BeeWhite
-import com.beemovil.ui.theme.BeeYellow
+import com.beemovil.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -23,6 +20,13 @@ fun AgentFactorySheet(
     onDismiss: () -> Unit,
     onForgeAgent: (name: String, icon: String, prompt: String, model: String) -> Unit
 ) {
+    val isDark = isDarkTheme()
+    val sheetBg = if (isDark) Color(0xFF1E1E2C) else LightSurface
+    val textPrimary = if (isDark) BeeWhite else TextDark
+    val textSecondary = if (isDark) BeeGray else TextGrayDark
+    val accent = if (isDark) BeeYellow else BrandBlue
+    val dropdownBg = if (isDark) Color(0xFF2A2A3D) else LightCard
+
     var agentName by remember { mutableStateOf("") }
     var agentIcon by remember { mutableStateOf("🤖") }
     var systemPrompt by remember { mutableStateOf("") }
@@ -49,7 +53,7 @@ fun AgentFactorySheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF1E1E2C), // Glassmorphism Dark
+        containerColor = sheetBg,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     ) {
         Column(
@@ -59,7 +63,7 @@ fun AgentFactorySheet(
         ) {
             Text(
                 text = "La Forja (Agent Factory)",
-                color = BeeWhite,
+                color = textPrimary,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -70,21 +74,21 @@ fun AgentFactorySheet(
                 OutlinedTextField(
                     value = agentIcon,
                     onValueChange = { if (it.length <= 2) agentIcon = it },
-                    label = { Text("Icono", color = BeeGray) },
+                    label = { Text("Icono", color = textSecondary) },
                     modifier = Modifier.weight(0.3f),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = BeeWhite, unfocusedTextColor = BeeWhite,
-                        focusedBorderColor = BeeYellow, unfocusedBorderColor = BeeGray
+                        focusedTextColor = textPrimary, unfocusedTextColor = textPrimary,
+                        focusedBorderColor = accent, unfocusedBorderColor = textSecondary
                     )
                 )
                 OutlinedTextField(
                     value = agentName,
                     onValueChange = { agentName = it },
-                    label = { Text("Nombre Operativo", color = BeeGray) },
+                    label = { Text("Nombre Operativo", color = textSecondary) },
                     modifier = Modifier.weight(0.7f),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = BeeWhite, unfocusedTextColor = BeeWhite,
-                        focusedBorderColor = BeeYellow, unfocusedBorderColor = BeeGray
+                        focusedTextColor = textPrimary, unfocusedTextColor = textPrimary,
+                        focusedBorderColor = accent, unfocusedBorderColor = textSecondary
                     )
                 )
             }
@@ -95,12 +99,12 @@ fun AgentFactorySheet(
             OutlinedTextField(
                 value = systemPrompt,
                 onValueChange = { systemPrompt = it },
-                label = { Text("System Prompt (El ADN del experto)", color = BeeGray) },
+                label = { Text("System Prompt (El ADN del experto)", color = textSecondary) },
                 modifier = Modifier.fillMaxWidth().height(120.dp),
                 maxLines = 5,
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = BeeWhite, unfocusedTextColor = BeeWhite,
-                    focusedBorderColor = BeeYellow, unfocusedBorderColor = BeeGray
+                    focusedTextColor = textPrimary, unfocusedTextColor = textPrimary,
+                    focusedBorderColor = accent, unfocusedBorderColor = textSecondary
                 )
             )
 
@@ -115,22 +119,22 @@ fun AgentFactorySheet(
                     readOnly = true,
                     value = modelOptions.find { it.first == selectedModel }?.second ?: selectedModel,
                     onValueChange = {},
-                    label = { Text("Motor de Inteligencia", color = BeeGray) },
+                    label = { Text("Motor de Inteligencia", color = textSecondary) },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedMenu) },
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = BeeWhite, unfocusedTextColor = BeeWhite,
-                        focusedBorderColor = BeeYellow, unfocusedBorderColor = BeeGray
+                        focusedTextColor = textPrimary, unfocusedTextColor = textPrimary,
+                        focusedBorderColor = accent, unfocusedBorderColor = textSecondary
                     ),
                     modifier = Modifier.menuAnchor().fillMaxWidth()
                 )
                 ExposedDropdownMenu(
                     expanded = expandedMenu,
                     onDismissRequest = { expandedMenu = false },
-                    modifier = Modifier.background(Color(0xFF2A2A3D))
+                    modifier = Modifier.background(dropdownBg)
                 ) {
                     modelOptions.forEach { selectionOption ->
                         DropdownMenuItem(
-                            text = { Text(selectionOption.second, color = BeeWhite) },
+                            text = { Text(selectionOption.second, color = textPrimary) },
                             onClick = {
                                 selectedModel = selectionOption.first
                                 expandedMenu = false
@@ -150,7 +154,7 @@ fun AgentFactorySheet(
                     }
                 },
                 modifier = Modifier.fillMaxWidth().height(50.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = BeeYellow, contentColor = BeeBlack),
+                colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = if (isDark) BeeBlack else Color.White),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Text("FORJAR AGENTE", fontWeight = FontWeight.Bold, fontSize = 16.sp)

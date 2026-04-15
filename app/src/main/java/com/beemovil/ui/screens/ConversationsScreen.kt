@@ -33,6 +33,16 @@ import java.util.UUID
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConversationsScreen(viewModel: ChatViewModel) {
+    val isDark = isDarkTheme()
+    val bg = if (isDark) Color(0xFF0F0F16) else LightBackground
+    val textPrimary = if (isDark) BeeWhite else TextDark
+    val textSecondary = if (isDark) BeeGray else TextGrayDark
+    val accent = if (isDark) BeeYellow else BrandBlue
+    val cardBg = if (isDark) Color(0xFF1E1E2C) else LightSurface
+    val cardBgAlt = if (isDark) Color(0xFF2A2A3D) else LightCard
+    val dividerColor = if (isDark) Color(0xFF1E1E2C) else LightBorder
+    val dialogBg = if (isDark) Color(0xFF1E1E2C) else LightSurface
+
     var showFactorySheet by remember { mutableStateOf(false) }
 
     if (showFactorySheet) {
@@ -51,17 +61,17 @@ fun ConversationsScreen(viewModel: ChatViewModel) {
         
         AlertDialog(
             onDismissRequest = { viewModel.showHermesDialog.value = false },
-            containerColor = Color(0xFF1E1E2C),
-            title = { Text("Conexión Hermes (A2A)", color = BeeWhite, fontWeight = FontWeight.Bold) },
+            containerColor = dialogBg,
+            title = { Text("Conexión Hermes (A2A)", color = textPrimary, fontWeight = FontWeight.Bold) },
             text = {
                 Column {
                     OutlinedTextField(
                         value = serverUrl,
                         onValueChange = { serverUrl = it },
-                        label = { Text("URL del Servidor", color = BeeGray) },
+                        label = { Text("URL del Servidor", color = textSecondary) },
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = BeeWhite, unfocusedTextColor = BeeWhite,
-                            focusedBorderColor = BeeYellow, unfocusedBorderColor = BeeGray
+                            focusedTextColor = textPrimary, unfocusedTextColor = textPrimary,
+                            focusedBorderColor = accent, unfocusedBorderColor = textSecondary
                         ),
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
@@ -70,10 +80,10 @@ fun ConversationsScreen(viewModel: ChatViewModel) {
                     OutlinedTextField(
                         value = token,
                         onValueChange = { token = it },
-                        label = { Text("Access Token", color = BeeGray) },
+                        label = { Text("Access Token", color = textSecondary) },
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = BeeWhite, unfocusedTextColor = BeeWhite,
-                            focusedBorderColor = BeeYellow, unfocusedBorderColor = BeeGray
+                            focusedTextColor = textPrimary, unfocusedTextColor = textPrimary,
+                            focusedBorderColor = accent, unfocusedBorderColor = textSecondary
                         ),
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
@@ -82,28 +92,28 @@ fun ConversationsScreen(viewModel: ChatViewModel) {
             },
             confirmButton = {
                 TextButton(onClick = { viewModel.connectHermes(serverUrl, token) }) {
-                    Text("Conectar", color = BeeYellow, fontWeight = FontWeight.Bold)
+                    Text("Conectar", color = accent, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { viewModel.showHermesDialog.value = false }) {
-                    Text("Cancelar", color = BeeGray)
+                    Text("Cancelar", color = textSecondary)
                 }
             }
         )
     }
 
     Scaffold(
-        containerColor = Color(0xFF0F0F16), // Deep Space Black
+        containerColor = bg,
         topBar = {
             TopAppBar(
-                title = { Text("Agent Hub", fontWeight = FontWeight.Bold, color = BeeWhite) },
+                title = { Text("Agent Hub", fontWeight = FontWeight.Bold, color = textPrimary) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 actions = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = if (viewModel.isHermesConnected.value) "Hermes On" else "Hermes Off", 
-                            color = if(viewModel.isHermesConnected.value) Color.Green else BeeGray, 
+                            color = if(viewModel.isHermesConnected.value) Color.Green else textSecondary, 
                             fontSize = 12.sp
                         )
                         Spacer(modifier = Modifier.width(4.dp))
@@ -117,8 +127,8 @@ fun ConversationsScreen(viewModel: ChatViewModel) {
                                 }
                             },
                             colors = SwitchDefaults.colors(
-                                checkedThumbColor = BeeYellow, 
-                                checkedTrackColor = Color(0xFF2A2A3D)
+                                checkedThumbColor = accent, 
+                                checkedTrackColor = if (isDark) Color(0xFF2A2A3D) else accent.copy(alpha = 0.2f)
                             ),
                             modifier = Modifier.scale(0.8f)
                         )
@@ -129,8 +139,8 @@ fun ConversationsScreen(viewModel: ChatViewModel) {
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { showFactorySheet = true },
-                containerColor = BeeYellow,
-                contentColor = BeeBlack,
+                containerColor = accent,
+                contentColor = if (isDark) BeeBlack else Color.White,
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Icon(Icons.Filled.Add, "Nuevo Enjambre")
@@ -142,7 +152,7 @@ fun ConversationsScreen(viewModel: ChatViewModel) {
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Fila de Agentes Pineados (Expertos Directos)
+            // Fila de Agentes Pineados
             if (viewModel.allAgents.isNotEmpty()) {
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -157,24 +167,24 @@ fun ConversationsScreen(viewModel: ChatViewModel) {
                                 modifier = Modifier
                                     .size(60.dp)
                                     .clip(CircleShape)
-                                    .background(Color(0xFF1E1E2C).copy(alpha = 0.8f))
-                                    .border(1.dp, BeeYellow.copy(alpha = 0.3f), CircleShape),
+                                    .background(cardBg.copy(alpha = 0.8f))
+                                    .border(1.dp, accent.copy(alpha = 0.3f), CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(agent.icon, fontSize = 24.sp)
                             }
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text(agent.name.take(10), color = BeeWhite, fontSize = 11.sp, maxLines = 1)
+                            Text(agent.name.take(10), color = textPrimary, fontSize = 11.sp, maxLines = 1)
                         }
                     }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
-                HorizontalDivider(color = Color(0xFF1E1E2C), thickness = 1.dp)
+                HorizontalDivider(color = dividerColor, thickness = 1.dp)
             } else {
-                Text("No hay expertos forjados.", color = BeeGray, modifier = Modifier.padding(16.dp))
+                Text("No hay expertos forjados.", color = textSecondary, modifier = Modifier.padding(16.dp))
             }
 
-            // Lista de Threads (Grupos e Individuales)
+            // Lista de Threads
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(vertical = 8.dp)
@@ -183,7 +193,7 @@ fun ConversationsScreen(viewModel: ChatViewModel) {
                     item {
                         Text(
                             "Presiona '+' para forjar tu primer Agente o Swarm Group.",
-                            color = BeeGray, fontSize = 14.sp,
+                            color = textSecondary, fontSize = 14.sp,
                             modifier = Modifier.padding(16.dp)
                         )
                     }
@@ -200,22 +210,20 @@ fun ConversationsScreen(viewModel: ChatViewModel) {
                             modifier = Modifier
                                 .size(50.dp)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(if (thread.type == "GROUP") Color(0xFF2A2A3D) else Color(0xFF1E1E2C)),
+                                .background(if (thread.type == "GROUP") cardBgAlt else cardBg),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(if (thread.type == "GROUP") "👥" else "🧠", fontSize = 22.sp)
                         }
                         Spacer(modifier = Modifier.width(16.dp))
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(thread.title, color = BeeWhite, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                            // UI-12: Subtítulo descriptivo en vez de genérico
+                            Text(thread.title, color = textPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                             val subtitle = when (thread.type) {
                                 "GROUP" -> "Grupo de agentes"
                                 else -> if (thread.threadId == "main") "Chat principal" else "Conversación directa"
                             }
-                            Text(subtitle, color = BeeGray, fontSize = 13.sp, maxLines = 1)
+                            Text(subtitle, color = textSecondary, fontSize = 13.sp, maxLines = 1)
                         }
-                        // UI-11: Timestamp relativo real
                         val timeAgo = remember(thread.lastUpdateMillis) {
                             val diff = System.currentTimeMillis() - thread.lastUpdateMillis
                             val mins = diff / 60_000
@@ -229,7 +237,7 @@ fun ConversationsScreen(viewModel: ChatViewModel) {
                                 else -> "${days / 7}sem"
                             }
                         }
-                        Text(timeAgo, color = BeeYellow, fontSize = 11.sp)
+                        Text(timeAgo, color = accent, fontSize = 11.sp)
                     }
                 }
             }

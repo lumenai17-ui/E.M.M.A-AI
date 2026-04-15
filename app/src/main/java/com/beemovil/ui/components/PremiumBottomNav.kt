@@ -22,13 +22,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-
-// Premium palette (keep in sync with DashboardScreen)
-private val NavBg = Color(0xFF0A0A0C)
-private val NavBorder = Color(0xFF1A1A24)
-private val Gold = Color(0xFFF5A623)
-private val GoldDim = Color(0xFFD4850A)
-private val Muted = Color(0xFF555566)
+import com.beemovil.ui.theme.*
 
 data class NavItem(
     val screen: String,
@@ -50,18 +44,24 @@ fun PremiumBottomNav(
     currentScreen: String,
     onNavigate: (String) -> Unit
 ) {
-    // Top edge line
+    val isDark = isDarkTheme()
+    val navBg = if (isDark) Color(0xFF0A0A0C) else LightSurface
+    val navBorder = if (isDark) Color(0xFF1A1A24) else LightBorder
+    val accent = if (isDark) HoneyGold else BrandBlue
+    val accentDim = if (isDark) HoneyAmber else BrandBlueDark
+    val muted = if (isDark) Color(0xFF555566) else TextGrayDarker
+
     Surface(
-        color = NavBg,
-        shadowElevation = 0.dp
+        color = navBg,
+        shadowElevation = if (isDark) 0.dp else 4.dp
     ) {
         Column {
-            // Golden accent line at top
+            // Accent line at top
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(0.5.dp)
-                    .background(NavBorder)
+                    .background(navBorder)
             )
 
             Row(
@@ -78,6 +78,9 @@ fun PremiumBottomNav(
                         item = item,
                         isSelected = isSelected,
                         onClick = { onNavigate(item.screen) },
+                        accent = accent,
+                        accentDim = accentDim,
+                        muted = muted,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -91,18 +94,21 @@ private fun PremiumNavItem(
     item: NavItem,
     isSelected: Boolean,
     onClick: () -> Unit,
+    accent: Color,
+    accentDim: Color,
+    muted: Color,
     modifier: Modifier = Modifier
 ) {
     val iconColor by animateColorAsState(
-        targetValue = if (isSelected) Gold else Muted,
+        targetValue = if (isSelected) accent else muted,
         animationSpec = tween(250), label = "iconColor"
     )
     val textColor by animateColorAsState(
-        targetValue = if (isSelected) Gold else Color.Transparent,
+        targetValue = if (isSelected) accent else Color.Transparent,
         animationSpec = tween(250), label = "textColor"
     )
     val bgAlpha by animateColorAsState(
-        targetValue = if (isSelected) Gold.copy(alpha = 0.1f) else Color.Transparent,
+        targetValue = if (isSelected) accent.copy(alpha = 0.1f) else Color.Transparent,
         animationSpec = tween(250), label = "bgAlpha"
     )
     val pillWidth by animateDpAsState(
@@ -127,7 +133,7 @@ private fun PremiumNavItem(
                 .height(3.dp)
                 .clip(RoundedCornerShape(2.dp))
                 .background(
-                    if (isSelected) Brush.horizontalGradient(listOf(GoldDim, Gold, GoldDim))
+                    if (isSelected) Brush.horizontalGradient(listOf(accentDim, accent, accentDim))
                     else Brush.horizontalGradient(listOf(Color.Transparent, Color.Transparent))
                 )
         )
@@ -156,7 +162,7 @@ private fun PremiumNavItem(
                 item.label,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = Gold
+                color = accent
             )
         }
     }

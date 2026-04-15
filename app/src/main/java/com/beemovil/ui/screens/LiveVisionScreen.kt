@@ -24,17 +24,23 @@ fun LiveVisionScreen(
     viewModel: ChatViewModel,
     onBack: () -> Unit
 ) {
+    val isDark = isDarkTheme()
+    val textPrimary = if (isDark) BeeWhite else TextDark
+    val textSecondary = if (isDark) BeeGray else TextGrayDark
+    val accent = if (isDark) BeeYellow else BrandBlue
+    val bg = if (isDark) Color.Black else LightBackground
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(bg)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             TopAppBar(
-                title = { Text("Live Vision (Offline)", fontWeight = FontWeight.Bold, color = BeeWhite) },
+                title = { Text("Live Vision (Offline)", fontWeight = FontWeight.Bold, color = textPrimary) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, "Back", tint = BeeYellow)
+                        Icon(Icons.Filled.ArrowBack, "Back", tint = accent)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -61,20 +67,20 @@ fun LiveVisionScreen(
                     "Motor de Visión Suspendido",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
-                    color = BeeWhite
+                    color = textPrimary
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     "Se desactivó Live Vision temporalmente mientras se instala Koog VLM. La lógica de bucle manual del modelo antiguo fue purgada correctamente.",
                     fontSize = 14.sp,
-                    color = BeeGray,
+                    color = textSecondary,
                     textAlign = TextAlign.Center,
                     lineHeight = 20.sp
                 )
                 Spacer(modifier = Modifier.height(32.dp))
                 Button(
                     onClick = onBack,
-                    colors = ButtonDefaults.buttonColors(containerColor = BeeYellow, contentColor = BeeBlack)
+                    colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = if (isDark) BeeBlack else Color.White)
                 ) {
                     Text("Regresar al Dashboard")
                 }

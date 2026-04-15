@@ -81,16 +81,22 @@ fun SettingsScreen(
             .verticalScroll(rememberScrollState())
     ) {
         // Header
+        val isDark = isDarkTheme()
+        val accent = if (isDark) BeeYellow else BrandBlue
+        val textPrimary = if (isDark) BeeWhite else TextDark
+        val textSecondary = if (isDark) BeeGray else TextGrayDark
+        val topBarBg = if (isDark) Color(0xFF1A1A2E) else LightSurface
+
         TopAppBar(
             title = { Text("Configuración", fontWeight = FontWeight.Bold) },
             navigationIcon = {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.Filled.ArrowBack, "Back", tint = BeeYellow)
+                    Icon(Icons.Filled.ArrowBack, "Back", tint = accent)
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = Color(0xFF1A1A2E),
-                titleContentColor = BeeWhite
+                containerColor = topBarBg,
+                titleContentColor = textPrimary
             )
         )
 
@@ -109,16 +115,10 @@ fun SettingsScreen(
                 OutlinedTextField(
                     value = displayName,
                     onValueChange = { displayName = it },
-                    placeholder = { Text("Como quieres que te llame?", color = Color.Gray) },
+                    placeholder = { Text("Como quieres que te llame?", color = textSecondary) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = BeeYellow,
-                        unfocusedBorderColor = BeeGray,
-                        focusedTextColor = BeeWhite,
-                        unfocusedTextColor = BeeWhite,
-                        cursorColor = BeeYellow
-                    ),
+                    colors = fieldColors(),
                     shape = RoundedCornerShape(10.dp)
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -127,11 +127,11 @@ fun SettingsScreen(
                         prefs.edit().putString("user_display_name", displayName.trim()).apply()
                         Toast.makeText(context, "Nombre guardado", Toast.LENGTH_SHORT).show()
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = BeeGray.copy(alpha = 0.5f)),
+                    colors = ButtonDefaults.buttonColors(containerColor = textSecondary.copy(alpha = 0.5f)),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("Guardar", color = BeeWhite, fontSize = 13.sp)
+                    Text("Guardar", color = textPrimary, fontSize = 13.sp)
                 }
             }
 
@@ -162,11 +162,11 @@ fun SettingsScreen(
                                 }
                             },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = BeeYellow.copy(alpha = 0.2f),
-                                selectedLabelColor = BeeYellow
+                                selectedContainerColor = accent.copy(alpha = 0.2f),
+                                selectedLabelColor = accent
                             ),
                             border = FilterChipDefaults.filterChipBorder(
-                                borderColor = BeeGray, selectedBorderColor = BeeYellow,
+                                borderColor = textSecondary, selectedBorderColor = accent,
                                 enabled = true, selected = currentTheme == isDark
                             )
                         )
@@ -179,11 +179,11 @@ fun SettingsScreen(
                         },
                         label = { Text("Sistema", fontSize = 13.sp) },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = BeeYellow.copy(alpha = 0.2f),
-                            selectedLabelColor = BeeYellow
+                            selectedContainerColor = accent.copy(alpha = 0.2f),
+                            selectedLabelColor = accent
                         ),
                         border = FilterChipDefaults.filterChipBorder(
-                            borderColor = BeeGray, selectedBorderColor = BeeYellow,
+                            borderColor = textSecondary, selectedBorderColor = accent,
                             enabled = true, selected = currentTheme == null
                         )
                     )
@@ -241,11 +241,11 @@ fun SettingsScreen(
                                 }
                             },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = BeeYellow.copy(alpha = 0.2f),
-                                selectedLabelColor = BeeYellow
+                                selectedContainerColor = accent.copy(alpha = 0.2f),
+                                selectedLabelColor = accent
                             ),
                             border = FilterChipDefaults.filterChipBorder(
-                                borderColor = BeeGray, selectedBorderColor = BeeYellow,
+                                borderColor = textSecondary, selectedBorderColor = accent,
                                 enabled = true, selected = currentLang == code
                             )
                         )
@@ -296,7 +296,7 @@ fun SettingsScreen(
                         }) {
                             Icon(
                                 if (showKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                                "Toggle", tint = BeeGrayLight
+                                "Toggle", tint = textSecondary
                             )
                         }
                     },
@@ -327,11 +327,11 @@ fun SettingsScreen(
                         viewModel.updateApiKey(selectedProvider, key)
                         Toast.makeText(context, "Key guardada", Toast.LENGTH_SHORT).show()
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = BeeGray.copy(alpha = 0.5f)),
+                    colors = ButtonDefaults.buttonColors(containerColor = textSecondary.copy(alpha = 0.5f)),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("Guardar Key", color = BeeWhite, fontSize = 13.sp)
+                    Text("Guardar Key", color = textPrimary, fontSize = 13.sp)
                 }
             }
 
@@ -381,7 +381,7 @@ fun SettingsScreen(
                     ) {
                         Text(
                             "${models.size} modelos disponibles",
-                            fontSize = 11.sp, color = BeeGray
+                            fontSize = 11.sp, color = textSecondary
                         )
                         Button(
                             onClick = {
@@ -410,22 +410,22 @@ fun SettingsScreen(
                                 }
                             },
                             enabled = !isRefreshing,
-                            colors = ButtonDefaults.buttonColors(containerColor = BeeGray.copy(alpha = 0.5f)),
+                            colors = ButtonDefaults.buttonColors(containerColor = textSecondary.copy(alpha = 0.5f)),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                             modifier = Modifier.height(32.dp)
                         ) {
                             if (isRefreshing) {
-                                CircularProgressIndicator(color = BeeYellow, modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                                CircularProgressIndicator(color = accent, modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
                                 Spacer(modifier = Modifier.width(6.dp))
                             } else {
-                                Icon(Icons.Filled.Refresh, "Refresh", tint = BeeYellow, modifier = Modifier.size(14.dp))
+                                Icon(Icons.Filled.Refresh, "Refresh", tint = accent, modifier = Modifier.size(14.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
                             }
-                            Text("Actualizar", fontSize = 11.sp, color = BeeWhite)
+                            Text("Actualizar", fontSize = 11.sp, color = textPrimary)
                         }
                     }
                     if (refreshStatus.isNotBlank()) {
-                        Text(refreshStatus, fontSize = 10.sp, color = BeeGray, modifier = Modifier.padding(top = 4.dp))
+                        Text(refreshStatus, fontSize = 10.sp, color = textSecondary, modifier = Modifier.padding(top = 4.dp))
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                 }
@@ -434,7 +434,7 @@ fun SettingsScreen(
                     // Local model info
                     Text(
                         "Modelos que corren EN TU TELEFONO sin internet.",
-                        fontSize = 12.sp, color = BeeGray
+                        fontSize = 12.sp, color = textSecondary
                     )
                     Spacer(modifier = Modifier.height(4.dp))
 
@@ -452,13 +452,13 @@ fun SettingsScreen(
                         value = hfToken,
                         onValueChange = { hfToken = it },
                         label = { Text("HuggingFace Token") },
-                        placeholder = { Text("hf_...", color = BeeGray) },
+                        placeholder = { Text("hf_...", color = textSecondary) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         visualTransformation = if (showHfToken) VisualTransformation.None else PasswordVisualTransformation(),
                         trailingIcon = {
                             IconButton(onClick = { showHfToken = !showHfToken }) {
-                                Icon(if (showHfToken) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Toggle", tint = BeeGrayLight)
+                                Icon(if (showHfToken) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Toggle", tint = textSecondary)
                             }
                         },
                         colors = fieldColors()
@@ -470,14 +470,14 @@ fun SettingsScreen(
                     ) {
                         Text(
                             "Necesario para descargar Gemma 4.\nhuggingface.co/settings/tokens",
-                            fontSize = 9.sp, color = BeeGray.copy(alpha = 0.8f)
+                            fontSize = 9.sp, color = textSecondary.copy(alpha = 0.8f)
                         )
                         Button(
                             onClick = {
                                 securePrefs.edit().putString("huggingface_token", hfToken.trim()).apply()
                                 Toast.makeText(context, "HuggingFace token guardado", Toast.LENGTH_SHORT).show()
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = BeeGray.copy(alpha = 0.5f)),
+                            colors = ButtonDefaults.buttonColors(containerColor = textSecondary.copy(alpha = 0.5f)),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                             modifier = Modifier.height(28.dp)
                         ) {
@@ -496,7 +496,7 @@ fun SettingsScreen(
                         onClick = {
                             selectedModel = model.id
                         },
-                        color = if (isSelected) BeeYellow.copy(alpha = 0.15f) else Color.Transparent,
+                        color = if (isSelected) accent.copy(alpha = 0.15f) else Color.Transparent,
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
                     ) {
@@ -515,13 +515,13 @@ fun SettingsScreen(
                                 fontWeight = FontWeight.Bold,
                                 color = when {
                                     selectedProvider == "local" && isDownloaded -> Color(0xFF4CAF50)
-                                    model.free -> BeeYellow
+                                    model.free -> accent
                                     else -> Color(0xFFBF5AF2)
                                 }
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(model.name, color = if (isSelected) BeeYellow else Color(0xFFE0E0E0), fontSize = 14.sp)
+                                Text(model.name, color = if (isSelected) accent else if (isDark) Color(0xFFE0E0E0) else TextDark, fontSize = 14.sp)
                                 if (selectedProvider == "local") {
                                     Text(
                                         if (isDownloaded) "Listo para usar" else "Toca Descargar para usar",
@@ -529,11 +529,11 @@ fun SettingsScreen(
                                         fontSize = 10.sp
                                     )
                                 } else {
-                                    Text(model.id, color = BeeGray, fontSize = 10.sp)
+                                    Text(model.id, color = textSecondary, fontSize = 10.sp)
                                 }
                             }
                             if (isSelected && (selectedProvider != "local" || isDownloaded)) {
-                                Icon(Icons.Filled.CheckCircle, "Selected", tint = BeeYellow, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Filled.CheckCircle, "Selected", tint = accent, modifier = Modifier.size(18.dp))
                             }
                         }
                     }
@@ -575,7 +575,7 @@ fun SettingsScreen(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(10.dp)
                         ) {
-                            Text("Descargar ${modelToDownload.name}", color = BeeWhite, fontSize = 13.sp)
+                            Text("Descargar ${modelToDownload.name}", color = textPrimary, fontSize = 13.sp)
                         }
 
                         if (downloadProgress in 0f..0.99f) {
@@ -583,15 +583,15 @@ fun SettingsScreen(
                             LinearProgressIndicator(
                                 progress = { downloadProgress },
                                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)),
-                                color = BeeYellow,
-                                trackColor = BeeGray.copy(alpha = 0.3f)
+                                color = accent,
+                                trackColor = textSecondary.copy(alpha = 0.3f)
                             )
                         }
                     }
 
                     if (downloadStatus.isNotBlank()) {
                         Spacer(modifier = Modifier.height(4.dp))
-                        Text(downloadStatus, fontSize = 11.sp, color = BeeGray)
+                        Text(downloadStatus, fontSize = 11.sp, color = textSecondary)
                     }
                 }
             }
@@ -609,7 +609,7 @@ fun SettingsScreen(
                     onBack()
                 },
                 modifier = Modifier.fillMaxWidth().height(48.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = BeeYellow, contentColor = BeeBlack),
+                colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = if (isDark) BeeBlack else Color.White),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Text("Aplicar y Volver", fontWeight = FontWeight.Bold, fontSize = 16.sp)
@@ -620,7 +620,7 @@ fun SettingsScreen(
             // ═══════════════════════════════════════
             SectionCard {
                 SectionTitle("TELEGRAM BOT")
-                Text("Conecta un bot de Telegram a tu agente E.M.M.A.", fontSize = 12.sp, color = BeeGray)
+                Text("Conecta un bot de Telegram a tu agente E.M.M.A.", fontSize = 12.sp, color = textSecondary)
                 Spacer(modifier = Modifier.height(6.dp))
 
                 // Live status indicator
@@ -628,8 +628,8 @@ fun SettingsScreen(
                     color = when {
                         botStatus.contains("Activo") -> Color(0xFF4CAF50).copy(alpha = 0.12f)
                         botStatus.contains("Error") -> Color(0xFFF44336).copy(alpha = 0.12f)
-                        botStatus.contains("Procesando") -> BeeYellow.copy(alpha = 0.12f)
-                        else -> BeeGray.copy(alpha = 0.1f)
+                        botStatus.contains("Procesando") -> accent.copy(alpha = 0.12f)
+                        else -> textSecondary.copy(alpha = 0.1f)
                     },
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -642,26 +642,26 @@ fun SettingsScreen(
                             when {
                                 botStatus.contains("Activo") -> Color(0xFF4CAF50)
                                 botStatus.contains("Error") -> Color(0xFFF44336)
-                                botStatus.contains("Procesando") -> BeeYellow
-                                else -> BeeGray
+                                botStatus.contains("Procesando") -> accent
+                                else -> textSecondary
                             }
                         ))
                         Spacer(modifier = Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 if (botStatus.isBlank()) "Desconectado" else botStatus,
-                                fontSize = 13.sp, fontWeight = FontWeight.Bold, color = BeeWhite
+                                fontSize = 13.sp, fontWeight = FontWeight.Bold, color = textPrimary
                             )
                             if (botName.isNotBlank()) {
-                                Text("@$botName", fontSize = 11.sp, color = BeeGray)
+                                Text("@$botName", fontSize = 11.sp, color = textSecondary)
                             }
                         }
                         if (viewModel.telegramBotMessages.value > 0) {
-                            Surface(color = BeeYellow, shape = RoundedCornerShape(12.dp)) {
+                            Surface(color = accent, shape = RoundedCornerShape(12.dp)) {
                                 Text(
                                     "${viewModel.telegramBotMessages.value} msgs",
                                     fontSize = 10.sp, fontWeight = FontWeight.Bold,
-                                    color = BeeBlack,
+                                    color = if (isDark) BeeBlack else Color.White,
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                                 )
                             }
@@ -679,7 +679,7 @@ fun SettingsScreen(
                     visualTransformation = if (showToken) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
                         IconButton(onClick = { showToken = !showToken }) {
-                            Icon(if (showToken) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Toggle", tint = BeeGrayLight)
+                            Icon(if (showToken) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Toggle", tint = textSecondary)
                         }
                     },
                     colors = fieldColors()
@@ -691,14 +691,14 @@ fun SettingsScreen(
                     value = telegramUsername,
                     onValueChange = { telegramUsername = it },
                     label = { Text("Tu @username de Telegram") },
-                    placeholder = { Text("@mi_usuario", color = BeeGray) },
+                    placeholder = { Text("@mi_usuario", color = textSecondary) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     colors = fieldColors()
                 )
                 Text(
                     "Solo responderá a mensajes de este usuario. Déjalo vacío para modo abierto.",
-                    fontSize = 9.sp, color = BeeGray.copy(alpha = 0.7f)
+                    fontSize = 9.sp, color = textSecondary.copy(alpha = 0.7f)
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -712,11 +712,11 @@ fun SettingsScreen(
                         Toast.makeText(context, "Credenciales de Telegram guardadas", Toast.LENGTH_SHORT).show()
                     },
                     enabled = telegramToken.isNotBlank(),
-                    colors = ButtonDefaults.buttonColors(containerColor = BeeGray.copy(alpha = 0.5f)),
+                    colors = ButtonDefaults.buttonColors(containerColor = textSecondary.copy(alpha = 0.5f)),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("Guardar Credenciales", color = BeeWhite, fontSize = 13.sp)
+                    Text("Guardar Credenciales", color = textPrimary, fontSize = 13.sp)
                 }
 
                 Spacer(modifier = Modifier.height(6.dp))
@@ -796,13 +796,13 @@ fun SettingsScreen(
                 ) {
                     Column(modifier = Modifier.padding(10.dp)) {
                         Text("Cómo configurar", fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp, color = BeeYellow)
+                            fontSize = 12.sp, color = accent)
                         Text(
                             "1. Abre Telegram → busca @BotFather → /newbot\n" +
                             "2. Copia el token → pégalo arriba\n" +
                             "3. Pon tu @username para que solo tú puedas usarlo\n" +
                             "4. Toca 'Iniciar Bot' → ¡listo! Háblale a tu bot.",
-                            fontSize = 11.sp, color = BeeGray
+                            fontSize = 11.sp, color = textSecondary
                         )
                     }
                 }
@@ -813,7 +813,7 @@ fun SettingsScreen(
             // ═══════════════════════════════════════
             SectionCard {
                 SectionTitle("VOZ (DEEPGRAM)")
-                Text("Text-to-Speech y Speech-to-Text avanzado", fontSize = 12.sp, color = BeeGray)
+                Text("Text-to-Speech y Speech-to-Text avanzado", fontSize = 12.sp, color = textSecondary)
                 Spacer(modifier = Modifier.height(8.dp))
 
                 var dgKey by remember { mutableStateOf(securePrefs.getString("deepgram_api_key", "") ?: "") }
@@ -826,13 +826,13 @@ fun SettingsScreen(
                     value = dgKey,
                     onValueChange = { dgKey = it },
                     label = { Text("Deepgram API Key") },
-                    placeholder = { Text("dg_xxxxxxxxxxxx", color = BeeGray) },
+                    placeholder = { Text("dg_xxxxxxxxxxxx", color = textSecondary) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     visualTransformation = if (showDgKey) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
                         IconButton(onClick = { showDgKey = !showDgKey }) {
-                            Icon(if (showDgKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Toggle", tint = BeeGrayLight)
+                            Icon(if (showDgKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Toggle", tint = textSecondary)
                         }
                     },
                     colors = fieldColors()
@@ -841,7 +841,7 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(10.dp))
 
                 // Voice selector
-                Text("VOZ DEL AGENTE", fontSize = 11.sp, color = BeeYellow,
+                Text("VOZ DEL AGENTE", fontSize = 11.sp, color = accent,
                     fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                 Spacer(modifier = Modifier.height(6.dp))
 
@@ -856,7 +856,7 @@ fun SettingsScreen(
                 voices.forEach { (id, name, desc) ->
                     Surface(
                         onClick = { dgVoice = id },
-                        color = if (dgVoice == id) BeeYellow.copy(alpha = 0.1f) else Color.Transparent,
+                        color = if (dgVoice == id) accent.copy(alpha = 0.1f) else Color.Transparent,
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Row(
@@ -867,24 +867,24 @@ fun SettingsScreen(
                                 if (name.startsWith("A") || name.startsWith("L") || name.startsWith("S"))
                                     Icons.Filled.Face else Icons.Filled.RecordVoiceOver,
                                 name,
-                                tint = if (dgVoice == id) BeeYellow else BeeGray,
+                                tint = if (dgVoice == id) accent else textSecondary,
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(name, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
-                                    color = if (dgVoice == id) BeeYellow else BeeWhite)
-                                Text(desc, fontSize = 11.sp, color = BeeGray)
+                                    color = if (dgVoice == id) accent else textPrimary)
+                                Text(desc, fontSize = 11.sp, color = textSecondary)
                             }
                             if (dgVoice == id) {
-                                Icon(Icons.Filled.CheckCircle, "Selected", tint = BeeYellow, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Filled.CheckCircle, "Selected", tint = accent, modifier = Modifier.size(18.dp))
                             }
                         }
                     }
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
-                HorizontalDivider(color = BeeGray.copy(alpha = 0.2f))
+                HorizontalDivider(color = textSecondary.copy(alpha = 0.2f))
                 Spacer(modifier = Modifier.height(8.dp))
 
                 // STT Toggle
@@ -893,16 +893,16 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Deepgram STT", fontSize = 14.sp, color = BeeWhite)
-                        Text("Transcripcion con Nova-3", fontSize = 11.sp, color = BeeGray)
+                        Text("Deepgram STT", fontSize = 14.sp, color = textPrimary)
+                        Text("Transcripcion con Nova-3", fontSize = 11.sp, color = textSecondary)
                     }
                     Switch(
                         checked = useDgSTT,
                         onCheckedChange = { useDgSTT = it },
                         colors = SwitchDefaults.colors(
-                            checkedThumbColor = BeeBlack,
-                            checkedTrackColor = BeeYellow,
-                            uncheckedTrackColor = BeeGray.copy(alpha = 0.3f)
+                            checkedThumbColor = if (isDark) BeeBlack else Color.White,
+                            checkedTrackColor = accent,
+                            uncheckedTrackColor = textSecondary.copy(alpha = 0.3f)
                         )
                     )
                 }
@@ -915,16 +915,16 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Deepgram TTS", fontSize = 14.sp, color = BeeWhite)
-                        Text("Voz Aura (alta calidad)", fontSize = 11.sp, color = BeeGray)
+                        Text("Deepgram TTS", fontSize = 14.sp, color = textPrimary)
+                        Text("Voz Aura (alta calidad)", fontSize = 11.sp, color = textSecondary)
                     }
                     Switch(
                         checked = useDgTTS,
                         onCheckedChange = { useDgTTS = it },
                         colors = SwitchDefaults.colors(
-                            checkedThumbColor = BeeBlack,
-                            checkedTrackColor = BeeYellow,
-                            uncheckedTrackColor = BeeGray.copy(alpha = 0.3f)
+                            checkedThumbColor = if (isDark) BeeBlack else Color.White,
+                            checkedTrackColor = accent,
+                            uncheckedTrackColor = textSecondary.copy(alpha = 0.3f)
                         )
                     )
                 }
@@ -942,7 +942,7 @@ fun SettingsScreen(
                             .apply()
                         Toast.makeText(context, if (dgKey.isNotBlank()) "Deepgram activado" else "Deepgram desactivado (voz nativa)", Toast.LENGTH_SHORT).show()
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = BeeYellow, contentColor = BeeBlack),
+                    colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = if (isDark) BeeBlack else Color.White),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp)
                 ) {
@@ -955,7 +955,7 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         "Sin API key: se usa voz nativa de Android (gratis)",
-                        fontSize = 11.sp, color = BeeGray
+                        fontSize = 11.sp, color = textSecondary
                     )
                 }
             }
@@ -965,7 +965,7 @@ fun SettingsScreen(
             // ═══════════════════════════════════════
             SectionCard {
                 SectionTitle("CLONACION DE VOZ (ELEVENLABS)")
-                Text("Voz hiper-realista por defecto para tu asistente", fontSize = 12.sp, color = BeeGray)
+                Text("Voz hiper-realista por defecto para tu asistente", fontSize = 12.sp, color = textSecondary)
                 Spacer(modifier = Modifier.height(8.dp))
 
                 var elKey by remember { mutableStateOf(securePrefs.getString("elevenlabs_api_key", "") ?: "") }
@@ -976,13 +976,13 @@ fun SettingsScreen(
                     value = elKey,
                     onValueChange = { elKey = it },
                     label = { Text("ElevenLabs API Key") },
-                    placeholder = { Text("sk_...", color = BeeGray) },
+                    placeholder = { Text("sk_...", color = textSecondary) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     visualTransformation = if (showElKey) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
                         IconButton(onClick = { showElKey = !showElKey }) {
-                            Icon(if (showElKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Toggle", tint = BeeGrayLight)
+                            Icon(if (showElKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Toggle", tint = textSecondary)
                         }
                     },
                     colors = fieldColors()
@@ -994,7 +994,7 @@ fun SettingsScreen(
                     value = elVoiceId,
                     onValueChange = { elVoiceId = it },
                     label = { Text("Voice ID (La voz de Emma)") },
-                    placeholder = { Text("ID alfanumerico", color = BeeGray) },
+                    placeholder = { Text("ID alfanumerico", color = textSecondary) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     colors = fieldColors()
@@ -1010,7 +1010,7 @@ fun SettingsScreen(
                             .apply()
                         Toast.makeText(context, "Configuracion de voz viva guardada", Toast.LENGTH_SHORT).show()
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE91E63), contentColor = BeeWhite),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE91E63), contentColor = textPrimary),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp)
                 ) {
@@ -1023,7 +1023,7 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         "Inactivo: Se usará Deepgram o Nativa. Activa a Emma cuando estés listo.",
-                        fontSize = 11.sp, color = BeeYellow.copy(alpha = 0.8f)
+                        fontSize = 11.sp, color = accent.copy(alpha = 0.8f)
                     )
                 }
             }
@@ -1034,7 +1034,7 @@ fun SettingsScreen(
             SectionCard {
                 SectionTitle("MEDIA IA (Imagenes + Video)")
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Genera imagenes y videos con IA desde cualquier chat", fontSize = 12.sp, color = BeeGray,
+                    Text("Genera imagenes y videos con IA desde cualquier chat", fontSize = 12.sp, color = textSecondary,
                         modifier = Modifier.weight(1f))
                     Surface(color = Color(0xFFFF9800).copy(alpha = 0.2f), shape = RoundedCornerShape(4.dp)) {
                         Text("PRÓXIMAMENTE", fontSize = 9.sp, color = Color(0xFFFF9800), fontWeight = FontWeight.Bold,
@@ -1078,7 +1078,7 @@ fun SettingsScreen(
                                     if (openRouterKey.isNotBlank()) providers.add("OpenRouter (DALL-E)")
                                     append(if (providers.isNotEmpty()) providers.joinToString(" · ") else "Configura al menos un provider")
                                 },
-                                fontSize = 11.sp, color = BeeGray
+                                fontSize = 11.sp, color = textSecondary
                             )
                             // Show image count
                             val imgDir = java.io.File(
@@ -1087,7 +1087,7 @@ fun SettingsScreen(
                             )
                             val imgCount = if (imgDir.exists()) imgDir.listFiles()?.size ?: 0 else 0
                             if (imgCount > 0) {
-                                Text("$imgCount imagenes generadas", fontSize = 10.sp, color = BeeYellow)
+                                Text("$imgCount imagenes generadas", fontSize = 10.sp, color = accent)
                             }
                         }
                     }
@@ -1100,18 +1100,18 @@ fun SettingsScreen(
                     value = falKey,
                     onValueChange = { falKey = it },
                     label = { Text("fal.ai API Key") },
-                    placeholder = { Text("fal_xxxxxxxxxxxx", color = BeeGray) },
+                    placeholder = { Text("fal_xxxxxxxxxxxx", color = textSecondary) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     visualTransformation = if (showFalKey) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
                         IconButton(onClick = { showFalKey = !showFalKey }) {
-                            Icon(if (showFalKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Toggle", tint = BeeGrayLight)
+                            Icon(if (showFalKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Toggle", tint = textSecondary)
                         }
                     },
                     colors = fieldColors()
                 )
-                Text("Flux Schnell/Pro — el mas rapido. fal.ai/dashboard", fontSize = 10.sp, color = BeeGray.copy(alpha = 0.7f))
+                Text("Flux Schnell/Pro — el mas rapido. fal.ai/dashboard", fontSize = 10.sp, color = textSecondary.copy(alpha = 0.7f))
 
                 Spacer(modifier = Modifier.height(6.dp))
 
@@ -1120,18 +1120,18 @@ fun SettingsScreen(
                     value = togetherKey,
                     onValueChange = { togetherKey = it },
                     label = { Text("Together AI API Key") },
-                    placeholder = { Text("tok_xxxxxxxxxxxx", color = BeeGray) },
+                    placeholder = { Text("tok_xxxxxxxxxxxx", color = textSecondary) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     visualTransformation = if (showTogetherKey) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
                         IconButton(onClick = { showTogetherKey = !showTogetherKey }) {
-                            Icon(if (showTogetherKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Toggle", tint = BeeGrayLight)
+                            Icon(if (showTogetherKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Toggle", tint = textSecondary)
                         }
                     },
                     colors = fieldColors()
                 )
-                Text("Flux.1 Schnell — creditos iniciales gratis. together.ai", fontSize = 10.sp, color = BeeGray.copy(alpha = 0.7f))
+                Text("Flux.1 Schnell — creditos iniciales gratis. together.ai", fontSize = 10.sp, color = textSecondary.copy(alpha = 0.7f))
 
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -1143,7 +1143,7 @@ fun SettingsScreen(
                             .apply()
                         Toast.makeText(context, "Media generation configurado", Toast.LENGTH_SHORT).show()
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFAB47BC), contentColor = BeeWhite),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFAB47BC), contentColor = textPrimary),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp)
                 ) {
@@ -1180,7 +1180,7 @@ fun SettingsScreen(
             // ═══════════════════════════════════════
             SectionCard {
                 SectionTitle("DEVELOPER & GIT")
-                Text("Configura GitHub y herramientas de desarrollo", fontSize = 12.sp, color = BeeGray)
+                Text("Configura GitHub y herramientas de desarrollo", fontSize = 12.sp, color = textSecondary)
                 Spacer(modifier = Modifier.height(8.dp))
 
                 var githubToken by remember { mutableStateOf(securePrefs.getString("github_token", "") ?: "") }
@@ -1191,7 +1191,7 @@ fun SettingsScreen(
                     value = githubToken,
                     onValueChange = { githubToken = it },
                     label = { Text("GitHub Personal Access Token") },
-                    placeholder = { Text("ghp_xxxxxxxxxxxx", color = BeeGray) },
+                    placeholder = { Text("ghp_xxxxxxxxxxxx", color = textSecondary) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     visualTransformation = if (showGithubToken) VisualTransformation.None else PasswordVisualTransformation(),
@@ -1199,7 +1199,7 @@ fun SettingsScreen(
                         IconButton(onClick = { showGithubToken = !showGithubToken }) {
                             Icon(
                                 if (showGithubToken) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                                "Toggle", tint = BeeGray
+                                "Toggle", tint = textSecondary
                             )
                         }
                     },
@@ -1211,7 +1211,7 @@ fun SettingsScreen(
                     value = browserHomepage,
                     onValueChange = { browserHomepage = it },
                     label = { Text("Browser Homepage") },
-                    placeholder = { Text("https://www.google.com", color = BeeGray) },
+                    placeholder = { Text("https://www.google.com", color = textSecondary) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     colors = fieldColors()
@@ -1224,17 +1224,17 @@ fun SettingsScreen(
                         prefs.edit().putString("browser_homepage", browserHomepage.trim()).apply()
                         Toast.makeText(context, "Developer settings guardados", Toast.LENGTH_SHORT).show()
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = BeeGray.copy(alpha = 0.5f)),
+                    colors = ButtonDefaults.buttonColors(containerColor = textSecondary.copy(alpha = 0.5f)),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("Guardar Developer Settings", color = BeeWhite, fontSize = 13.sp)
+                    Text("Guardar Developer Settings", color = textPrimary, fontSize = 13.sp)
                 }
 
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     "1. GitHub → Settings → Developer Settings → Personal Access Tokens\n2. Generate new token (classic) → permisos: repo\n3. Copia el token → pega aqui",
-                    fontSize = 11.sp, color = BeeGray
+                    fontSize = 11.sp, color = textSecondary
                 )
             }
 
@@ -1243,7 +1243,7 @@ fun SettingsScreen(
             // ═══════════════════════════════════════
             SectionCard {
                 SectionTitle("GOOGLE WORKSPACE")
-                Text("Un solo login para Drive, Gmail y Calendar", fontSize = 12.sp, color = BeeGray)
+                Text("Un solo login para Drive, Gmail y Calendar", fontSize = 12.sp, color = textSecondary)
                 Spacer(modifier = Modifier.height(8.dp))
 
                 val googleAuth = remember { com.beemovil.google.GoogleAuthManager(context) }
@@ -1278,8 +1278,8 @@ fun SettingsScreen(
                             }
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(googleName, color = BeeWhite, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                                Text(googleEmail, color = BeeGray, fontSize = 12.sp)
+                                Text(googleName, color = textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                Text(googleEmail, color = textSecondary, fontSize = 12.sp)
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     val hasDrive = googleAuth.hasDriveScope()
@@ -1409,7 +1409,7 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         "Accede a Drive, Gmail y Calendar con un solo login.\nNecesitas configurar un proyecto en Google Cloud Console.",
-                        fontSize = 11.sp, color = BeeGray, lineHeight = 14.sp
+                        fontSize = 11.sp, color = textSecondary, lineHeight = 14.sp
                     )
                 }
             }
@@ -1419,7 +1419,7 @@ fun SettingsScreen(
             // ═══════════════════════════════════════
             SectionCard {
                 SectionTitle("CORREO ELECTRONICO")
-                Text("Configura tu email para usar la bandeja de entrada", fontSize = 12.sp, color = BeeGray)
+                Text("Configura tu email para usar la bandeja de entrada", fontSize = 12.sp, color = textSecondary)
                 Spacer(modifier = Modifier.height(8.dp))
 
                 var emailAddr by remember { mutableStateOf(securePrefs.getString("email_address", "") ?: "") }
@@ -1433,7 +1433,7 @@ fun SettingsScreen(
                 var showServerFields by remember { mutableStateOf(false) }
 
                 // Presets – auto-fill servers
-                Text("PROVEEDOR", fontSize = 10.sp, color = BeeGray, letterSpacing = 1.sp)
+                Text("PROVEEDOR", fontSize = 10.sp, color = textSecondary, letterSpacing = 1.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf("Gmail", "Outlook", "Dominio propio").forEach { name ->
                         FilterChip(
@@ -1460,9 +1460,9 @@ fun SettingsScreen(
                             },
                             label = { Text(name, fontSize = 12.sp) },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = BeeYellow,
-                                selectedLabelColor = BeeBlack,
-                                containerColor = BeeGray.copy(alpha = 0.3f),
+                                selectedContainerColor = accent,
+                                selectedLabelColor = if (isDark) BeeBlack else Color.White,
+                                containerColor = textSecondary.copy(alpha = 0.3f),
                                 labelColor = Color(0xFFE0E0E0)
                             )
                         )
@@ -1501,7 +1501,7 @@ fun SettingsScreen(
                         }
                     },
                     label = { Text("Correo electrónico") },
-                    placeholder = { Text("usuario@gmail.com", color = BeeGray) },
+                    placeholder = { Text("usuario@gmail.com", color = textSecondary) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     colors = fieldColors()
@@ -1511,7 +1511,7 @@ fun SettingsScreen(
                 if (emailImapHost.contains("gmail")) {
                     Text(
                         "Gmail requiere App Password (no tu contrasena normal).\nVe a myaccount.google.com > Seguridad > Contrasenas de apps",
-                        fontSize = 10.sp, color = BeeYellow.copy(alpha = 0.7f),
+                        fontSize = 10.sp, color = accent.copy(alpha = 0.7f),
                         modifier = Modifier.padding(top = 4.dp)
                     )
                 }
@@ -1527,7 +1527,7 @@ fun SettingsScreen(
                     visualTransformation = if (showEmailPass) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
                         IconButton(onClick = { showEmailPass = !showEmailPass }) {
-                            Icon(if (showEmailPass) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Toggle", tint = BeeGrayLight)
+                            Icon(if (showEmailPass) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Toggle", tint = textSecondary)
                         }
                     },
                     colors = fieldColors()
@@ -1548,9 +1548,9 @@ fun SettingsScreen(
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Servidores", fontSize = 13.sp, color = Color(0xFFE0E0E0))
                             Text("IMAP: $emailImapHost:$emailImapPort · SMTP: $emailSmtpHost:$emailSmtpPort",
-                                fontSize = 10.sp, color = BeeGray)
+                                fontSize = 10.sp, color = textSecondary)
                         }
-                        Text(if (showServerFields) "▲" else "▼", color = BeeGray)
+                        Text(if (showServerFields) "▲" else "▼", color = textSecondary)
                     }
                 }
 
@@ -1612,11 +1612,11 @@ fun SettingsScreen(
                                 .apply()
                             Toast.makeText(context, "Email configurado", Toast.LENGTH_SHORT).show()
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = BeeGray.copy(alpha = 0.5f)),
+                        colors = ButtonDefaults.buttonColors(containerColor = textSecondary.copy(alpha = 0.5f)),
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("Guardar", color = BeeWhite, fontSize = 13.sp)
+                        Text("Guardar", color = textPrimary, fontSize = 13.sp)
                     }
                     Button(
                         onClick = {
@@ -1664,7 +1664,7 @@ fun SettingsScreen(
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("Probar", color = BeeWhite, fontSize = 13.sp)
+                        Text("Probar", color = textPrimary, fontSize = 13.sp)
                     }
                 }
 
@@ -1674,7 +1674,7 @@ fun SettingsScreen(
                         color = when {
                             emailTestResult.startsWith("OK") -> Color(0xFF4CAF50)
                             emailTestResult.startsWith("Error") -> Color(0xFFF44336)
-                            else -> BeeGray
+                            else -> textSecondary
                         }
                     )
                 }
@@ -1689,7 +1689,7 @@ fun SettingsScreen(
                         Text("Gmail requiere App Password", fontWeight = FontWeight.Bold,
                             fontSize = 12.sp, color = Color(0xFFFFC107))
                         Text("1. Ve a myaccount.google.com\n2. Seguridad > Verificación en 2 pasos (activar)\n3. App Passwords > genera una y pégala aquí\n\nOutlook/Hotmail: usa tu contraseña normal",
-                            fontSize = 10.sp, color = BeeGray)
+                            fontSize = 10.sp, color = textSecondary)
                     }
                 }
             }
@@ -1728,7 +1728,7 @@ fun SettingsScreen(
                         onClick = {
                             Toast.makeText(context, "Exportacion proximamente", Toast.LENGTH_SHORT).show()
                         },
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = BeeYellow),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = accent),
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(10.dp)
                     ) {
@@ -1754,8 +1754,8 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(6.dp))
 
                 skillGroups.forEach { (group, skills) ->
-                    Text(group, fontSize = 11.sp, color = BeeYellow, fontWeight = FontWeight.Bold)
-                    Text(skills.joinToString("  "), fontSize = 12.sp, color = Color(0xFFB0B0B0))
+                    Text(group, fontSize = 11.sp, color = accent, fontWeight = FontWeight.Bold)
+                    Text(skills.joinToString("  "), fontSize = 12.sp, color = if (isDark) Color(0xFFB0B0B0) else TextGrayDark)
                     Spacer(modifier = Modifier.height(4.dp))
                 }
             }
@@ -1766,13 +1766,13 @@ fun SettingsScreen(
             SectionCard {
                 SectionTitle("ACERCA DE")
                 Spacer(modifier = Modifier.height(6.dp))
-                Text("E.M.M.A. AI", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = BeeWhite)
-                Text("v4.2.1 · Kotlin nativo · Edge AI · Multi-Agent", fontSize = 12.sp, color = BeeGray)
+                Text("E.M.M.A. AI", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = textPrimary)
+                Text("v4.2.1 · Kotlin nativo · Edge AI · Multi-Agent", fontSize = 12.sp, color = textSecondary)
                 Spacer(modifier = Modifier.height(4.dp))
                 Text("Enhanced Multi-Modal Mobile Assistant.\nTu asistente AI personal que vive en tu teléfono.\nSin servidores externos. Sin tracking. 100% tuyo.",
-                    fontSize = 12.sp, color = Color(0xFFB0B0B0))
+                    fontSize = 12.sp, color = if (isDark) Color(0xFFB0B0B0) else TextGrayDark)
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("Powered by Bee-Movil", fontSize = 11.sp, color = BeeYellow)
+                Text("Powered by Bee-Movil", fontSize = 11.sp, color = accent)
             }
 
             Spacer(modifier = Modifier.height(40.dp))
@@ -1786,9 +1786,11 @@ fun SettingsScreen(
 
 @Composable
 private fun SectionCard(content: @Composable ColumnScope.() -> Unit) {
+    val isDark = isDarkTheme()
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A2E)),
+        colors = CardDefaults.cardColors(containerColor = if (isDark) Color(0xFF1A1A2E) else LightSurface),
         shape = RoundedCornerShape(14.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isDark) 0.dp else 2.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(16.dp), content = content)
@@ -1797,39 +1799,46 @@ private fun SectionCard(content: @Composable ColumnScope.() -> Unit) {
 
 @Composable
 private fun SectionTitle(text: String) {
-    Text(text, fontSize = 11.sp, color = BeeYellow, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+    val accent = if (isDarkTheme()) BeeYellow else BrandBlue
+    Text(text, fontSize = 11.sp, color = accent, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
 }
 
 @Composable
 private fun DataRow(label: String, value: String) {
+    val isDark = isDarkTheme()
+    val accent = if (isDark) BeeYellow else BrandBlue
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, fontSize = 14.sp, color = Color(0xFFE0E0E0), modifier = Modifier.weight(1f))
-        Text(value, fontSize = 14.sp, color = BeeYellow, fontWeight = FontWeight.Bold)
+        Text(label, fontSize = 14.sp, color = if (isDark) Color(0xFFE0E0E0) else TextDark, modifier = Modifier.weight(1f))
+        Text(value, fontSize = 14.sp, color = accent, fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable
 private fun ProviderChip(label: String, id: String, selected: String, onClick: (String) -> Unit) {
+    val isDark = isDarkTheme()
+    val accent = if (isDark) BeeYellow else BrandBlue
     FilterChip(
         selected = selected == id,
         onClick = { onClick(id) },
         label = { Text(label) },
         colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = BeeYellow,
-            selectedLabelColor = BeeBlack,
-            containerColor = BeeGray.copy(alpha = 0.3f),
-            labelColor = Color(0xFFE0E0E0)
+            selectedContainerColor = accent,
+            selectedLabelColor = if (isDark) BeeBlack else Color.White,
+            containerColor = if (isDark) BeeGray.copy(alpha = 0.3f) else LightCard,
+            labelColor = if (isDark) Color(0xFFE0E0E0) else TextDark
         )
     )
 }
 
 @Composable
 private fun ServiceBadge(label: String, active: Boolean) {
+    val isDark = isDarkTheme()
+    val muted = if (isDark) BeeGray else TextGrayDark
     Surface(
-        color = if (active) Color(0xFF4CAF50).copy(alpha = 0.2f) else BeeGray.copy(alpha = 0.15f),
+        color = if (active) Color(0xFF4CAF50).copy(alpha = 0.2f) else muted.copy(alpha = 0.15f),
         shape = RoundedCornerShape(4.dp)
     ) {
         Row(
@@ -1840,21 +1849,28 @@ private fun ServiceBadge(label: String, active: Boolean) {
             Icon(
                 if (active) Icons.Filled.Check else Icons.Filled.Lock,
                 label,
-                tint = if (active) Color(0xFF4CAF50) else BeeGray,
+                tint = if (active) Color(0xFF4CAF50) else muted,
                 modifier = Modifier.size(10.dp)
             )
-            Text(label, fontSize = 9.sp, color = if (active) Color(0xFF4CAF50) else BeeGray)
+            Text(label, fontSize = 9.sp, color = if (active) Color(0xFF4CAF50) else muted)
         }
     }
 }
 
 @Composable
-private fun fieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedBorderColor = BeeYellow,
-    unfocusedBorderColor = Color(0xFF333355),
-    focusedTextColor = BeeWhite,
-    unfocusedTextColor = BeeWhite,
-    focusedLabelColor = BeeYellow,
-    unfocusedLabelColor = BeeGrayLight,
-    cursorColor = BeeYellow
-)
+private fun fieldColors(): androidx.compose.material3.TextFieldColors {
+    val isDark = isDarkTheme()
+    val accent = if (isDark) BeeYellow else BrandBlue
+    val textColor = if (isDark) BeeWhite else TextDark
+    val labelColor = if (isDark) BeeGrayLight else TextGrayDark
+    val borderColor = if (isDark) Color(0xFF333355) else LightBorder
+    return OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = accent,
+        unfocusedBorderColor = borderColor,
+        focusedTextColor = textColor,
+        unfocusedTextColor = textColor,
+        focusedLabelColor = accent,
+        unfocusedLabelColor = labelColor,
+        cursorColor = accent
+    )
+}

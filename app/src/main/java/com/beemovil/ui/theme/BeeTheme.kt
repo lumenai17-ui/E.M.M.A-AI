@@ -130,14 +130,14 @@ private val BeeDarkColorScheme = darkColorScheme(
 )
 
 private val BeeLightColorScheme = lightColorScheme(
-    primary = HoneyAmber,
+    primary = BrandBlue,
     onPrimary = Color.White,
-    primaryContainer = HoneyGold.copy(alpha = 0.15f),
-    onPrimaryContainer = HoneyAmber,
-    secondary = AccentViolet,
+    primaryContainer = BrandBlueLight,
+    onPrimaryContainer = BrandBlueDark,
+    secondary = BrandGreen,
     onSecondary = Color.White,
-    secondaryContainer = AccentViolet.copy(alpha = 0.1f),
-    tertiary = AccentCyan,
+    secondaryContainer = BrandGreenLight,
+    tertiary = BrandGreen,
     onTertiary = TextDark,
     background = LightBackground,
     onBackground = TextDark,

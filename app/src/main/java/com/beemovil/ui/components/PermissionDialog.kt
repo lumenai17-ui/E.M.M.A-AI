@@ -24,14 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
-
-// ── Palette
-private val DialogBg = Color(0xFF111118)
-private val Gold = Color(0xFFF5A623)
-private val Txt = Color(0xFFF2F2F7)
-private val TxtSub = Color(0xFF8E8E9A)
-private val TxtMuted = Color(0xFF555566)
-private val Red = Color(0xFFFF3B30)
+import com.beemovil.ui.theme.*
 
 /**
  * Permission types used across BeeMovil screens
@@ -99,8 +92,7 @@ fun isPermissionGranted(context: android.content.Context, permission: BeePermiss
 
 /**
  * Premium permission request dialog.
- * Shows a beautiful dialog explaining why the permission is needed,
- * with Approve/Deny buttons.
+ * Theme-aware: uses dark bg on dark theme, light bg on light theme.
  */
 @Composable
 fun PermissionDialog(
@@ -109,6 +101,12 @@ fun PermissionDialog(
     onDenied: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val isDark = isDarkTheme()
+    val dialogBg = if (isDark) Color(0xFF111118) else LightSurface
+    val txt = if (isDark) Color(0xFFF2F2F7) else TextDark
+    val txtSub = if (isDark) Color(0xFF8E8E9A) else TextGrayDark
+    val txtMuted = if (isDark) Color(0xFF555566) else TextGrayDarker
+
     val context = LocalContext.current
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -119,7 +117,7 @@ fun PermissionDialog(
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             shape = RoundedCornerShape(24.dp),
-            color = DialogBg,
+            color = dialogBg,
             tonalElevation = 8.dp
         ) {
             Column(
@@ -161,7 +159,7 @@ fun PermissionDialog(
                     "Permiso: ${permission.title}",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Txt,
+                    color = txt,
                     textAlign = TextAlign.Center
                 )
 
@@ -171,7 +169,7 @@ fun PermissionDialog(
                 Text(
                     permission.description,
                     fontSize = 14.sp,
-                    color = TxtSub,
+                    color = txtSub,
                     textAlign = TextAlign.Center,
                     lineHeight = 20.sp
                 )
@@ -198,7 +196,7 @@ fun PermissionDialog(
                         Text(
                             permission.reason,
                             fontSize = 12.sp,
-                            color = TxtSub,
+                            color = txtSub,
                             lineHeight = 16.sp
                         )
                     }
@@ -219,8 +217,8 @@ fun PermissionDialog(
                         },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TxtMuted),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, TxtMuted.copy(alpha = 0.3f))
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = txtMuted),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, txtMuted.copy(alpha = 0.3f))
                     ) {
                         Text("Denegar", fontWeight = FontWeight.Medium)
                     }

@@ -32,6 +32,14 @@ import kotlinx.coroutines.withContext
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TasksScreen(viewModel: ChatViewModel) {
+    val isDark = isDarkTheme()
+    val bg = if (isDark) Color(0xFF0F0F16) else LightBackground
+    val textPrimary = if (isDark) BeeWhite else TextDark
+    val textSecondary = if (isDark) BeeGray else TextGrayDark
+    val accent = if (isDark) BeeYellow else BrandBlue
+    val cardBg = if (isDark) Color(0xFF161622) else LightSurface
+    val dialogBg = if (isDark) Color(0xFF1E1E2C) else LightSurface
+
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     val googleAuth = remember { GoogleAuthManager(context) }
@@ -43,7 +51,6 @@ fun TasksScreen(viewModel: ChatViewModel) {
     var errorMsg by remember { mutableStateOf<String?>(null) }
     var showNewTaskDialog by remember { mutableStateOf(false) }
 
-    // Load tasks on first open
     LaunchedEffect(accessToken) {
         if (accessToken != null) {
             isLoading = true
@@ -60,23 +67,22 @@ fun TasksScreen(viewModel: ChatViewModel) {
         }
     }
 
-    // New Task Dialog
     if (showNewTaskDialog) {
         var newTitle by remember { mutableStateOf("") }
         var newNotes by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { showNewTaskDialog = false },
-            containerColor = Color(0xFF1E1E2C),
-            title = { Text("Nueva Tarea", color = BeeWhite, fontWeight = FontWeight.Bold) },
+            containerColor = dialogBg,
+            title = { Text("Nueva Tarea", color = textPrimary, fontWeight = FontWeight.Bold) },
             text = {
                 Column {
                     OutlinedTextField(
                         value = newTitle,
                         onValueChange = { newTitle = it },
-                        label = { Text("Título", color = BeeGray) },
+                        label = { Text("Título", color = textSecondary) },
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = BeeWhite, unfocusedTextColor = BeeWhite,
-                            focusedBorderColor = BeeYellow, unfocusedBorderColor = BeeGray
+                            focusedTextColor = textPrimary, unfocusedTextColor = textPrimary,
+                            focusedBorderColor = accent, unfocusedBorderColor = textSecondary
                         ),
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
@@ -85,10 +91,10 @@ fun TasksScreen(viewModel: ChatViewModel) {
                     OutlinedTextField(
                         value = newNotes,
                         onValueChange = { newNotes = it },
-                        label = { Text("Notas (opcional)", color = BeeGray) },
+                        label = { Text("Notas (opcional)", color = textSecondary) },
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = BeeWhite, unfocusedTextColor = BeeWhite,
-                            focusedBorderColor = BeeYellow, unfocusedBorderColor = BeeGray
+                            focusedTextColor = textPrimary, unfocusedTextColor = textPrimary,
+                            focusedBorderColor = accent, unfocusedBorderColor = textSecondary
                         ),
                         modifier = Modifier.fillMaxWidth(),
                         maxLines = 3
@@ -115,21 +121,21 @@ fun TasksScreen(viewModel: ChatViewModel) {
                             }
                         }
                     }
-                ) { Text("Crear", color = BeeYellow, fontWeight = FontWeight.Bold) }
+                ) { Text("Crear", color = accent, fontWeight = FontWeight.Bold) }
             },
             dismissButton = {
                 TextButton(onClick = { showNewTaskDialog = false }) {
-                    Text("Cancelar", color = BeeGray)
+                    Text("Cancelar", color = textSecondary)
                 }
             }
         )
     }
 
     Scaffold(
-        containerColor = Color(0xFF0F0F16),
+        containerColor = bg,
         topBar = {
             TopAppBar(
-                title = { Text("Tareas", fontWeight = FontWeight.Bold, color = BeeWhite) },
+                title = { Text("Tareas", fontWeight = FontWeight.Bold, color = textPrimary) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 actions = {
                     if (accessToken != null) {
@@ -147,7 +153,7 @@ fun TasksScreen(viewModel: ChatViewModel) {
                                 isLoading = false
                             }
                         }) {
-                            Icon(Icons.Filled.Refresh, "Actualizar", tint = BeeYellow)
+                            Icon(Icons.Filled.Refresh, "Actualizar", tint = accent)
                         }
                     }
                 }
@@ -157,8 +163,8 @@ fun TasksScreen(viewModel: ChatViewModel) {
             if (accessToken != null) {
                 FloatingActionButton(
                     onClick = { showNewTaskDialog = true },
-                    containerColor = BeeYellow,
-                    contentColor = BeeBlack,
+                    containerColor = accent,
+                    contentColor = if (isDark) BeeBlack else Color.White,
                     shape = RoundedCornerShape(16.dp)
                 ) {
                     Icon(Icons.Filled.Add, "Nueva tarea")
@@ -172,7 +178,6 @@ fun TasksScreen(viewModel: ChatViewModel) {
                 .padding(padding)
         ) {
             if (!isSignedIn || accessToken == null) {
-                // Not connected state
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -185,18 +190,18 @@ fun TasksScreen(viewModel: ChatViewModel) {
                         Icon(
                             Icons.Filled.TaskAlt,
                             contentDescription = "Tasks",
-                            tint = BeeYellow.copy(alpha = 0.5f),
+                            tint = accent.copy(alpha = 0.5f),
                             modifier = Modifier.size(72.dp)
                         )
                         Text(
                             "Conecta tu cuenta de Google",
-                            color = BeeWhite,
+                            color = textPrimary,
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
                             "Para ver tus tareas, ve a Settings → Google Workspace y conecta tu cuenta.",
-                            color = BeeGray,
+                            color = textSecondary,
                             fontSize = 14.sp,
                             lineHeight = 20.sp,
                             modifier = Modifier.padding(horizontal = 16.dp)
@@ -219,9 +224,9 @@ fun TasksScreen(viewModel: ChatViewModel) {
             } else if (isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(color = BeeYellow, modifier = Modifier.size(40.dp))
+                        CircularProgressIndicator(color = accent, modifier = Modifier.size(40.dp))
                         Spacer(modifier = Modifier.height(12.dp))
-                        Text("Cargando tareas...", color = BeeGray, fontSize = 14.sp)
+                        Text("Cargando tareas...", color = textSecondary, fontSize = 14.sp)
                     }
                 }
             } else if (errorMsg != null) {
@@ -232,13 +237,13 @@ fun TasksScreen(viewModel: ChatViewModel) {
                     ) {
                         Icon(Icons.Filled.Warning, "Error", tint = Color(0xFFF44336), modifier = Modifier.size(48.dp))
                         Spacer(modifier = Modifier.height(12.dp))
-                        Text("Error al cargar tareas", color = BeeWhite, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        Text("Error al cargar tareas", color = textPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(errorMsg ?: "", color = BeeGray, fontSize = 12.sp)
+                        Text(errorMsg ?: "", color = textSecondary, fontSize = 12.sp)
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(
                             onClick = { viewModel.currentScreen.value = "settings" },
-                            colors = ButtonDefaults.buttonColors(containerColor = BeeYellow, contentColor = BeeBlack)
+                            colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = if (isDark) BeeBlack else Color.White)
                         ) { Text("Verificar conexión Google") }
                     }
                 }
@@ -247,12 +252,11 @@ fun TasksScreen(viewModel: ChatViewModel) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("🎉", fontSize = 48.sp)
                         Spacer(modifier = Modifier.height(12.dp))
-                        Text("No tienes tareas pendientes", color = BeeWhite, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                        Text("Toca + para crear una", color = BeeGray, fontSize = 14.sp)
+                        Text("No tienes tareas pendientes", color = textPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        Text("Toca + para crear una", color = textSecondary, fontSize = 14.sp)
                     }
                 }
             } else {
-                // Task list
                 LazyColumn(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -260,6 +264,11 @@ fun TasksScreen(viewModel: ChatViewModel) {
                     items(tasks, key = { it.id }) { task ->
                         TaskItemCard(
                             task = task,
+                            isDark = isDark,
+                            cardBg = cardBg,
+                            textPrimary = textPrimary,
+                            textSecondary = textSecondary,
+                            accent = accent,
                             onComplete = {
                                 scope.launch {
                                     withContext(Dispatchers.IO) {
@@ -293,14 +302,20 @@ fun TasksScreen(viewModel: ChatViewModel) {
 @Composable
 private fun TaskItemCard(
     task: GoogleTasksService.TaskItem,
+    isDark: Boolean,
+    cardBg: Color,
+    textPrimary: Color,
+    textSecondary: Color,
+    accent: Color,
     onComplete: () -> Unit,
     onDelete: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
 
     Surface(
-        color = Color(0xFF161622),
+        color = cardBg,
         shape = RoundedCornerShape(12.dp),
+        shadowElevation = if (isDark) 0.dp else 2.dp,
         modifier = Modifier
             .fillMaxWidth()
             .animateContentSize()
@@ -308,7 +323,6 @@ private fun TaskItemCard(
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Checkbox
                 IconButton(
                     onClick = onComplete,
                     modifier = Modifier.size(32.dp)
@@ -316,7 +330,7 @@ private fun TaskItemCard(
                     Icon(
                         if (task.completed) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
                         "Complete",
-                        tint = if (task.completed) Color(0xFF4CAF50) else BeeGray,
+                        tint = if (task.completed) Color(0xFF4CAF50) else textSecondary,
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -324,7 +338,7 @@ private fun TaskItemCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         task.title,
-                        color = if (task.completed) BeeGray else BeeWhite,
+                        color = if (task.completed) textSecondary else textPrimary,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Medium,
                         textDecoration = if (task.completed) TextDecoration.LineThrough else TextDecoration.None,
@@ -335,7 +349,7 @@ private fun TaskItemCard(
                         val sdf = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault())
                         Text(
                             "Vence: ${sdf.format(java.util.Date(task.dueDate))}",
-                            color = BeeYellow.copy(alpha = 0.7f),
+                            color = accent.copy(alpha = 0.7f),
                             fontSize = 11.sp
                         )
                     }
@@ -348,7 +362,7 @@ private fun TaskItemCard(
             }
             if (expanded && task.notes.isNotBlank()) {
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(task.notes, color = BeeGray, fontSize = 13.sp, lineHeight = 18.sp)
+                Text(task.notes, color = textSecondary, fontSize = 13.sp, lineHeight = 18.sp)
             }
         }
     }

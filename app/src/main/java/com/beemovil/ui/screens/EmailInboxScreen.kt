@@ -33,6 +33,15 @@ import java.util.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EmailInboxScreen(viewModel: ChatViewModel) {
+    val isDark = isDarkTheme()
+    val bg = if (isDark) Color(0xFF0F0F16) else LightBackground
+    val textPrimary = if (isDark) BeeWhite else TextDark
+    val textSecondary = if (isDark) BeeGray else TextGrayDark
+    val accent = if (isDark) BeeYellow else BrandBlue
+    val cardBg = if (isDark) Color(0xFF1E1E2C) else LightSurface
+    val avatarBg = if (isDark) Color(0xFF2A2A3D) else LightCard
+    val dividerColor = if (isDark) Color(0xFF1E1E2C) else LightBorder
+
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     val googleAuth = remember { GoogleAuthManager(context) }
@@ -45,7 +54,6 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
     var errorMsg by remember { mutableStateOf<String?>(null) }
     var selectedEmail by remember { mutableStateOf<GoogleGmailService.EmailMessage?>(null) }
 
-    // Load emails on first open
     LaunchedEffect(accessToken) {
         if (accessToken != null) {
             isLoading = true
@@ -64,12 +72,12 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
     }
 
     Scaffold(
-        containerColor = Color(0xFF0F0F16),
+        containerColor = bg,
         topBar = {
             TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Correo", fontWeight = FontWeight.Bold, color = BeeWhite)
+                        Text("Correo", fontWeight = FontWeight.Bold, color = textPrimary)
                         if (unreadCount > 0) {
                             Spacer(modifier = Modifier.width(8.dp))
                             Surface(
@@ -105,7 +113,7 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                                 isLoading = false
                             }
                         }) {
-                            Icon(Icons.Filled.Refresh, "Actualizar", tint = BeeYellow)
+                            Icon(Icons.Filled.Refresh, "Actualizar", tint = accent)
                         }
                     }
                 }
@@ -118,7 +126,6 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                 .padding(padding)
         ) {
             if (!isSignedIn || accessToken == null) {
-                // Not connected state
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -131,18 +138,18 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                         Icon(
                             Icons.Filled.Email,
                             contentDescription = "Email",
-                            tint = BeeYellow.copy(alpha = 0.5f),
+                            tint = accent.copy(alpha = 0.5f),
                             modifier = Modifier.size(72.dp)
                         )
                         Text(
                             "Conecta tu cuenta de Google",
-                            color = BeeWhite,
+                            color = textPrimary,
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
                             "Para ver tu bandeja de correo, ve a Settings → Google Workspace y conecta tu cuenta.",
-                            color = BeeGray,
+                            color = textSecondary,
                             fontSize = 14.sp,
                             lineHeight = 20.sp,
                             modifier = Modifier.padding(horizontal = 16.dp)
@@ -165,9 +172,9 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
             } else if (isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(color = BeeYellow, modifier = Modifier.size(40.dp))
+                        CircularProgressIndicator(color = accent, modifier = Modifier.size(40.dp))
                         Spacer(modifier = Modifier.height(12.dp))
-                        Text("Cargando correos...", color = BeeGray, fontSize = 14.sp)
+                        Text("Cargando correos...", color = textSecondary, fontSize = 14.sp)
                     }
                 }
             } else if (errorMsg != null) {
@@ -178,18 +185,18 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                     ) {
                         Icon(Icons.Filled.Warning, "Error", tint = Color(0xFFF44336), modifier = Modifier.size(48.dp))
                         Spacer(modifier = Modifier.height(12.dp))
-                        Text("Error al cargar correos", color = BeeWhite, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        Text("Error al cargar correos", color = textPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             errorMsg ?: "",
-                            color = BeeGray,
+                            color = textSecondary,
                             fontSize = 12.sp,
                             modifier = Modifier.padding(horizontal = 16.dp)
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(
                             onClick = { viewModel.currentScreen.value = "settings" },
-                            colors = ButtonDefaults.buttonColors(containerColor = BeeYellow, contentColor = BeeBlack)
+                            colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = if (isDark) BeeBlack else Color.White)
                         ) { Text("Verificar conexión Google") }
                     }
                 }
@@ -198,37 +205,36 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("📭", fontSize = 48.sp)
                         Spacer(modifier = Modifier.height(12.dp))
-                        Text("Tu bandeja está vacía", color = BeeWhite, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        Text("Tu bandeja está vacía", color = textPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             } else {
-                // Email Detail Dialog
                 if (selectedEmail != null) {
                     AlertDialog(
                         onDismissRequest = { selectedEmail = null },
-                        containerColor = Color(0xFF1E1E2C),
+                        containerColor = cardBg,
                         title = {
                             Text(
                                 selectedEmail!!.subject,
-                                color = BeeWhite,
+                                color = textPrimary,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp
                             )
                         },
                         text = {
                             Column {
-                                Text("De: ${selectedEmail!!.from}", color = BeeYellow, fontSize = 12.sp)
+                                Text("De: ${selectedEmail!!.from}", color = accent, fontSize = 12.sp)
                                 if (selectedEmail!!.to.isNotBlank()) {
-                                    Text("Para: ${selectedEmail!!.to}", color = BeeGray, fontSize = 11.sp)
+                                    Text("Para: ${selectedEmail!!.to}", color = textSecondary, fontSize = 11.sp)
                                 }
                                 val sdf = SimpleDateFormat("dd MMM yyyy HH:mm", Locale.getDefault())
-                                Text(sdf.format(Date(selectedEmail!!.date)), color = BeeGray, fontSize = 11.sp)
+                                Text(sdf.format(Date(selectedEmail!!.date)), color = textSecondary, fontSize = 11.sp)
                                 Spacer(modifier = Modifier.height(12.dp))
-                                HorizontalDivider(color = BeeGray.copy(alpha = 0.2f))
+                                HorizontalDivider(color = dividerColor)
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Text(
                                     selectedEmail!!.snippet,
-                                    color = BeeWhite.copy(alpha = 0.9f),
+                                    color = textPrimary.copy(alpha = 0.9f),
                                     fontSize = 14.sp,
                                     lineHeight = 20.sp
                                 )
@@ -236,22 +242,26 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                         },
                         confirmButton = {
                             TextButton(onClick = { selectedEmail = null }) {
-                                Text("Cerrar", color = BeeYellow)
+                                Text("Cerrar", color = accent)
                             }
                         }
                     )
                 }
 
-                // Email list
                 LazyColumn(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)
                 ) {
                     items(emails, key = { it.id }) { email ->
                         EmailItemCard(
                             email = email,
+                            isDark = isDark,
+                            textPrimary = textPrimary,
+                            textSecondary = textSecondary,
+                            accent = accent,
+                            avatarBg = avatarBg,
+                            dividerColor = dividerColor,
                             onClick = {
                                 selectedEmail = email
-                                // Mark as read
                                 if (email.isUnread && accessToken != null) {
                                     scope.launch {
                                         withContext(Dispatchers.IO) {
@@ -273,11 +283,16 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
 @Composable
 private fun EmailItemCard(
     email: GoogleGmailService.EmailMessage,
+    isDark: Boolean,
+    textPrimary: Color,
+    textSecondary: Color,
+    accent: Color,
+    avatarBg: Color,
+    dividerColor: Color,
     onClick: () -> Unit
 ) {
     val sdf = remember { SimpleDateFormat("dd MMM", Locale.getDefault()) }
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
-    val now = remember { System.currentTimeMillis() }
     val isToday = remember(email.date) {
         val cal1 = Calendar.getInstance().apply { timeInMillis = email.date }
         val cal2 = Calendar.getInstance()
@@ -295,7 +310,6 @@ private fun EmailItemCard(
             modifier = Modifier.padding(vertical = 12.dp),
             verticalAlignment = Alignment.Top
         ) {
-            // Unread indicator
             if (email.isUnread) {
                 Box(
                     modifier = Modifier
@@ -309,7 +323,6 @@ private fun EmailItemCard(
             }
             Spacer(modifier = Modifier.width(10.dp))
 
-            // Avatar
             val initial = email.from
                 .substringBefore("<")
                 .trim()
@@ -317,37 +330,34 @@ private fun EmailItemCard(
             Surface(
                 modifier = Modifier.size(40.dp),
                 shape = CircleShape,
-                color = Color(0xFF2A2A3D)
+                color = avatarBg
             ) {
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                    Text(initial, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = BeeYellow)
+                    Text(initial, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = accent)
                 }
             }
             Spacer(modifier = Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                // Sender
                 Text(
                     email.from.substringBefore("<").trim().ifBlank { email.from },
-                    color = if (email.isUnread) BeeWhite else BeeGray,
+                    color = if (email.isUnread) textPrimary else textSecondary,
                     fontSize = 14.sp,
                     fontWeight = if (email.isUnread) FontWeight.Bold else FontWeight.Normal,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                // Subject
                 Text(
                     email.subject,
-                    color = if (email.isUnread) BeeWhite.copy(alpha = 0.9f) else BeeGray,
+                    color = if (email.isUnread) textPrimary.copy(alpha = 0.9f) else textSecondary,
                     fontSize = 13.sp,
                     fontWeight = if (email.isUnread) FontWeight.SemiBold else FontWeight.Normal,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                // Snippet
                 Text(
                     email.snippet,
-                    color = BeeGray.copy(alpha = 0.7f),
+                    color = textSecondary.copy(alpha = 0.7f),
                     fontSize = 12.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -357,10 +367,10 @@ private fun EmailItemCard(
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 if (isToday) timeFormat.format(Date(email.date)) else sdf.format(Date(email.date)),
-                color = if (email.isUnread) BeeYellow else BeeGray,
+                color = if (email.isUnread) accent else textSecondary,
                 fontSize = 11.sp
             )
         }
     }
-    HorizontalDivider(color = Color(0xFF1E1E2C), thickness = 0.5.dp)
+    HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
 }

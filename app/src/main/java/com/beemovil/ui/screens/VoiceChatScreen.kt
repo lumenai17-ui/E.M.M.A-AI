@@ -25,12 +25,20 @@ fun VoiceChatScreen(
     viewModel: ChatViewModel,
     onBack: () -> Unit
 ) {
+    val isDark = isDarkTheme()
+    val textPrimary = if (isDark) BeeWhite else TextDark
+    val textSecondary = if (isDark) BeeGray else TextGrayDark
+    val accent = if (isDark) BeeYellow else BrandBlue
+    val bg = if (isDark) BeeBlack else LightBackground
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(
-                Brush.verticalGradient(
+                if (isDark) Brush.verticalGradient(
                     colors = listOf(Color(0xFF0A0A1A), Color(0xFF1A1A2E), Color(0xFF0A0A1A))
+                ) else Brush.verticalGradient(
+                    colors = listOf(LightBackground, LightCard, LightBackground)
                 )
             )
     ) {
@@ -39,12 +47,12 @@ fun VoiceChatScreen(
                 title = { Text("Modo Voz (Offline)", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, "Back", tint = BeeYellow)
+                        Icon(Icons.Filled.ArrowBack, "Back", tint = accent)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,
-                    titleContentColor = BeeWhite
+                    titleContentColor = textPrimary
                 )
             )
 
@@ -67,20 +75,20 @@ fun VoiceChatScreen(
                     "Modo Voz Desconectado",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
-                    color = BeeWhite
+                    color = textPrimary
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     "El módulo de voz profunda se está reconstruyendo para interactuar de forma nativa con el nuevo motor Koog Framework. Estará en línea nuevamente en la Fase 3.",
                     fontSize = 14.sp,
-                    color = BeeGray,
+                    color = textSecondary,
                     textAlign = TextAlign.Center,
                     lineHeight = 20.sp
                 )
                 Spacer(modifier = Modifier.height(32.dp))
                 Button(
                     onClick = onBack,
-                    colors = ButtonDefaults.buttonColors(containerColor = BeeYellow, contentColor = BeeBlack)
+                    colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = if (isDark) BeeBlack else Color.White)
                 ) {
                     Text("Regresar al Dashboard")
                 }

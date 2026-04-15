@@ -8,6 +8,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.viewinterop.AndroidView
+import com.beemovil.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -15,18 +16,22 @@ fun BrowserChatPanel(
     url: String,
     onDismiss: () -> Unit
 ) {
+    val isDark = isDarkTheme()
+    val sheetBg = if (isDark) Color(0xFF161622) else LightSurface
+    val handleColor = if (isDark) Color.Gray else LightBorder
+
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
     
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color(0xFF161622), // Bee Black Premium
-        dragHandle = { BottomSheetDefaults.DragHandle(color = Color.Gray) }
+        containerColor = sheetBg,
+        dragHandle = { BottomSheetDefaults.DragHandle(color = handleColor) }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.75f) // Ocupa el 75% de la pantalla para seguir viendo el fondo
+                .fillMaxHeight(0.75f)
         ) {
             AndroidView(
                 factory = { context ->

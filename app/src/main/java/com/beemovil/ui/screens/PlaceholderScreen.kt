@@ -13,10 +13,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.beemovil.ui.theme.BeeBlack
-import com.beemovil.ui.theme.BeeGray
-import com.beemovil.ui.theme.BeeWhite
-import com.beemovil.ui.theme.BeeYellow
+import com.beemovil.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -25,25 +22,31 @@ fun PlaceholderScreen(
     message: String,
     onBack: () -> Unit
 ) {
+    val isDark = isDarkTheme()
+    val bg = if (isDark) BeeBlack else LightBackground
+    val textPrimary = if (isDark) BeeWhite else TextDark
+    val textSecondary = if (isDark) BeeGray else TextGrayDark
+    val accent = if (isDark) BeeYellow else BrandBlue
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(title, fontWeight = FontWeight.Bold, color = BeeWhite) },
+                title = { Text(title, fontWeight = FontWeight.Bold, color = textPrimary) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, "Back", tint = BeeYellow)
+                        Icon(Icons.Filled.ArrowBack, "Back", tint = accent)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = BeeBlack)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = bg)
             )
         },
-        containerColor = BeeBlack
+        containerColor = bg
     ) { padding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(BeeBlack),
+                .background(bg),
             contentAlignment = Alignment.Center
         ) {
             Column(
@@ -53,18 +56,18 @@ fun PlaceholderScreen(
                 Icon(
                     Icons.Filled.Construction,
                     contentDescription = "En construcción",
-                    tint = BeeYellow,
+                    tint = accent,
                     modifier = Modifier.size(64.dp)
                 )
                 Text(
                     text = title,
-                    color = BeeWhite,
+                    color = textPrimary,
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
                     text = message,
-                    color = BeeGray,
+                    color = textSecondary,
                     fontSize = 15.sp,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(horizontal = 32.dp)

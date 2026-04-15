@@ -43,6 +43,20 @@ fun ChatScreen(
     onBackClick: () -> Unit,
     onSettingsClick: () -> Unit
 ) {
+    val isDark = isDarkTheme()
+    val bg = if (isDark) BeeBlack else LightBackground
+    val accent = if (isDark) BeeYellow else BrandBlue
+    val accentSecondary = if (isDark) BeeYellow else BrandGreen
+    val textPrimary = if (isDark) BeeWhite else TextDark
+    val textSecondary = if (isDark) BeeGray else TextGrayDark
+    val topBarBg = if (isDark) Color(0xFF161622) else LightSurface
+    val inputBg = if (isDark) Color(0xFF222234) else LightCard
+    val userBubble = if (isDark) BeeYellow else BrandGreenLight
+    val userBubbleText = if (isDark) BeeBlack else TextDark
+    val assistantBubble = if (isDark) Color(0xFF222234) else LightSurface
+    val assistantBubbleText = if (isDark) BeeWhite else TextDark
+    val fileSurface = if (isDark) Color(0xFF1E1E2C).copy(alpha=0.6f) else LightCard
+
     var inputText by remember { mutableStateOf("") }
     var showMenuForMessage by remember { mutableStateOf<String?>(null) }
     var attachedFileUri by remember { mutableStateOf<android.net.Uri?>(null) }
@@ -74,33 +88,33 @@ fun ChatScreen(
 
     Scaffold(
         modifier = Modifier.imePadding(),
-        containerColor = BeeBlack,
+        containerColor = bg,
         topBar = {
             TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(color = BeeYellow.copy(alpha = 0.3f), shape = CircleShape, modifier = Modifier.size(36.dp)) {
-                            Icon(Icons.Filled.SmartToy, "EMMA", tint = BeeYellow, modifier = Modifier.padding(6.dp))
+                        Surface(color = accent.copy(alpha = 0.3f), shape = CircleShape, modifier = Modifier.size(36.dp)) {
+                            Icon(Icons.Filled.SmartToy, "EMMA", tint = accent, modifier = Modifier.padding(6.dp))
                         }
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
-                            Text(viewModel.activeAgentName.value, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = BeeWhite)
-                            Text("[$provider] $modelId", fontSize = 10.sp, color = BeeYellow.copy(alpha=0.8f))
+                            Text(viewModel.activeAgentName.value, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = textPrimary)
+                            Text("[$provider] $modelId", fontSize = 10.sp, color = accent.copy(alpha=0.8f))
                         }
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBackClick) { Icon(Icons.Filled.ArrowBack, "Back", tint = BeeYellow) }
+                    IconButton(onClick = onBackClick) { Icon(Icons.Filled.ArrowBack, "Back", tint = accent) }
                 },
                 actions = {
                     IconButton(onClick = { viewModel.isMuted.value = !viewModel.isMuted.value }) {
                         Icon(
                             if (viewModel.isMuted.value) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
                             "Mute Toggle",
-                            tint = if (viewModel.isMuted.value) Color.Red else BeeYellow
+                            tint = if (viewModel.isMuted.value) Color.Red else accent
                         )
                     }
-                    IconButton(onClick = { showTopMenu = true }) { Icon(Icons.Filled.MoreVert, "Settings", tint = BeeGray) }
+                    IconButton(onClick = { showTopMenu = true }) { Icon(Icons.Filled.MoreVert, "Settings", tint = textSecondary) }
                     DropdownMenu(expanded = showTopMenu, onDismissRequest = { showTopMenu = false }) {
                         DropdownMenuItem(
                             text = { Text("Configurar Agente Mente") },
@@ -122,27 +136,27 @@ fun ChatScreen(
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF161622))
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = topBarBg)
             )
         },
         bottomBar = {
             Surface(
-                color = Color(0xFF161622),
+                color = topBarBg,
                 shadowElevation = 8.dp
             ) {
                 Column(modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(8.dp)) {
                     if (attachedFileUri != null) {
                         Surface(
-                            color = Color(0xFF222234),
+                            color = inputBg,
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.padding(bottom = 8.dp, start = 48.dp, end = 48.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(8.dp)) {
-                                Icon(Icons.Filled.InsertDriveFile, "File", tint = BeeYellow, modifier = Modifier.size(24.dp))
+                                Icon(Icons.Filled.InsertDriveFile, "File", tint = accent, modifier = Modifier.size(24.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Archivo adjunto", color = BeeWhite, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                                Text("Archivo adjunto", color = textPrimary, fontSize = 12.sp, modifier = Modifier.weight(1f))
                                 IconButton(onClick = { attachedFileUri = null }, modifier = Modifier.size(24.dp)) {
-                                    Icon(Icons.Filled.Close, "Remove", tint = BeeGray)
+                                    Icon(Icons.Filled.Close, "Remove", tint = textSecondary)
                                 }
                             }
                         }
@@ -152,7 +166,7 @@ fun ChatScreen(
                         verticalAlignment = Alignment.Bottom
                     ) {
                         IconButton(onClick = { filePickerLauncher.launch("*/*") }) {
-                            Icon(Icons.Outlined.AttachFile, "Attach", tint = BeeGray)
+                            Icon(Icons.Outlined.AttachFile, "Attach", tint = textSecondary)
                         }
                         AnimatedVisibility(
                             visible = !viewModel.isRecording.value,
@@ -161,12 +175,12 @@ fun ChatScreen(
                             TextField(
                                 value = inputText,
                                 onValueChange = { inputText = it },
-                                placeholder = { Text(stringResource(R.string.chat_input_placeholder), color = BeeGray) },
+                                placeholder = { Text(stringResource(R.string.chat_input_placeholder), color = textSecondary) },
                                 colors = TextFieldDefaults.colors(
-                                    focusedContainerColor = Color(0xFF222234),
-                                    unfocusedContainerColor = Color(0xFF222234),
-                                    focusedTextColor = BeeWhite,
-                                    unfocusedTextColor = BeeWhite,
+                                    focusedContainerColor = inputBg,
+                                    unfocusedContainerColor = inputBg,
+                                    focusedTextColor = textPrimary,
+                                    unfocusedTextColor = textPrimary,
                                     focusedIndicatorColor = Color.Transparent,
                                     unfocusedIndicatorColor = Color.Transparent
                                 ),
@@ -189,7 +203,7 @@ fun ChatScreen(
                                         attachedFileUri = null
                                     }
                                 }) {
-                                    Icon(Icons.Filled.Send, "Send", tint = BeeYellow)
+                                    Icon(Icons.Filled.Send, "Send", tint = accent)
                                 }
                             } else {
                                 Box(
@@ -215,7 +229,7 @@ fun ChatScreen(
                                     Icon(
                                         if (viewModel.isRecording.value) Icons.Filled.Stop else Icons.Filled.Mic, 
                                         "Voice", 
-                                        tint = if (viewModel.isRecording.value) Color.Red else BeeYellow,
+                                        tint = if (viewModel.isRecording.value) Color.Red else accent,
                                         modifier = Modifier.scale(scaleAnim)
                                     )
                                 }
@@ -227,7 +241,7 @@ fun ChatScreen(
         }
     ) { padding ->
         Box(
-            modifier = Modifier.fillMaxSize().padding(padding).background(BeeBlack)
+            modifier = Modifier.fillMaxSize().padding(padding).background(bg)
         ) {
             val listState = rememberLazyListState()
             val displayMessages = if (viewModel.isSearchMode.value) viewModel.searchResults else viewModel.messages
@@ -237,10 +251,8 @@ fun ChatScreen(
             LaunchedEffect(displayMessages.size) {
                 if (displayMessages.isNotEmpty()) {
                     if (previousSize == 0) {
-                        // Carga inicial: salto directo sin animación (evita mareo)
                         listState.scrollToItem(displayMessages.size - 1)
                     } else {
-                        // Mensaje nuevo en tiempo real: animación suave
                         listState.animateScrollToItem(displayMessages.size - 1)
                     }
                     previousSize = displayMessages.size
@@ -262,7 +274,7 @@ fun ChatScreen(
                                 modifier = Modifier
                                     .widthIn(max = 280.dp)
                                     .clip(RoundedCornerShape(if (msg.isUser) 16.dp else 0.dp, 16.dp, 16.dp, if (msg.isUser) 0.dp else 16.dp))
-                                    .background(if (msg.isUser) BeeYellow else Color(0xFF222234))
+                                    .background(if (msg.isUser) userBubble else assistantBubble)
                                     .combinedClickable(
                                         onClick = {},
                                         onLongClick = { showMenuForMessage = msg.text }
@@ -275,15 +287,13 @@ fun ChatScreen(
                                         val fName = msg.attachmentNames.firstOrNull() ?: java.io.File(fPath).name
                                         val fMime = msg.attachmentMimeTypes.firstOrNull() ?: ""
                                         
-                                        // FILE-04: Detectar imagen por MIME type, no por extensión
                                         val isImage = fMime.startsWith("image/") || 
                                             fPath.endsWith(".jpg") || fPath.endsWith(".jpeg") || 
                                             fPath.endsWith(".png") || fPath.endsWith(".webp") || 
                                             fPath.endsWith(".gif")
 
-                                        // FILE-06: Tap-to-open en el preview
                                         Surface(
-                                            color = Color(0xFF1E1E2C).copy(alpha=0.6f),
+                                            color = fileSurface,
                                             shape = RoundedCornerShape(8.dp),
                                             modifier = Modifier
                                                 .padding(bottom = 6.dp)
@@ -291,7 +301,6 @@ fun ChatScreen(
                                                 .clip(RoundedCornerShape(8.dp))
                                                 .combinedClickable(
                                                     onClick = {
-                                                        // FILE-06: Abrir archivo con el visor del sistema
                                                         try {
                                                             val viewUri = if (fPath.startsWith("content://")) {
                                                                 android.net.Uri.parse(fPath)
@@ -315,7 +324,6 @@ fun ChatScreen(
                                         ) {
                                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(8.dp)) {
                                                 if (isImage) {
-                                                    // Sprint 6 polish: Larger preview for AI-generated images
                                                     val imageFile = java.io.File(fPath)
                                                     AsyncImage(
                                                         model = if (fPath.startsWith("content://")) fPath else imageFile,
@@ -327,21 +335,19 @@ fun ChatScreen(
                                                         contentScale = androidx.compose.ui.layout.ContentScale.FillWidth
                                                     )
                                                 } else {
-                                                    // Ícono diferenciado por tipo
                                                     val fileIcon = when {
                                                         fMime.contains("pdf") || fName.endsWith(".pdf") -> Icons.Filled.PictureAsPdf
                                                         fMime.startsWith("audio/") -> Icons.Filled.AudioFile
                                                         fMime.startsWith("video/") -> Icons.Filled.VideoFile
                                                         else -> Icons.Filled.InsertDriveFile
                                                     }
-                                                    Icon(fileIcon, "File", tint=BeeYellow, modifier = Modifier.size(32.dp))
+                                                    Icon(fileIcon, "File", tint=accent, modifier = Modifier.size(32.dp))
                                                 }
                                                 Spacer(modifier = Modifier.width(8.dp))
-                                                // FILE-03: Mostrar nombre real del archivo
                                                 Column(modifier = Modifier.weight(1f)) {
-                                                    Text(fName, color = BeeWhite, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                                                    Text(fName, color = textPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                                                     if (fMime.isNotBlank()) {
-                                                        Text(fMime.uppercase(), color = BeeGray, fontSize = 9.sp)
+                                                        Text(fMime.uppercase(), color = textSecondary, fontSize = 9.sp)
                                                     }
                                                 }
                                             }
@@ -350,7 +356,7 @@ fun ChatScreen(
                                     if (msg.text.isNotBlank()) {
                                         Text(
                                             text = msg.text,
-                                            color = if (msg.isUser) BeeBlack else BeeWhite,
+                                            color = if (msg.isUser) userBubbleText else assistantBubbleText,
                                             fontSize = 15.sp
                                         )
                                     }
@@ -373,7 +379,6 @@ fun ChatScreen(
                                     val rawPath = msg.filePaths.first()
                                     val fileMime = msg.attachmentMimeTypes.firstOrNull() ?: "*/*"
                                     
-                                    // FILE-05: Opción "Abrir archivo" 
                                     DropdownMenuItem(
                                         text = { Text("Abrir archivo") },
                                         onClick = {
@@ -432,13 +437,13 @@ fun ChatScreen(
                             if (viewModel.swarmInsight.value.isNotBlank()) {
                                 Text(
                                     text = viewModel.swarmInsight.value,
-                                    color = BeeYellow,
+                                    color = accent,
                                     fontSize = 12.sp,
                                     modifier = Modifier.padding(bottom = 6.dp)
                                 )
                             }
                             Row(horizontalArrangement = Arrangement.Start) {
-                                CircularProgressIndicator(color = BeeYellow, modifier = Modifier.size(24.dp))
+                                CircularProgressIndicator(color = accent, modifier = Modifier.size(24.dp))
                             }
                         }
                     }
@@ -462,34 +467,34 @@ fun ChatScreen(
 
                 AlertDialog(
                     onDismissRequest = { showEditAgentDialog = false },
-                    containerColor = Color(0xFF222234),
-                    title = { Text("ADN de ${agent.name}", color = BeeYellow, fontWeight = FontWeight.Bold) },
+                    containerColor = if (isDark) Color(0xFF222234) else LightSurface,
+                    title = { Text("ADN de ${agent.name}", color = accent, fontWeight = FontWeight.Bold) },
                     text = {
                         Column {
                             OutlinedTextField(
                                 value = editName,
                                 onValueChange = { editName = it },
-                                label = { Text("Nombre del Agente", color = BeeGray) },
-                                colors = TextFieldDefaults.colors(focusedTextColor = BeeWhite, unfocusedTextColor = BeeWhite)
+                                label = { Text("Nombre del Agente", color = textSecondary) },
+                                colors = TextFieldDefaults.colors(focusedTextColor = textPrimary, unfocusedTextColor = textPrimary)
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             OutlinedTextField(
                                 value = editModel,
                                 onValueChange = { editModel = it },
-                                label = { Text("Motor LLM (o Túnel)", color = BeeGray) },
-                                colors = TextFieldDefaults.colors(focusedTextColor = BeeWhite, unfocusedTextColor = BeeWhite)
+                                label = { Text("Motor LLM (o Túnel)", color = textSecondary) },
+                                colors = TextFieldDefaults.colors(focusedTextColor = textPrimary, unfocusedTextColor = textPrimary)
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             OutlinedTextField(
                                 value = editPrompt,
                                 onValueChange = { editPrompt = it },
-                                label = { Text("Directriz Primaria (System Prompt)", color = BeeGray) },
+                                label = { Text("Directriz Primaria (System Prompt)", color = textSecondary) },
                                 modifier = Modifier.height(180.dp),
                                 maxLines = 8,
-                                colors = TextFieldDefaults.colors(focusedTextColor = BeeWhite, unfocusedTextColor = BeeWhite)
+                                colors = TextFieldDefaults.colors(focusedTextColor = textPrimary, unfocusedTextColor = textPrimary)
                             )
                             Spacer(modifier = Modifier.height(6.dp))
-                            Text("Para Túnel Dinámico: hermes-a2a|wss://ip|token", fontSize = 10.sp, color = BeeGray)
+                            Text("Para Túnel Dinámico: hermes-a2a|wss://ip|token", fontSize = 10.sp, color = textSecondary)
                         }
                     },
                     confirmButton = {
@@ -497,10 +502,10 @@ fun ChatScreen(
                             val updated = agent.copy(name = editName, systemPrompt = editPrompt, fallbackModel = editModel)
                             viewModel.updateAgentConfig(updated)
                             showEditAgentDialog = false
-                        }) { Text("Aplicar Mutación", color = BeeYellow) }
+                        }) { Text("Aplicar Mutación", color = accent) }
                     },
                     dismissButton = {
-                        TextButton(onClick = { showEditAgentDialog = false }) { Text("Cancelar", color = BeeGray) }
+                        TextButton(onClick = { showEditAgentDialog = false }) { Text("Cancelar", color = textSecondary) }
                     }
                 )
             }
