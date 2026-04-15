@@ -48,14 +48,30 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
     val isSignedIn = googleAuth.isSignedIn()
     val accessToken = googleAuth.getAccessToken()
 
+    // IMAP personal email credentials
+    val securePrefs = remember { com.beemovil.security.SecurePrefs.get(context) }
+    val imapEmail = securePrefs.getString("email_address", "") ?: ""
+    val imapPassword = securePrefs.getString("email_password", "") ?: ""
+    val imapHost = securePrefs.getString("email_imap_host", "") ?: ""
+    val imapPort = securePrefs.getInt("email_imap_port", 993)
+    val hasImapConfig = imapEmail.isNotBlank() && imapPassword.isNotBlank() && imapHost.isNotBlank()
+
+    // Active source: "google" or "personal"
+    var activeSource by remember {
+        mutableStateOf(if (accessToken != null) "google" else if (hasImapConfig) "personal" else "google")
+    }
+
     var emails by remember { mutableStateOf<List<GoogleGmailService.EmailMessage>>(emptyList()) }
+    var imapEmails by remember { mutableStateOf<List<com.beemovil.email.EmailService.EmailMessage>>(emptyList()) }
     var unreadCount by remember { mutableStateOf(0) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
     var selectedEmail by remember { mutableStateOf<GoogleGmailService.EmailMessage?>(null) }
+    var selectedImapEmail by remember { mutableStateOf<com.beemovil.email.EmailService.EmailMessage?>(null) }
 
-    LaunchedEffect(accessToken) {
-        if (accessToken != null) {
+    // Load Google emails
+    LaunchedEffect(accessToken, activeSource) {
+        if (accessToken != null && activeSource == "google") {
             isLoading = true
             errorMsg = null
             withContext(Dispatchers.IO) {
@@ -63,6 +79,29 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                     val service = GoogleGmailService(accessToken)
                     emails = service.listInbox(maxResults = 25)
                     unreadCount = service.getUnreadCount()
+                } catch (e: Exception) {
+                    errorMsg = e.message
+                }
+            }
+            isLoading = false
+        }
+    }
+
+    // Load IMAP personal emails 
+    LaunchedEffect(activeSource) {
+        if (hasImapConfig && activeSource == "personal") {
+            isLoading = true
+            errorMsg = null
+            withContext(Dispatchers.IO) {
+                try {
+                    val emailService = com.beemovil.email.EmailService(context)
+                    val config = com.beemovil.email.EmailService.EmailConfig(
+                        imapHost, imapPort,
+                        securePrefs.getString("email_smtp_host", "") ?: "",
+                        securePrefs.getInt("email_smtp_port", 587)
+                    )
+                    imapEmails = emailService.fetchInbox(imapEmail, imapPassword, config, limit = 25)
+                    unreadCount = imapEmails.count { !it.isRead }
                 } catch (e: Exception) {
                     errorMsg = e.message
                 }
@@ -97,15 +136,27 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 actions = {
-                    if (accessToken != null) {
+                    if (accessToken != null || hasImapConfig) {
                         IconButton(onClick = {
                             scope.launch {
                                 isLoading = true
+                                errorMsg = null
                                 withContext(Dispatchers.IO) {
                                     try {
-                                        val service = GoogleGmailService(accessToken)
-                                        emails = service.listInbox(maxResults = 25)
-                                        unreadCount = service.getUnreadCount()
+                                        if (activeSource == "google" && accessToken != null) {
+                                            val service = GoogleGmailService(accessToken)
+                                            emails = service.listInbox(maxResults = 25)
+                                            unreadCount = service.getUnreadCount()
+                                        } else if (activeSource == "personal" && hasImapConfig) {
+                                            val emailService = com.beemovil.email.EmailService(context)
+                                            val config = com.beemovil.email.EmailService.EmailConfig(
+                                                imapHost, imapPort,
+                                                securePrefs.getString("email_smtp_host", "") ?: "",
+                                                securePrefs.getInt("email_smtp_port", 587)
+                                            )
+                                            imapEmails = emailService.fetchInbox(imapEmail, imapPassword, config, limit = 25)
+                                            unreadCount = imapEmails.count { !it.isRead }
+                                        }
                                     } catch (e: Exception) {
                                         errorMsg = e.message
                                     }
@@ -125,7 +176,41 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            if (!isSignedIn || accessToken == null) {
+            // Account filter chips (show when at least one source is available)
+            val hasGoogle = accessToken != null
+            val hasBoth = hasGoogle && hasImapConfig
+            if (hasBoth) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = activeSource == "google",
+                        onClick = { activeSource = "google"; errorMsg = null },
+                        label = { Text("Gmail", fontSize = 12.sp) },
+                        leadingIcon = { Text("G", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF4285F4)) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = accent.copy(alpha = 0.2f),
+                            selectedLabelColor = accent
+                        )
+                    )
+                    FilterChip(
+                        selected = activeSource == "personal",
+                        onClick = { activeSource = "personal"; errorMsg = null },
+                        label = { Text(imapEmail.take(20), fontSize = 12.sp) },
+                        leadingIcon = { Icon(Icons.Filled.AlternateEmail, "IMAP", modifier = Modifier.size(16.dp)) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = accent.copy(alpha = 0.2f),
+                            selectedLabelColor = accent
+                        )
+                    )
+                }
+            }
+
+            val noSourceConfigured = !hasGoogle && !hasImapConfig
+            if (noSourceConfigured) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -142,13 +227,13 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                             modifier = Modifier.size(72.dp)
                         )
                         Text(
-                            "Conecta tu cuenta de Google",
+                            "Configura tu correo",
                             color = textPrimary,
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            "Para ver tu bandeja de correo, ve a Settings → Google Workspace y conecta tu cuenta.",
+                            "Conecta Google Workspace o configura tu email personal (IMAP) en Settings.",
                             color = textSecondary,
                             fontSize = 14.sp,
                             lineHeight = 20.sp,
@@ -156,14 +241,11 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                         )
                         Button(
                             onClick = { viewModel.currentScreen.value = "settings" },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color.White,
-                                contentColor = Color(0xFF1F1F1F)
-                            ),
+                            colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = if (isDark) BeeBlack else Color.White),
                             shape = RoundedCornerShape(24.dp),
                             modifier = Modifier.height(48.dp)
                         ) {
-                            Text("G", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF4285F4))
+                            Icon(Icons.Filled.Settings, "Config", modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Ir a Settings", fontWeight = FontWeight.Medium)
                         }
@@ -197,15 +279,98 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                         Button(
                             onClick = { viewModel.currentScreen.value = "settings" },
                             colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = if (isDark) BeeBlack else Color.White)
-                        ) { Text("Verificar conexión Google") }
+                        ) { Text("Verificar conexión") }
                     }
                 }
-            } else if (emails.isEmpty()) {
+            } else if (activeSource == "google" && emails.isEmpty() || activeSource == "personal" && imapEmails.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("📭", fontSize = 48.sp)
                         Spacer(modifier = Modifier.height(12.dp))
                         Text("Tu bandeja está vacía", color = textPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            } else if (activeSource == "personal") {
+                // IMAP Personal Email List
+                if (selectedImapEmail != null) {
+                    AlertDialog(
+                        onDismissRequest = { selectedImapEmail = null },
+                        containerColor = cardBg,
+                        title = {
+                            Text(selectedImapEmail!!.subject, color = textPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        },
+                        text = {
+                            Column {
+                                Text("De: ${selectedImapEmail!!.from}", color = accent, fontSize = 12.sp)
+                                Text(
+                                    java.text.SimpleDateFormat("dd MMM yyyy HH:mm", java.util.Locale.getDefault()).format(selectedImapEmail!!.date),
+                                    color = textSecondary, fontSize = 11.sp
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(selectedImapEmail!!.body.take(2000), color = textPrimary, fontSize = 13.sp, lineHeight = 18.sp)
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = { selectedImapEmail = null }) {
+                                Text("Cerrar", color = accent)
+                            }
+                        }
+                    )
+                }
+
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    items(imapEmails) { email ->
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { selectedImapEmail = email },
+                            color = Color.Transparent
+                        ) {
+                            Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                                Surface(
+                                    shape = RoundedCornerShape(50),
+                                    color = avatarBg,
+                                    modifier = Modifier.size(44.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                        Text(
+                                            email.from.take(1).uppercase(),
+                                            color = accent, fontSize = 18.sp, fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            email.from.take(25),
+                                            color = if (!email.isRead) textPrimary else textSecondary,
+                                            fontWeight = if (!email.isRead) FontWeight.Bold else FontWeight.Normal,
+                                            fontSize = 14.sp,
+                                            modifier = Modifier.weight(1f),
+                                            maxLines = 1
+                                        )
+                                        Text(
+                                            java.text.SimpleDateFormat("dd/MM", java.util.Locale.getDefault()).format(email.date),
+                                            color = textSecondary, fontSize = 11.sp
+                                        )
+                                    }
+                                    Text(
+                                        email.subject.take(50),
+                                        color = textPrimary,
+                                        fontSize = 13.sp,
+                                        maxLines = 1
+                                    )
+                                    Text(
+                                        email.body.take(60).replace("\n", " "),
+                                        color = textSecondary,
+                                        fontSize = 12.sp,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+                        Divider(color = dividerColor, thickness = 0.5.dp)
                     }
                 }
             } else {
