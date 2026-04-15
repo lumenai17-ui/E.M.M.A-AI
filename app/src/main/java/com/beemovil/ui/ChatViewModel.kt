@@ -29,7 +29,8 @@ data class AgentConfigStub(
     val icon: String = "🧠",
     val description: String = "Sistema central guiado por Koog",
     val systemPrompt: String = "",
-    val model: String = "koog-engine"
+    val model: String = "koog-engine",
+    val avatarUri: String? = null
 )
 
 data class DashboardMatrixState(
@@ -144,7 +145,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun forgeAgent(name: String, icon: String, prompt: String, model: String) {
+    fun forgeAgent(name: String, icon: String, prompt: String, model: String, avatarUri: String? = null) {
         viewModelScope.launch {
             val validIcon = if (icon.isBlank()) "🤖" else icon
             val newAgent = com.beemovil.database.AgentConfigEntity(
@@ -152,7 +153,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 name = name,
                 icon = validIcon,
                 systemPrompt = prompt,
-                fallbackModel = model
+                fallbackModel = model,
+                avatarUri = avatarUri
             )
             chatHistoryDB.chatHistoryDao().insertAgent(newAgent)
             

@@ -51,6 +51,10 @@ fun ConversationsScreen(viewModel: ChatViewModel) {
             onForgeAgent = { name, icon, prompt, model ->
                 viewModel.forgeAgent(name, icon, prompt, model)
                 showFactorySheet = false
+            },
+            onForgeAgentWithAvatar = { name, icon, prompt, model, avatarUri ->
+                viewModel.forgeAgent(name, icon, prompt, model, avatarUri)
+                showFactorySheet = false
             }
         )
     }
@@ -168,10 +172,23 @@ fun ConversationsScreen(viewModel: ChatViewModel) {
                                     .size(60.dp)
                                     .clip(CircleShape)
                                     .background(cardBg.copy(alpha = 0.8f))
-                                    .border(1.dp, accent.copy(alpha = 0.3f), CircleShape),
+                                    .border(
+                                        if (agent.avatarUri != null) 2.dp else 1.dp,
+                                        if (agent.avatarUri != null) accent else accent.copy(alpha = 0.3f),
+                                        CircleShape
+                                    ),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(agent.icon, fontSize = 24.sp)
+                                if (agent.avatarUri != null && java.io.File(agent.avatarUri).exists()) {
+                                    coil.compose.AsyncImage(
+                                        model = java.io.File(agent.avatarUri),
+                                        contentDescription = agent.name,
+                                        modifier = Modifier.fillMaxSize().clip(CircleShape),
+                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                    )
+                                } else {
+                                    Text(agent.icon, fontSize = 24.sp)
+                                }
                             }
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(agent.name.take(10), color = textPrimary, fontSize = 11.sp, maxLines = 1)

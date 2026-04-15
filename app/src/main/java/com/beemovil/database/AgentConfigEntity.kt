@@ -10,5 +10,6 @@ data class AgentConfigEntity(
     val name: String,
     val icon: String,
     val systemPrompt: String,
-    val fallbackModel: String = "koog-engine"
+    val fallbackModel: String = "koog-engine",
+    val avatarUri: String? = null
 )

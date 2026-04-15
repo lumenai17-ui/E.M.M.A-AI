@@ -15,7 +15,7 @@ import android.util.Log
         ChatThreadEntity::class, 
         GroupMemberEntity::class
     ], 
-    version = 2, 
+    version = 3, 
     exportSchema = false
 )
 abstract class ChatHistoryDB : RoomDatabase() {
@@ -58,6 +58,14 @@ abstract class ChatHistoryDB : RoomDatabase() {
             }
         }
 
+        // Migración v2 → v3: avatarUri para fotos de agentes
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                Log.i("ChatHistoryDB", "Migrando v2 → v3: añadiendo avatarUri a agent_config")
+                db.execSQL("ALTER TABLE agent_config ADD COLUMN avatarUri TEXT DEFAULT NULL")
+            }
+        }
+
         fun getDatabase(context: Context): ChatHistoryDB {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -65,7 +73,7 @@ abstract class ChatHistoryDB : RoomDatabase() {
                     ChatHistoryDB::class.java,
                     "emma_chat_history_db"
                 )
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
                 INSTANCE = instance
                 instance
