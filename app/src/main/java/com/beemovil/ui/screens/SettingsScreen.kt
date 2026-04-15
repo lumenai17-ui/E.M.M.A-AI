@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Build
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -1785,8 +1786,59 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(4.dp))
                 Text("Enhanced Multi-Modal Mobile Assistant.\nTu asistente AI personal que vive en tu teléfono.\nSin servidores externos. Sin tracking. 100% tuyo.",
                     fontSize = 12.sp, color = if (isDark) Color(0xFFB0B0B0) else TextGrayDark)
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("Powered by Bee-Movil", fontSize = 11.sp, color = accent)
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Documentation & Tutorial link
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://helloemma.ai/docs"))
+                            intent.flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                            try { context.startActivity(intent) } catch (_: Exception) {}
+                        },
+                    color = Color.Transparent
+                ) {
+                    Row(
+                        modifier = Modifier.padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Filled.MenuBook, "Docs", tint = accent, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Documentación y Tutorial", color = textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                            Text("Guía completa de uso y configuración", color = textSecondary, fontSize = 11.sp)
+                        }
+                        Icon(Icons.Filled.ChevronRight, "→", tint = textSecondary, modifier = Modifier.size(18.dp))
+                    }
+                }
+
+                HorizontalDivider(color = if (isDark) Color(0xFF2A2A3D) else LightBorder)
+
+                // Licenses link
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://helloemma.ai/licenses"))
+                            intent.flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                            try { context.startActivity(intent) } catch (_: Exception) {}
+                        },
+                    color = Color.Transparent
+                ) {
+                    Row(
+                        modifier = Modifier.padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Filled.Policy, "Licencias", tint = accent, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Licencias y Términos", color = textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                            Text("Open source licenses y términos de uso", color = textSecondary, fontSize = 11.sp)
+                        }
+                        Icon(Icons.Filled.ChevronRight, "→", tint = textSecondary, modifier = Modifier.size(18.dp))
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(40.dp))
