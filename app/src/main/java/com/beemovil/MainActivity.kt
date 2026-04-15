@@ -62,6 +62,16 @@ class MainActivity : ComponentActivity() {
             else -> null  // seguir sistema
         }
 
+        // Restaurar idioma guardado
+        val savedLang = themePrefs.getString("app_language", "auto") ?: "auto"
+        if (savedLang != "auto") {
+            val locale = java.util.Locale(savedLang)
+            java.util.Locale.setDefault(locale)
+            val config = resources.configuration
+            config.setLocale(locale)
+            resources.updateConfiguration(config, resources.displayMetrics)
+        }
+
         setContent {
             BeeMovilTheme {
                 val isDark = BeeThemeState.forceDark.value ?: true

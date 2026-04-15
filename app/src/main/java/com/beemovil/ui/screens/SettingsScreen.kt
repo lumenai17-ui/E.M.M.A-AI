@@ -191,6 +191,69 @@ fun SettingsScreen(
             }
 
             // ═══════════════════════════════════════
+            // IDIOMA
+            // ═══════════════════════════════════════
+            SectionCard {
+                SectionTitle("IDIOMA / LANGUAGE")
+                Spacer(modifier = Modifier.height(8.dp))
+
+                val savedLang = prefs.getString("app_language", "auto") ?: "auto"
+                var currentLang by remember { mutableStateOf(savedLang) }
+                
+                val languages = listOf(
+                    Triple("es", "Español", "🇪🇸"),
+                    Triple("en", "English", "🇺🇸"),
+                    Triple("auto", "Sistema", "🌐")
+                )
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    languages.forEach { (code, label, flag) ->
+                        FilterChip(
+                            selected = currentLang == code,
+                            onClick = {
+                                currentLang = code
+                                prefs.edit().putString("app_language", code).apply()
+                                
+                                // Apply locale change
+                                val locale = if (code == "auto") {
+                                    java.util.Locale.getDefault()
+                                } else {
+                                    java.util.Locale(code)
+                                }
+                                
+                                val config = context.resources.configuration
+                                config.setLocale(locale)
+                                context.resources.updateConfiguration(config, context.resources.displayMetrics)
+                                
+                                // Recreate activity to apply
+                                (context as? android.app.Activity)?.recreate()
+                            },
+                            label = {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(flag, fontSize = 16.sp)
+                                    Text(label, fontSize = 13.sp)
+                                }
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = BeeYellow.copy(alpha = 0.2f),
+                                selectedLabelColor = BeeYellow
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                borderColor = BeeGray, selectedBorderColor = BeeYellow,
+                                enabled = true, selected = currentLang == code
+                            )
+                        )
+                    }
+                }
+            }
+
+            // ═══════════════════════════════════════
             // PROVEEDOR AI
             // ═══════════════════════════════════════
             SectionCard {
