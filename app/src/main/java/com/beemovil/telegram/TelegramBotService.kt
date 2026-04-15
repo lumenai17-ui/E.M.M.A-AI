@@ -282,6 +282,85 @@ class TelegramBotService : Service() {
         } catch (_: Exception) {}
     }
 
+    /**
+     * Send a file as a Telegram document using multipart upload.
+     * Supports images (sends as photo if small enough) and documents.
+     */
+    private fun sendDocument(chatId: Long, file: java.io.File, replyToMessageId: Long? = null) {
+        val extension = file.name.substringAfterLast('.', "").lowercase()
+        val isImage = extension in listOf("png", "jpg", "jpeg", "webp", "gif")
+        val mimeType = when (extension) {
+            "png" -> "image/png"
+            "jpg", "jpeg" -> "image/jpeg"
+            "webp" -> "image/webp"
+            "gif" -> "image/gif"
+            "pdf" -> "application/pdf"
+            "csv" -> "text/csv"
+            "html" -> "text/html"
+            else -> "application/octet-stream"
+        }
+
+        // Use sendPhoto for images (better Telegram UX), sendDocument for others
+        val endpoint = if (isImage && file.length() < 10 * 1024 * 1024) "sendPhoto" else "sendDocument"
+        val fieldName = if (endpoint == "sendPhoto") "photo" else "document"
+
+        val multipartBody = okhttp3.MultipartBody.Builder()
+            .setType(okhttp3.MultipartBody.FORM)
+            .addFormDataPart("chat_id", chatId.toString())
+            .addFormDataPart(fieldName, file.name,
+                okhttp3.RequestBody.create(mimeType.toMediaType(), file))
+            .addFormDataPart("caption", "📎 ${file.name}")
+            .apply {
+                if (replyToMessageId != null) {
+                    addFormDataPart("reply_to_message_id", replyToMessageId.toString())
+                }
+            }
+            .build()
+
+        val request = Request.Builder()
+            .url("${TELEGRAM_API}$botToken/$endpoint")
+            .post(multipartBody)
+            .build()
+
+        val response = httpClient.newCall(request).execute()
+        val respBody = response.body?.string()
+        response.close()
+        
+        if (!response.isSuccessful) {
+            Log.e(TAG, "sendDocument failed: $respBody")
+            // Fallback: if sendPhoto fails, try sendDocument
+            if (endpoint == "sendPhoto") {
+                sendDocumentFallback(chatId, file, replyToMessageId)
+            } else {
+                throw Exception("Failed to send document: ${response.code}")
+            }
+        } else {
+            Log.i(TAG, "📤 File sent to Telegram: ${file.name}")
+        }
+    }
+
+    private fun sendDocumentFallback(chatId: Long, file: java.io.File, replyToMessageId: Long?) {
+        val multipartBody = okhttp3.MultipartBody.Builder()
+            .setType(okhttp3.MultipartBody.FORM)
+            .addFormDataPart("chat_id", chatId.toString())
+            .addFormDataPart("document", file.name,
+                okhttp3.RequestBody.create("application/octet-stream".toMediaType(), file))
+            .addFormDataPart("caption", "📎 ${file.name}")
+            .apply {
+                if (replyToMessageId != null) {
+                    addFormDataPart("reply_to_message_id", replyToMessageId.toString())
+                }
+            }
+            .build()
+
+        val request = Request.Builder()
+            .url("${TELEGRAM_API}$botToken/sendDocument")
+            .post(multipartBody)
+            .build()
+
+        httpClient.newCall(request).execute().close()
+    }
+
     // ═══════════════════════════════════════
     // MESSAGE PROCESSING
     // ═══════════════════════════════════════
@@ -305,14 +384,50 @@ class TelegramBotService : Service() {
         sendTypingAction(update.chatId)
 
         try {
-            // Route through EmmaEngine
-            val response = engine.processUserMessage(update.text, provider, model)
+            // Route through EmmaEngine with timeout to prevent hanging
+            val response = withTimeoutOrNull(120_000L) { // 2 min max
+                engine.processUserMessage(update.text, provider, model)
+            } ?: run {
+                sendMessage(update.chatId, "⏰ La operación tardó demasiado. Intenta con algo más simple.", update.messageId)
+                updateStatus("Activo", botUsername, messageCount)
+                return
+            }
 
-            // Filter out internal tool call signals
+            // Handle file generation — send file as Telegram document
+            if (response.startsWith("TOOL_CALL::file_generated::")) {
+                val filePath = response.removePrefix("TOOL_CALL::file_generated::")
+                val file = java.io.File(filePath)
+                if (file.exists()) {
+                    try {
+                        sendDocument(update.chatId, file, update.messageId)
+                        updateStatus("Activo", botUsername, messageCount)
+                        updateNotification("@$botUsername — $messageCount mensajes procesados")
+                        return
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error sending document: ${e.message}")
+                        sendMessage(update.chatId, "✅ Archivo generado (${file.name}) pero no pude enviarlo por Telegram. Está disponible en la app.", update.messageId)
+                        updateStatus("Activo", botUsername, messageCount)
+                        return
+                    }
+                } else {
+                    sendMessage(update.chatId, "⚠️ Archivo generado pero no encontrado en: ${file.name}", update.messageId)
+                    updateStatus("Activo", botUsername, messageCount)
+                    return
+                }
+            }
+
+            // Handle browser (can't open from Telegram)
+            if (response.startsWith("TOOL_CALL::open_browser::")) {
+                val url = response.removePrefix("TOOL_CALL::open_browser::")
+                sendMessage(update.chatId, "🌐 Enlace: $url\n\n_(Abre la app de E.M.M.A. para navegación interactiva)_", update.messageId)
+                updateStatus("Activo", botUsername, messageCount)
+                return
+            }
+
+            // Normal text response
             val cleanResponse = when {
                 response.startsWith("TOOL_CALL::") -> {
-                    val action = response.substringBefore("::", "").substringAfter("::")
-                    "✅ Acción ejecutada: $action (disponible en la app de E.M.M.A.)"
+                    "✅ Acción ejecutada desde la app de E.M.M.A."
                 }
                 response.length > 4000 -> response.take(4000) + "\n\n... _(respuesta truncada)_"
                 else -> response
