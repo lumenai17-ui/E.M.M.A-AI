@@ -1247,8 +1247,11 @@ fun SettingsScreen(
                     }
                 } else {
                     // ── Not Connected ──
+                    var googleError by remember { mutableStateOf<String?>(null) }
+                    
                     Button(
                         onClick = {
+                            googleError = null
                             scope.launch {
                                 googleLoading = true
                                 try {
@@ -1257,16 +1260,19 @@ fun SettingsScreen(
                                         ?: (context as? android.content.ContextWrapper)?.baseContext as? android.app.Activity
                                     
                                     if (activity == null) {
-                                        Toast.makeText(context, "Error: No se pudo encontrar la Activity", Toast.LENGTH_LONG).show()
+                                        googleError = "Error interno: No se encontró Activity context"
                                         googleLoading = false
                                         return@launch
                                     }
+                                    
+                                    android.util.Log.i("GoogleSettings", "Attempting signIn with WEB_CLIENT_ID: ${com.beemovil.google.GoogleAuthManager.WEB_CLIENT_ID.take(20)}...")
                                     
                                     val user = googleAuth.signIn(activity)
                                     if (user != null) {
                                         googleSignedIn = true
                                         googleEmail = user.email
                                         googleName = user.displayName
+                                        googleError = null
                                         // Auto-populate soul
                                         try {
                                             val memDb = com.beemovil.memory.BeeMemoryDB(context)
@@ -1278,25 +1284,25 @@ fun SettingsScreen(
                                             }
                                         } catch (_: Exception) {}
                                         
-                                        // Request OAuth2 scopes to get access token for APIs
+                                        // Request OAuth2 scopes
                                         try {
                                             val accessToken = googleAuth.requestScopes(activity)
                                             if (accessToken != null) {
                                                 Toast.makeText(context, "Google conectado con permisos ✅", Toast.LENGTH_SHORT).show()
                                             } else {
-                                                Toast.makeText(context, "Cuenta conectada, pero sin permisos de API. Reintenta.", Toast.LENGTH_LONG).show()
+                                                googleError = "Cuenta conectada, pero sin permisos de API. Toca de nuevo para reintentar."
                                             }
                                         } catch (e: Exception) {
                                             android.util.Log.e("GoogleSettings", "Scope request failed: ${e.message}", e)
-                                            Toast.makeText(context, "Error obteniendo permisos: ${e.message}", Toast.LENGTH_LONG).show()
+                                            googleError = "Permisos: ${e.message}"
                                         }
                                     } else {
-                                        Toast.makeText(context, "No se pudo conectar con Google.\nVerifica que tienes una cuenta Google en este dispositivo.", Toast.LENGTH_LONG).show()
-                                        android.util.Log.w("GoogleSettings", "signIn returned null — check SHA-1 and package name in Google Cloud Console")
+                                        googleError = "Google no respondió. Posibles causas:\n• No hay cuenta Google en este dispositivo\n• El SHA-1 no está registrado en Cloud Console\n• El WEB_CLIENT_ID no coincide con el proyecto"
+                                        android.util.Log.w("GoogleSettings", "signIn returned null")
                                     }
                                 } catch (e: Exception) {
                                     android.util.Log.e("GoogleSettings", "Sign-in exception: ${e.message}", e)
-                                    Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                                    googleError = "Excepción: ${e.message}"
                                 }
                                 googleLoading = false
                             }
@@ -1311,13 +1317,32 @@ fun SettingsScreen(
                     ) {
                         if (googleLoading) {
                             CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Color(0xFF4285F4))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Conectando...", fontWeight = FontWeight.Medium, fontSize = 14.sp)
                         } else {
-                            // Google G colors
                             Text("G", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF4285F4))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Conectar con Google", fontWeight = FontWeight.Medium, fontSize = 14.sp)
                         }
                     }
+                    
+                    // Persistent error display
+                    if (googleError != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Surface(
+                            color = Color(0xFF2E1A1A),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text("❌ Error de Google Sign-In", fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp, color = Color(0xFFF44336))
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(googleError!!, fontSize = 11.sp, color = Color(0xFFFF8A80), lineHeight = 15.sp)
+                            }
+                        }
+                    }
+                    
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         "Accede a Drive, Gmail y Calendar con un solo login.\nNecesitas configurar un proyecto en Google Cloud Console.",
