@@ -101,6 +101,7 @@ class EmmaEngine(private val context: Context) {
 
         // Registrar Google Ecosystem (Sprint 4)
         registerPlugin(com.beemovil.plugins.builtins.GmailPlugin(context))
+        registerPlugin(com.beemovil.plugins.builtins.PersonalEmailPlugin(context))
         registerPlugin(com.beemovil.plugins.builtins.GoogleCalendarPlugin(context))
         registerPlugin(com.beemovil.plugins.builtins.GoogleTasksPlugin(context))
 
