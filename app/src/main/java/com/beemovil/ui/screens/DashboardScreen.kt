@@ -163,6 +163,18 @@ fun DashboardScreen(
                 icon = Icons.Filled.Mic,
                 onClick = { viewModel.currentScreen.value = "voice" }
             )
+            MainModuleCard(
+                title = "Tareas",
+                subtitle = "Tus pendientes de Google Tasks",
+                icon = Icons.Filled.TaskAlt,
+                onClick = { viewModel.currentScreen.value = "tasks" }
+            )
+            MainModuleCard(
+                title = "Correo",
+                subtitle = "Tu bandeja de Gmail",
+                icon = Icons.Filled.Email,
+                onClick = { viewModel.currentScreen.value = "email_inbox" }
+            )
 
             val recientes = viewModel.allThreads
                 .filter { it.threadId != "main" && it.threadId != "default_session" }

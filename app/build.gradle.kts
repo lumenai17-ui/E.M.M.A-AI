@@ -43,7 +43,8 @@ android {
         debug {
             isMinifyEnabled = false
             isDebuggable = true
-            applicationIdSuffix = ".debug"
+            // NOTE: NO applicationIdSuffix here — it breaks Google OAuth
+            // because Cloud Console only has com.beemovil.emma registered
             versionNameSuffix = "-debug"
         }
         release {

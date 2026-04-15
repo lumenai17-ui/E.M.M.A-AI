@@ -1251,36 +1251,52 @@ fun SettingsScreen(
                         onClick = {
                             scope.launch {
                                 googleLoading = true
-                                val user = googleAuth.signIn(context)
-                                if (user != null) {
-                                    googleSignedIn = true
-                                    googleEmail = user.email
-                                    googleName = user.displayName
-                                    // Auto-populate soul
-                                    try {
-                                        val memDb = com.beemovil.memory.BeeMemoryDB(context)
-                                        if (memDb.getSoul("name").isNullOrBlank()) {
-                                            memDb.setSoul("name", user.displayName)
-                                        }
-                                        if (memDb.getSoul("email").isNullOrBlank()) {
-                                            memDb.setSoul("email", user.email)
-                                        }
-                                    } catch (_: Exception) {}
+                                try {
+                                    // Find the actual Activity (Compose wraps context)
+                                    val activity = context as? android.app.Activity
+                                        ?: (context as? android.content.ContextWrapper)?.baseContext as? android.app.Activity
                                     
-                                    // Request OAuth2 scopes to get access token for APIs
-                                    try {
-                                        val activity = context as? android.app.Activity
-                                        if (activity != null) {
+                                    if (activity == null) {
+                                        Toast.makeText(context, "Error: No se pudo encontrar la Activity", Toast.LENGTH_LONG).show()
+                                        googleLoading = false
+                                        return@launch
+                                    }
+                                    
+                                    val user = googleAuth.signIn(activity)
+                                    if (user != null) {
+                                        googleSignedIn = true
+                                        googleEmail = user.email
+                                        googleName = user.displayName
+                                        // Auto-populate soul
+                                        try {
+                                            val memDb = com.beemovil.memory.BeeMemoryDB(context)
+                                            if (memDb.getSoul("name").isNullOrBlank()) {
+                                                memDb.setSoul("name", user.displayName)
+                                            }
+                                            if (memDb.getSoul("email").isNullOrBlank()) {
+                                                memDb.setSoul("email", user.email)
+                                            }
+                                        } catch (_: Exception) {}
+                                        
+                                        // Request OAuth2 scopes to get access token for APIs
+                                        try {
                                             val accessToken = googleAuth.requestScopes(activity)
                                             if (accessToken != null) {
-                                                android.widget.Toast.makeText(context, "Google conectado con permisos ✅", android.widget.Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, "Google conectado con permisos ✅", Toast.LENGTH_SHORT).show()
                                             } else {
-                                                android.widget.Toast.makeText(context, "Conectado, pero sin permisos de API. Reintenta.", android.widget.Toast.LENGTH_LONG).show()
+                                                Toast.makeText(context, "Cuenta conectada, pero sin permisos de API. Reintenta.", Toast.LENGTH_LONG).show()
                                             }
+                                        } catch (e: Exception) {
+                                            android.util.Log.e("GoogleSettings", "Scope request failed: ${e.message}", e)
+                                            Toast.makeText(context, "Error obteniendo permisos: ${e.message}", Toast.LENGTH_LONG).show()
                                         }
-                                    } catch (e: Exception) {
-                                        android.util.Log.e("GoogleSettings", "Scope request failed: ${e.message}")
+                                    } else {
+                                        Toast.makeText(context, "No se pudo conectar con Google.\nVerifica que tienes una cuenta Google en este dispositivo.", Toast.LENGTH_LONG).show()
+                                        android.util.Log.w("GoogleSettings", "signIn returned null — check SHA-1 and package name in Google Cloud Console")
                                     }
+                                } catch (e: Exception) {
+                                    android.util.Log.e("GoogleSettings", "Sign-in exception: ${e.message}", e)
+                                    Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
                                 }
                                 googleLoading = false
                             }
