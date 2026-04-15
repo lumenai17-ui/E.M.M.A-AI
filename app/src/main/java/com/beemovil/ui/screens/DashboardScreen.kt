@@ -385,8 +385,10 @@ fun ThermalWeatherWidget(text: String, isLoading: Boolean) {
                 contentScale = ContentScale.Crop
             )
             
+            // Overlay — stronger in light mode for arc contrast
             Box(modifier = Modifier.fillMaxSize().background(
-                if (isDark) Color.Black.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.3f)
+                if (isDark) Color.Black.copy(alpha = 0.15f)
+                else Color(0xFF1A2B4A).copy(alpha = 0.45f)
             ))
 
             Column(
@@ -396,16 +398,24 @@ fun ThermalWeatherWidget(text: String, isLoading: Boolean) {
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     androidx.compose.foundation.Canvas(modifier = Modifier.size(90.dp)) {
+                        // Track (background arc)
                         drawArc(
-                            color = Color.DarkGray.copy(alpha = 0.2f),
+                            color = if (isDark) Color.DarkGray.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.25f),
                             startAngle = 135f, sweepAngle = 270f, useCenter = false,
                             style = androidx.compose.ui.graphics.drawscope.Stroke(width = 6.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
                         )
+                        // Gradient arc
+                        val gradientColors = if (isDark) {
+                            listOf(Color(0xFF2196F3), accent, Color(0xFFF44336), Color(0xFF2196F3))
+                        } else {
+                            listOf(Color(0xFF64B5F6), Color(0xFFFFD54F), Color(0xFFFF7043), Color(0xFF64B5F6))
+                        }
                         drawArc(
-                            brush = androidx.compose.ui.graphics.Brush.sweepGradient(listOf(Color(0xFF2196F3), accent, Color(0xFFF44336), Color(0xFF2196F3))),
+                            brush = androidx.compose.ui.graphics.Brush.sweepGradient(gradientColors),
                             startAngle = 135f, sweepAngle = 270f, useCenter = false,
                             style = androidx.compose.ui.graphics.drawscope.Stroke(width = 6.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
                         )
+                        // Needle indicator
                         drawArc(
                             color = Color.White,
                             startAngle = 200f, sweepAngle = 5f, useCenter = false,
@@ -416,12 +426,18 @@ fun ThermalWeatherWidget(text: String, isLoading: Boolean) {
                         val extracted = text.substringAfter("(", "").substringBefore(")")
                         if (extracted.isNotBlank()) extracted else "--°C"
                     }
+                    // Temperature text — always white with shadow for readability on both themes
                     Text(
                         text = tempText, 
                         color = Color.White, 
                         fontSize = 24.sp, 
                         fontWeight = FontWeight.ExtraBold,
-                        style = androidx.compose.ui.text.TextStyle(shadow = androidx.compose.ui.graphics.Shadow(color = Color.Black, blurRadius = 12f))
+                        style = androidx.compose.ui.text.TextStyle(
+                            shadow = androidx.compose.ui.graphics.Shadow(
+                                color = if (isDark) Color.Black else Color(0xFF1A2B4A),
+                                blurRadius = if (isDark) 12f else 16f
+                            )
+                        )
                     )
                 }
                 
