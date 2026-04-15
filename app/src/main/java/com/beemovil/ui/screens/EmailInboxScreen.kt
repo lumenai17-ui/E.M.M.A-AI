@@ -50,10 +50,15 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
 
     // IMAP personal email credentials
     val securePrefs = remember { com.beemovil.security.SecurePrefs.get(context) }
+    val prefs = remember { context.getSharedPreferences("beemovil", android.content.Context.MODE_PRIVATE) }
+    // email_address & email_password → securePrefs (encrypted)
     val imapEmail = securePrefs.getString("email_address", "") ?: ""
     val imapPassword = securePrefs.getString("email_password", "") ?: ""
-    val imapHost = securePrefs.getString("email_imap_host", "") ?: ""
-    val imapPort = securePrefs.getInt("email_imap_port", 993)
+    // IMAP/SMTP host/port → regular prefs (matching SettingsScreen save logic)
+    val imapHost = prefs.getString("email_imap_host", "") ?: ""
+    val imapPort = prefs.getInt("email_imap_port", 993)
+    val smtpHost = prefs.getString("email_smtp_host", "") ?: ""
+    val smtpPort = prefs.getInt("email_smtp_port", 587)
     val hasImapConfig = imapEmail.isNotBlank() && imapPassword.isNotBlank() && imapHost.isNotBlank()
 
     // Active source: "google" or "personal"
@@ -96,9 +101,7 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                 try {
                     val emailService = com.beemovil.email.EmailService(context)
                     val config = com.beemovil.email.EmailService.EmailConfig(
-                        imapHost, imapPort,
-                        securePrefs.getString("email_smtp_host", "") ?: "",
-                        securePrefs.getInt("email_smtp_port", 587)
+                        imapHost, imapPort, smtpHost, smtpPort
                     )
                     imapEmails = emailService.fetchInbox(imapEmail, imapPassword, config, limit = 25)
                     unreadCount = imapEmails.count { !it.isRead }
@@ -150,9 +153,7 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                                         } else if (activeSource == "personal" && hasImapConfig) {
                                             val emailService = com.beemovil.email.EmailService(context)
                                             val config = com.beemovil.email.EmailService.EmailConfig(
-                                                imapHost, imapPort,
-                                                securePrefs.getString("email_smtp_host", "") ?: "",
-                                                securePrefs.getInt("email_smtp_port", 587)
+                                                imapHost, imapPort, smtpHost, smtpPort
                                             )
                                             imapEmails = emailService.fetchInbox(imapEmail, imapPassword, config, limit = 25)
                                             unreadCount = imapEmails.count { !it.isRead }

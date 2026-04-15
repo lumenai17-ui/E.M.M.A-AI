@@ -404,11 +404,11 @@ fun ThermalWeatherWidget(text: String, isLoading: Boolean) {
                             startAngle = 135f, sweepAngle = 270f, useCenter = false,
                             style = androidx.compose.ui.graphics.drawscope.Stroke(width = 6.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
                         )
-                        // Gradient arc
+                        // Gradient arc — Cold (blue) left → Warm (gold) center → Hot (red) right
                         val gradientColors = if (isDark) {
-                            listOf(Color(0xFF2196F3), accent, Color(0xFFF44336), Color(0xFF2196F3))
+                            listOf(Color(0xFFF44336), accent, Color(0xFF2196F3), Color(0xFFF44336))
                         } else {
-                            listOf(Color(0xFF64B5F6), Color(0xFFFFD54F), Color(0xFFFF7043), Color(0xFF64B5F6))
+                            listOf(Color(0xFFFF7043), Color(0xFFFFD54F), Color(0xFF64B5F6), Color(0xFFFF7043))
                         }
                         drawArc(
                             brush = androidx.compose.ui.graphics.Brush.sweepGradient(gradientColors),
