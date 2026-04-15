@@ -189,7 +189,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshLiveDashboard() {
         dynamicDashboardState.value = dynamicDashboardState.value.copy(
             isMatrixLoading = true,
-            insightText = "Generando Inferencia Neural del Entorno..."
+            insightText = "Generating Neural Environment Inference..."
         )
         viewModelScope.launch {
             // Leer de sensores fisicos en background
@@ -212,7 +212,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val insightBottom = "$locationRaw   |   $weatherRaw" // locationRaw/weatherRaw ya traen emoji de DeviceScanner
 
             // Capa 3: Reloj Local Temporal
-            val formatter = java.time.format.DateTimeFormatter.ofPattern("EEEE HH:mm", java.util.Locale("es", "ES"))
+            val formatter = java.time.format.DateTimeFormatter.ofPattern("EEEE HH:mm", java.util.Locale.getDefault())
             val sysTime = java.time.LocalDateTime.now().format(formatter)
 
             // Capa 4: Memoria de Hilo Principal
@@ -237,8 +237,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 insightHeaderBottom = insightBottom
             )
 
+            // Read language preference for AI prompt
+            val appLang = prefs.getString("app_language", "auto") ?: "auto"
+            val isEnglish = appLang == "en" || (appLang == "auto" && java.util.Locale.getDefault().language == "en")
+
             // Petición silenciosa a la IA (Prompt de Función Estricto para evadir alucinaciones charlatanas)
-            val systemMatrixPrompt = "INSTRUCCIÓN DE SISTEMA: No eres un asistente. No saludes ni expliques. Genera el reporte. Datos de telemetría recibidos: Bateria $battery%, Red $net, Hora $sysTime, Clima $weatherRaw, Sucesos recientes: $recentMemory$ghostInjection. FORMATO OBLIGATORIO (Max 2 líneas): Línea 1: Insight de entorno. Línea 2: '👉 Acción sugerida:' seguido de instrucción."
+            val systemMatrixPrompt = if (isEnglish) {
+                "SYSTEM INSTRUCTION: You are not an assistant. Do not greet or explain. Generate the report. Telemetry data received: Battery $battery%, Network $net, Time $sysTime, Weather $weatherRaw, Recent events: $recentMemory$ghostInjection. MANDATORY FORMAT (Max 2 lines): Line 1: Environment insight. Line 2: '👉 Suggested action:' followed by instruction."
+            } else {
+                "INSTRUCCIÓN DE SISTEMA: No eres un asistente. No saludes ni expliques. Genera el reporte. Datos de telemetría recibidos: Bateria $battery%, Red $net, Hora $sysTime, Clima $weatherRaw, Sucesos recientes: $recentMemory$ghostInjection. FORMATO OBLIGATORIO (Max 2 líneas): Línea 1: Insight de entorno. Línea 2: '👉 Acción sugerida:' seguido de instrucción."
+            }
             
             try {
                 var aiInsight = dashboardEngine.processUserMessage(systemMatrixPrompt).replace("SISTEMA CORE:", "").trim()

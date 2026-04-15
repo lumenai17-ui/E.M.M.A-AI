@@ -13,6 +13,9 @@ class BeeMovilApp : Application() {
     override fun onCreate() {
         super.onCreate()
 
+        // Initialize LocalModelManager context for Gemma downloads
+        com.beemovil.llm.local.LocalModelManager.appContext = this
+
         // Global crash handler — catch ANY unhandled exception
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->

@@ -1365,7 +1365,21 @@ fun SettingsScreen(
                                     }
                                 } catch (e: Exception) {
                                     android.util.Log.e("GoogleSettings", "Sign-in exception: ${e.message}", e)
-                                    googleError = "Excepción: ${e.message}"
+                                    val msg = e.message ?: "Error desconocido"
+                                    googleError = when {
+                                        msg.contains("No credentials available", true) || msg.contains("no viable", true) ->
+                                            "No hay credenciales disponibles.\n\n" +
+                                            "Para arreglar esto:\n" +
+                                            "1. Ve a console.cloud.google.com → Credentials\n" +
+                                            "2. Crea un OAuth Client ID tipo 'Android'\n" +
+                                            "3. Package: com.beemovil\n" +
+                                            "4. SHA-1: ${getDebugSha1()}\n" +
+                                            "5. También necesitas un Client ID tipo 'Web'\n" +
+                                            "6. El WEB_CLIENT_ID actual es:\n${com.beemovil.google.GoogleAuthManager.WEB_CLIENT_ID.take(30)}..."
+                                        msg.contains("sign_in_cancelled", true) ->
+                                            "Sign-in cancelado por el usuario"
+                                        else -> "Excepción: $msg"
+                                    }
                                 }
                                 googleLoading = false
                             }
@@ -1873,4 +1887,22 @@ private fun fieldColors(): androidx.compose.material3.TextFieldColors {
         unfocusedLabelColor = labelColor,
         cursorColor = accent
     )
+}
+
+/** Helper to get debug keystore SHA-1 for Google Cloud Console setup */
+private fun getDebugSha1(): String {
+    return try {
+        val debugKeystore = java.io.File(
+            System.getProperty("user.home"), ".android/debug.keystore"
+        )
+        if (!debugKeystore.exists()) return "(keystore no encontrado)"
+        val ks = java.security.KeyStore.getInstance("JKS")
+        debugKeystore.inputStream().use { ks.load(it, "android".toCharArray()) }
+        val cert = ks.getCertificate("androiddebugkey")
+        val md = java.security.MessageDigest.getInstance("SHA-1")
+        val digest = md.digest(cert.encoded)
+        digest.joinToString(":") { "%02X".format(it) }
+    } catch (e: Exception) {
+        "(no se pudo leer: ${e.message})"
+    }
 }
