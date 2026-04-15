@@ -66,9 +66,28 @@ object SecurePrefs {
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             )
         } catch (e: Exception) {
-            // Fallback for devices with broken Keystore (very rare, old devices)
-            Log.e(TAG, "EncryptedSharedPreferences failed, using fallback: ${e.message}")
-            context.getSharedPreferences("${SECURE_PREFS_NAME}_fallback", Context.MODE_PRIVATE)
+            Log.e(TAG, "EncryptedSharedPreferences failed: ${e.message}")
+            // Try deleting corrupted prefs file and retrying (common after reinstall)
+            try {
+                val prefsFile = java.io.File(context.applicationInfo.dataDir, "shared_prefs/${SECURE_PREFS_NAME}.xml")
+                if (prefsFile.exists()) {
+                    prefsFile.delete()
+                    Log.i(TAG, "Deleted corrupted prefs file, retrying...")
+                }
+                val masterKey = MasterKey.Builder(context)
+                    .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                    .build()
+                EncryptedSharedPreferences.create(
+                    context,
+                    SECURE_PREFS_NAME,
+                    masterKey,
+                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+                )
+            } catch (e2: Exception) {
+                Log.e(TAG, "Retry also failed, using fallback: ${e2.message}")
+                context.getSharedPreferences("${SECURE_PREFS_NAME}_fallback", Context.MODE_PRIVATE)
+            }
         }
     }
 

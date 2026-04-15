@@ -1,21 +1,66 @@
 package com.beemovil.core.config
 
 import android.content.Context
+import android.content.SharedPreferences
+import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
 class ApiConfigManager private constructor(context: Context) {
-    private val masterKey = MasterKey.Builder(context)
-        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-        .build()
+    
+    private val prefs: SharedPreferences = createPrefs(context)
+    
+    companion object {
+        private const val TAG = "ApiConfigManager"
+        private const val PREFS_NAME = "emma_secure_prefs"
+        
+        @Volatile
+        private var instance: ApiConfigManager? = null
 
-    private val prefs = EncryptedSharedPreferences.create(
-        context,
-        "emma_secure_prefs",
-        masterKey,
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-    )
+        fun getInstance(context: Context): ApiConfigManager {
+            return instance ?: synchronized(this) {
+                instance ?: ApiConfigManager(context.applicationContext).also { instance = it }
+            }
+        }
+        
+        private fun createPrefs(context: Context): SharedPreferences {
+            return try {
+                val masterKey = MasterKey.Builder(context)
+                    .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                    .build()
+                EncryptedSharedPreferences.create(
+                    context,
+                    PREFS_NAME,
+                    masterKey,
+                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "EncryptedSharedPreferences failed (likely reinstall): ${e.message}")
+                // Try deleting the corrupted prefs file and retrying
+                try {
+                    val prefsFile = java.io.File(context.applicationInfo.dataDir, "shared_prefs/${PREFS_NAME}.xml")
+                    if (prefsFile.exists()) {
+                        prefsFile.delete()
+                        Log.i(TAG, "Deleted corrupted prefs file, retrying...")
+                    }
+                    val masterKey = MasterKey.Builder(context)
+                        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                        .build()
+                    EncryptedSharedPreferences.create(
+                        context,
+                        PREFS_NAME,
+                        masterKey,
+                        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+                    )
+                } catch (e2: Exception) {
+                    Log.e(TAG, "Retry also failed, using plain fallback: ${e2.message}")
+                    context.getSharedPreferences("${PREFS_NAME}_fallback", Context.MODE_PRIVATE)
+                }
+            }
+        }
+    }
 
     // "openrouter", "ollama", "local", "custom"
     var providerPreset: String
@@ -42,15 +87,4 @@ class ApiConfigManager private constructor(context: Context) {
     var deepgramKey: String
         get() = prefs.getString("deepgram_key", "") ?: ""
         set(value) = prefs.edit().putString("deepgram_key", value).apply()
-
-    companion object {
-        @Volatile
-        private var instance: ApiConfigManager? = null
-
-        fun getInstance(context: Context): ApiConfigManager {
-            return instance ?: synchronized(this) {
-                instance ?: ApiConfigManager(context.applicationContext).also { instance = it }
-            }
-        }
-    }
 }
