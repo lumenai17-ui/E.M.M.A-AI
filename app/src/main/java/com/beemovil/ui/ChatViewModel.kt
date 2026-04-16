@@ -169,15 +169,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             activeAgentConfig.value = agent
             activeAgentName.value = agent.name
             activeSystemPrompt.value = agent.systemPrompt
-            // UI-06 fix: parse fallbackModel correctamente igual que openAgentChat
+            // Parse fallbackModel: only override provider/model if agent has a specific one
             if (agent.fallbackModel.startsWith("hermes-a2a")) {
                 currentProvider.value = agent.fallbackModel
                 currentModel.value = ""
-            } else {
+            } else if (agent.fallbackModel != "koog-engine" && agent.fallbackModel.contains(":")) {
                 val parts = agent.fallbackModel.split(":", limit = 2)
-                currentProvider.value = if (parts.isNotEmpty()) parts[0] else "openrouter"
-                currentModel.value = if (parts.size > 1) parts[1] else agent.fallbackModel
+                currentProvider.value = parts[0]
+                currentModel.value = parts[1]
             }
+            // else: "koog-engine" → keep global settings
             refreshSwarmData()
         }
     }
@@ -391,15 +392,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             
             engine.loadPersistedContext(pastMessages, agent.systemPrompt)
             
-            // Parse fallbackModel correctamente (formato "provider:modelId" o "hermes-a2a|url|token")
+            // Parse fallbackModel: "provider:modelId", "hermes-a2a|url|token", or "koog-engine" (global)
             if (agent.fallbackModel.startsWith("hermes-a2a")) {
-                currentProvider.value = agent.fallbackModel  // pass through completo para hermes
+                currentProvider.value = agent.fallbackModel
                 currentModel.value = ""
-            } else {
+            } else if (agent.fallbackModel != "koog-engine" && agent.fallbackModel.contains(":")) {
                 val parts = agent.fallbackModel.split(":", limit = 2)
-                currentProvider.value = if (parts.isNotEmpty()) parts[0] else "openrouter"
-                currentModel.value = if (parts.size > 1) parts[1] else agent.fallbackModel
+                currentProvider.value = parts[0]
+                currentModel.value = parts[1]
             }
+            // else: "koog-engine" → keep current global provider/model untouched
             currentScreen.value = "chat"
         }
     }
@@ -606,15 +608,21 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val capturedThreadId = activeThreadId.value
         val context = getApplication<Application>()
         
-        // Bug 1 fix: Use the agent's own model if there's an active agent config
+        // Use the agent's own model if configured, otherwise fall back to global settings
         val agentConfig = activeAgentConfig.value
         val capturedProvider: String
         val capturedModel: String
-        if (agentConfig != null && agentConfig.fallbackModel.isNotBlank()) {
-            val parts = agentConfig.fallbackModel.split(":", limit = 2)
-            capturedProvider = if (parts.isNotEmpty()) parts[0] else "openrouter"
-            capturedModel = if (parts.size > 1) parts[1] else agentConfig.fallbackModel
+        val agentModel = agentConfig?.fallbackModel ?: ""
+        if (agentModel.isNotBlank() && agentModel != "koog-engine" && agentModel.contains(":")) {
+            // Agent has a specific model like "openrouter:google/gemini-2.5-flash"
+            val parts = agentModel.split(":", limit = 2)
+            capturedProvider = parts[0]
+            capturedModel = parts[1]
+        } else if (agentModel.startsWith("hermes-a2a")) {
+            capturedProvider = agentModel
+            capturedModel = ""
         } else {
+            // "koog-engine" or blank → use global user settings
             capturedProvider = currentProvider.value
             capturedModel = currentModel.value
         }

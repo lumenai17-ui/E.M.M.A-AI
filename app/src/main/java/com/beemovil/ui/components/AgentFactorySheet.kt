@@ -73,17 +73,21 @@ fun AgentFactorySheet(
 
     val modelOptions = remember {
         val options = mutableListOf<Pair<String, String>>()
-        options.add("koog-engine" to "K.O.O.G Engine (Default)")
-        options.add("hermes-a2a" to "Hermes A2A (Remoto)")
+        options.add("koog-engine" to "⚙️ Usar config global (Default)")
+        options.add("hermes-a2a" to "🔗 Hermes A2A (Túnel Remoto)")
         
+        // OpenRouter models with free/premium badges
         com.beemovil.llm.ModelRegistry.OPENROUTER.forEach { model ->
-            options.add("openrouter:${model.id}" to "Cloud: ${model.name}")
+            val badge = if (model.free) "🆓" else "💎"
+            options.add("openrouter:${model.id}" to "$badge ${model.name}")
         }
+        // Ollama Cloud
         com.beemovil.llm.ModelRegistry.OLLAMA_CLOUD.forEach { model ->
-            options.add("ollama:${model.id}" to "Ollama: ${model.name}")
+            options.add("ollama:${model.id}" to "☁️ ${model.name}")
         }
+        // Local on-device
         com.beemovil.llm.ModelRegistry.LOCAL.forEach { model ->
-            options.add("local:${model.id}" to "Native Offline: ${model.name}")
+            options.add("local:${model.id}" to "📱 ${model.name}")
         }
         options
     }
