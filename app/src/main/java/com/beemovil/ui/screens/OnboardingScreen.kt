@@ -81,21 +81,21 @@ fun OnboardingScreen(onComplete: () -> Unit) {
     val bgGradient = if (isDark) {
         listOf(Color(0xFF0A0A12), Color(0xFF0D0D1A), Color(0xFF12101F))
     } else {
-        listOf(Color(0xFFF8F5F0), Color(0xFFF0EDE6), Color(0xFFE8E4DD))
+        listOf(Color(0xFFF5F0E8), Color(0xFFEDE8E0), Color(0xFFE5E0D8))
     }
-    val glowColor1 = if (isDark) HoneyGold.copy(alpha = 0.08f) else BrandBlue.copy(alpha = 0.06f)
-    val glowColor2 = if (isDark) AccentViolet.copy(alpha = 0.06f) else BrandGreen.copy(alpha = 0.06f)
-    val textPrimary = if (isDark) TextWhite else TextDark
-    val textSecondary = if (isDark) TextGrayLight else TextGrayDark
-    val textMuted = if (isDark) TextGrayMuted else TextGrayDarker
+    val glowColor1 = if (isDark) HoneyGold.copy(alpha = 0.08f) else BrandBlue.copy(alpha = 0.08f)
+    val glowColor2 = if (isDark) AccentViolet.copy(alpha = 0.06f) else BrandGreen.copy(alpha = 0.08f)
+    val textPrimary = if (isDark) TextWhite else Color(0xFF1A2030)
+    val textSecondary = if (isDark) TextGrayLight else Color(0xFF4A5568)
+    val textMuted = if (isDark) TextGrayMuted else Color(0xFF718096)
     val accentColor = if (isDark) HoneyGold else BrandBlue
-    val cardBg = if (isDark) Color.White.copy(alpha = 0.04f) else Color.Black.copy(alpha = 0.03f)
-    val cardBorder = if (isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.06f)
+    val cardBg = if (isDark) Color.White.copy(alpha = 0.04f) else Color.White.copy(alpha = 0.7f)
+    val cardBorder = if (isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.1f)
     val inputBg = if (isDark) Color.White.copy(alpha = 0.05f) else Color.White
-    val inputBorder = if (isDark) Color.White.copy(alpha = 0.15f) else Color.Black.copy(alpha = 0.1f)
-    val progressInactive = if (isDark) Color.White.copy(alpha = 0.1f) else Color.Black.copy(alpha = 0.08f)
-    val btnDisabledBg = if (isDark) Color.White.copy(alpha = 0.1f) else Color.Black.copy(alpha = 0.05f)
-    val btnDisabledText = if (isDark) Color.White.copy(alpha = 0.3f) else Color.Black.copy(alpha = 0.25f)
+    val inputBorder = if (isDark) Color.White.copy(alpha = 0.15f) else Color.Black.copy(alpha = 0.15f)
+    val progressInactive = if (isDark) Color.White.copy(alpha = 0.1f) else Color.Black.copy(alpha = 0.12f)
+    val btnDisabledBg = if (isDark) Color.White.copy(alpha = 0.1f) else Color.Black.copy(alpha = 0.08f)
+    val btnDisabledText = if (isDark) Color.White.copy(alpha = 0.3f) else Color.Black.copy(alpha = 0.3f)
 
     Box(
         modifier = Modifier
@@ -637,13 +637,23 @@ private fun ProviderCard(
     tag: String,
     onClick: () -> Unit
 ) {
+    val isDark = isDarkTheme()
+    val textPri = if (isDark) TextWhite else Color(0xFF1A2030)
+    val textSec = if (isDark) TextGrayLight else Color(0xFF4A5568)
+    val unselectedBorder = if (isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.1f)
+    val tagBg = if (isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.06f)
+
     val borderColor by animateColorAsState(
-        targetValue = if (isSelected) accentColor else Color.White.copy(alpha = 0.08f),
+        targetValue = if (isSelected) accentColor else unselectedBorder,
         animationSpec = tween(300),
         label = "border"
     )
     val bgAlpha by animateFloatAsState(
-        targetValue = if (isSelected) 0.12f else 0.04f,
+        targetValue = if (isSelected) {
+            if (isDark) 0.12f else 0.15f
+        } else {
+            if (isDark) 0.04f else 0.06f
+        },
         animationSpec = tween(300),
         label = "bg"
     )
@@ -674,25 +684,25 @@ private fun ProviderCard(
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(title, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = TextWhite)
-                    Text(subtitle, fontSize = 12.sp, color = TextGrayLight)
+                    Text(title, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = textPri)
+                    Text(subtitle, fontSize = 12.sp, color = textSec)
                 }
                 // Tag
                 Surface(
-                    color = if (isRecommended) AccentGreen.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.08f),
+                    color = if (isRecommended) AccentGreen.copy(alpha = 0.2f) else tagBg,
                     shape = RoundedCornerShape(6.dp)
                 ) {
                     Text(
                         tag,
                         fontSize = 9.sp,
                         fontWeight = FontWeight.Bold,
-                        color = if (isRecommended) AccentGreen else TextGrayLight,
+                        color = if (isRecommended) AccentGreen else textSec,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
                 }
             }
             Spacer(modifier = Modifier.height(10.dp))
-            Text(description, fontSize = 13.sp, color = TextGrayLight, lineHeight = 18.sp)
+            Text(description, fontSize = 13.sp, color = textSec, lineHeight = 18.sp)
 
             // Selection indicator
             if (isSelected) {
@@ -742,6 +752,10 @@ private fun LocalSetupPage(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val isDark = isDarkTheme()
+    val textPri = if (isDark) TextWhite else Color(0xFF1A2030)
+    val textSec = if (isDark) TextGrayLight else Color(0xFF4A5568)
+    val accentClr = if (isDark) HoneyGold else BrandBlue
 
     // Model states
     val models = LocalModelManager.AVAILABLE_MODELS
@@ -779,9 +793,9 @@ private fun LocalSetupPage(
         Spacer(modifier = Modifier.height(20.dp))
 
         TextButton(onClick = onBack, enabled = !isDownloading) {
-            Icon(Icons.Filled.ArrowBack, "Back", tint = TextGrayLight, modifier = Modifier.size(18.dp))
+            Icon(Icons.Filled.ArrowBack, "Back", tint = textSec, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(4.dp))
-            Text("Atrás", color = TextGrayLight, fontSize = 14.sp)
+            Text("Atrás", color = textSec, fontSize = 14.sp)
         }
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -790,12 +804,12 @@ private fun LocalSetupPage(
             "Descarga tu IA local",
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
-            color = TextWhite
+            color = textPri
         )
         Text(
             "Elige uno o ambos modelos de Gemma 4",
             fontSize = 14.sp,
-            color = TextGrayLight
+            color = textSec
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -809,12 +823,12 @@ private fun LocalSetupPage(
                 modifier = Modifier.padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Filled.Storage, "Storage", tint = TextGrayLight, modifier = Modifier.size(18.dp))
+                Icon(Icons.Filled.Storage, "Storage", tint = textSec, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     "Espacio disponible: ${String.format("%.1f", storageGB)} GB",
                     fontSize = 13.sp,
-                    color = TextGrayLight
+                    color = textSec
                 )
             }
         }
@@ -950,8 +964,8 @@ private fun LocalSetupPage(
                 colors = ButtonDefaults.buttonColors(
                     containerColor = AccentGreen,
                     contentColor = Color.White,
-                    disabledContainerColor = Color.White.copy(alpha = 0.1f),
-                    disabledContentColor = Color.White.copy(alpha = 0.3f)
+                    disabledContainerColor = if (isDark) Color.White.copy(alpha = 0.1f) else Color.Black.copy(alpha = 0.08f),
+                    disabledContentColor = if (isDark) Color.White.copy(alpha = 0.3f) else Color.Black.copy(alpha = 0.3f)
                 )
             ) {
                 Icon(Icons.Filled.Download, "Download", modifier = Modifier.size(20.dp))
@@ -984,10 +998,10 @@ private fun LocalSetupPage(
                 .height(54.dp),
             shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = HoneyGold,
-                contentColor = Color.Black,
-                disabledContainerColor = Color.White.copy(alpha = 0.08f),
-                disabledContentColor = Color.White.copy(alpha = 0.2f)
+                containerColor = if (isDark) HoneyGold else BrandBlue,
+                        contentColor = if (isDark) Color.Black else Color.White,
+                disabledContainerColor = if (isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.06f),
+                disabledContentColor = if (isDark) Color.White.copy(alpha = 0.2f) else Color.Black.copy(alpha = 0.25f)
             )
         ) {
             Text(
@@ -1019,6 +1033,13 @@ private fun ModelDownloadCard(
     enabled: Boolean,
     onToggle: () -> Unit
 ) {
+    val isDark = isDarkTheme()
+    val textPri = if (isDark) TextWhite else Color(0xFF1A2030)
+    val textSec = if (isDark) TextGrayLight else Color(0xFF4A5568)
+    val unselBorder = if (isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.08f)
+    val unselBg = if (isDark) Color.White.copy(alpha = 0.03f) else Color.Black.copy(alpha = 0.03f)
+    val tagBg = if (isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.06f)
+    val trackBg = if (isDark) Color.White.copy(alpha = 0.1f) else Color.Black.copy(alpha = 0.08f)
     val borderColor = when {
         isCompleted -> AccentGreen
         isSelected -> HoneyGold
@@ -1039,7 +1060,7 @@ private fun ModelDownloadCard(
         color = when {
             isCompleted -> AccentGreen.copy(alpha = 0.08f)
             isSelected -> HoneyGold.copy(alpha = 0.08f)
-            else -> Color.White.copy(alpha = 0.03f)
+            else -> unselBg
         }
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -1053,7 +1074,7 @@ private fun ModelDownloadCard(
                             when {
                                 isCompleted -> AccentGreen.copy(alpha = 0.2f)
                                 isSelected -> HoneyGold.copy(alpha = 0.2f)
-                                else -> Color.White.copy(alpha = 0.06f)
+                                else -> unselBorder
                             }
                         ),
                     contentAlignment = Alignment.Center
@@ -1066,18 +1087,18 @@ private fun ModelDownloadCard(
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(name, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = TextWhite)
-                    Text(description, fontSize = 12.sp, color = TextGrayLight)
+                    Text(name, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = textPri)
+                    Text(description, fontSize = 12.sp, color = textSec)
                 }
                 Surface(
-                    color = Color.White.copy(alpha = 0.08f),
+                    color = tagBg,
                     shape = RoundedCornerShape(6.dp)
                 ) {
                     Text(
                         if (isCompleted) "✅ LISTO" else sizeDisplay,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        color = if (isCompleted) AccentGreen else TextGrayLight,
+                        color = if (isCompleted) AccentGreen else textSec,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
                 }
@@ -1094,7 +1115,7 @@ private fun ModelDownloadCard(
                             .height(6.dp)
                             .clip(RoundedCornerShape(3.dp)),
                         color = HoneyGold,
-                        trackColor = Color.White.copy(alpha = 0.1f)
+                        trackColor = trackBg
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -1107,7 +1128,7 @@ private fun ModelDownloadCard(
                         Text(
                             "${downloadedMB} MB / ${totalMB} MB",
                             fontSize = 11.sp,
-                            color = TextGrayLight
+                            color = textSec
                         )
                     }
                 }
@@ -1128,6 +1149,9 @@ private fun OpenRouterSetupPage(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val isDark = isDarkTheme()
+    val textPri = if (isDark) TextWhite else Color(0xFF1A2030)
+    val textSec = if (isDark) TextGrayLight else Color(0xFF4A5568)
 
     var apiKey by remember { mutableStateOf("") }
     var showKey by remember { mutableStateOf(false) }
@@ -1144,9 +1168,9 @@ private fun OpenRouterSetupPage(
         Spacer(modifier = Modifier.height(20.dp))
 
         TextButton(onClick = onBack) {
-            Icon(Icons.Filled.ArrowBack, "Back", tint = TextGrayLight, modifier = Modifier.size(18.dp))
+            Icon(Icons.Filled.ArrowBack, "Back", tint = textSec, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(4.dp))
-            Text("Atrás", color = TextGrayLight, fontSize = 14.sp)
+            Text("Atrás", color = textSec, fontSize = 14.sp)
         }
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -1155,7 +1179,7 @@ private fun OpenRouterSetupPage(
             "Configura OpenRouter",
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
-            color = TextWhite
+            color = textPri
         )
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -1208,7 +1232,7 @@ private fun OpenRouterSetupPage(
                 validationResult = null
             },
             label = { Text("API Key de OpenRouter") },
-            placeholder = { Text("sk-or-v1-...", color = TextGrayMuted) },
+            placeholder = { Text("sk-or-v1-...", color = textSec) },
             singleLine = true,
             visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
             trailingIcon = {
@@ -1216,7 +1240,7 @@ private fun OpenRouterSetupPage(
                     Icon(
                         if (showKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
                         "Toggle",
-                        tint = TextGrayLight
+                        tint = textSec
                     )
                 }
             },
@@ -1224,14 +1248,14 @@ private fun OpenRouterSetupPage(
             shape = RoundedCornerShape(14.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = AccentBlue,
-                unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                unfocusedBorderColor = if (isDark) Color.White.copy(alpha = 0.15f) else Color.Black.copy(alpha = 0.15f),
                 cursorColor = AccentBlue,
-                focusedTextColor = TextWhite,
-                unfocusedTextColor = TextWhite,
-                focusedContainerColor = Color.White.copy(alpha = 0.05f),
-                unfocusedContainerColor = Color.White.copy(alpha = 0.03f),
+                focusedTextColor = textPri,
+                unfocusedTextColor = textPri,
+                focusedContainerColor = if (isDark) Color.White.copy(alpha = 0.05f) else Color.White,
+                unfocusedContainerColor = if (isDark) Color.White.copy(alpha = 0.03f) else Color.White.copy(alpha = 0.9f),
                 focusedLabelColor = AccentBlue,
-                unfocusedLabelColor = TextGrayLight
+                unfocusedLabelColor = textSec
             )
         )
 
@@ -1278,7 +1302,7 @@ private fun OpenRouterSetupPage(
             colors = ButtonDefaults.buttonColors(
                 containerColor = AccentBlue,
                 contentColor = Color.White,
-                disabledContainerColor = Color.White.copy(alpha = 0.1f)
+                disabledContainerColor = if (isDark) Color.White.copy(alpha = 0.1f) else Color.Black.copy(alpha = 0.08f)
             )
         ) {
             if (isValidating) {
@@ -1320,7 +1344,7 @@ private fun OpenRouterSetupPage(
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     "• Qwen 3.6+ — Coding + Razonamiento\n• Llama 3.3 70B — Meta flagship\n• Gemma 3 27B — Google con visión\n• Y muchos más...",
-                    fontSize = 12.sp, color = TextGrayLight, lineHeight = 18.sp
+                    fontSize = 12.sp, color = textSec, lineHeight = 18.sp
                 )
             }
         }
@@ -1348,10 +1372,10 @@ private fun OpenRouterSetupPage(
                 .height(54.dp),
             shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = HoneyGold,
-                contentColor = Color.Black,
-                disabledContainerColor = Color.White.copy(alpha = 0.08f),
-                disabledContentColor = Color.White.copy(alpha = 0.2f)
+                containerColor = if (isDark) HoneyGold else BrandBlue,
+                        contentColor = if (isDark) Color.Black else Color.White,
+                disabledContainerColor = if (isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.06f),
+                disabledContentColor = if (isDark) Color.White.copy(alpha = 0.2f) else Color.Black.copy(alpha = 0.25f)
             )
         ) {
             Text("¡Listo! Entrar a E.M.M.A.", fontSize = 16.sp, fontWeight = FontWeight.Bold)
@@ -1377,6 +1401,9 @@ private fun OllamaSetupPage(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val isDark = isDarkTheme()
+    val textPri = if (isDark) TextWhite else Color(0xFF1A2030)
+    val textSec = if (isDark) TextGrayLight else Color(0xFF4A5568)
 
     var ollamaKey by remember { mutableStateOf("") }
     var showKey by remember { mutableStateOf(false) }
@@ -1393,9 +1420,9 @@ private fun OllamaSetupPage(
         Spacer(modifier = Modifier.height(20.dp))
 
         TextButton(onClick = onBack) {
-            Icon(Icons.Filled.ArrowBack, "Back", tint = TextGrayLight, modifier = Modifier.size(18.dp))
+            Icon(Icons.Filled.ArrowBack, "Back", tint = textSec, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(4.dp))
-            Text("Atrás", color = TextGrayLight, fontSize = 14.sp)
+            Text("Atrás", color = textSec, fontSize = 14.sp)
         }
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -1404,7 +1431,7 @@ private fun OllamaSetupPage(
             "Configura Ollama Cloud",
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
-            color = TextWhite
+            color = textPri
         )
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -1457,14 +1484,14 @@ private fun OllamaSetupPage(
                 validationResult = null
             },
             label = { Text("API Key de Ollama") },
-            placeholder = { Text("Tu API key de ollama.com", color = TextGrayMuted) },
+            placeholder = { Text("Tu API key de ollama.com", color = textSec) },
             singleLine = true,
             visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
             trailingIcon = {
                 IconButton(onClick = { showKey = !showKey }) {
                     Icon(
                         if (showKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                        "Toggle", tint = TextGrayLight
+                        "Toggle", tint = textSec
                     )
                 }
             },
@@ -1472,14 +1499,14 @@ private fun OllamaSetupPage(
             shape = RoundedCornerShape(14.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = AccentViolet,
-                unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                unfocusedBorderColor = if (isDark) Color.White.copy(alpha = 0.15f) else Color.Black.copy(alpha = 0.15f),
                 cursorColor = AccentViolet,
-                focusedTextColor = TextWhite,
-                unfocusedTextColor = TextWhite,
-                focusedContainerColor = Color.White.copy(alpha = 0.05f),
-                unfocusedContainerColor = Color.White.copy(alpha = 0.03f),
+                focusedTextColor = textPri,
+                unfocusedTextColor = textPri,
+                focusedContainerColor = if (isDark) Color.White.copy(alpha = 0.05f) else Color.White,
+                unfocusedContainerColor = if (isDark) Color.White.copy(alpha = 0.03f) else Color.White.copy(alpha = 0.9f),
                 focusedLabelColor = AccentViolet,
-                unfocusedLabelColor = TextGrayLight
+                unfocusedLabelColor = textSec
             )
         )
 
@@ -1525,7 +1552,7 @@ private fun OllamaSetupPage(
             colors = ButtonDefaults.buttonColors(
                 containerColor = AccentViolet,
                 contentColor = Color.White,
-                disabledContainerColor = Color.White.copy(alpha = 0.1f)
+                disabledContainerColor = if (isDark) Color.White.copy(alpha = 0.1f) else Color.Black.copy(alpha = 0.08f)
             )
         ) {
             if (isValidating) {
@@ -1567,7 +1594,7 @@ private fun OllamaSetupPage(
                     "• Qwen 3.5 — Alibaba multimodal\n" +
                     "• Devstral 2 — Mistral coding agent\n" +
                     "• Y muchos más...",
-                    fontSize = 12.sp, color = TextGrayLight, lineHeight = 18.sp
+                    fontSize = 12.sp, color = textSec, lineHeight = 18.sp
                 )
             }
         }
@@ -1595,10 +1622,10 @@ private fun OllamaSetupPage(
                 .height(54.dp),
             shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = HoneyGold,
-                contentColor = Color.Black,
-                disabledContainerColor = Color.White.copy(alpha = 0.08f),
-                disabledContentColor = Color.White.copy(alpha = 0.2f)
+                containerColor = if (isDark) HoneyGold else BrandBlue,
+                        contentColor = if (isDark) Color.Black else Color.White,
+                disabledContainerColor = if (isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.06f),
+                disabledContentColor = if (isDark) Color.White.copy(alpha = 0.2f) else Color.Black.copy(alpha = 0.25f)
             )
         ) {
             Text(
@@ -1623,6 +1650,9 @@ private fun OllamaSetupPage(
 
 @Composable
 private fun SetupStep(number: String, title: String, description: String) {
+    val isDark = isDarkTheme()
+    val titleColor = if (isDark) TextWhite else Color(0xFF1A2030)
+    val descColor = if (isDark) TextGrayLight else Color(0xFF4A5568)
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.Top
@@ -1638,8 +1668,8 @@ private fun SetupStep(number: String, title: String, description: String) {
         }
         Spacer(modifier = Modifier.width(12.dp))
         Column {
-            Text(title, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = TextWhite)
-            Text(description, fontSize = 13.sp, color = TextGrayLight)
+            Text(title, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = titleColor)
+            Text(description, fontSize = 13.sp, color = descColor)
         }
     }
 }
