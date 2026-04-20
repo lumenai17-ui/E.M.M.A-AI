@@ -24,8 +24,10 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -33,6 +35,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.beemovil.R
 import com.beemovil.ui.theme.*
 import com.beemovil.llm.local.LocalModelManager
 import com.beemovil.security.SecurePrefs
@@ -64,6 +67,9 @@ fun OnboardingScreen(onComplete: () -> Unit) {
     var userName by remember { mutableStateOf("") }
     var selectedProvider by remember { mutableStateOf("") }  // "local", "openrouter", "ollama"
 
+    // Theme state — user chooses during onboarding
+    val isDark = isDarkTheme()
+
     // Animation entrance
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
@@ -71,18 +77,30 @@ fun OnboardingScreen(onComplete: () -> Unit) {
         visible = true
     }
 
+    // Theme-aware colors
+    val bgGradient = if (isDark) {
+        listOf(Color(0xFF0A0A12), Color(0xFF0D0D1A), Color(0xFF12101F))
+    } else {
+        listOf(Color(0xFFF8F5F0), Color(0xFFF0EDE6), Color(0xFFE8E4DD))
+    }
+    val glowColor1 = if (isDark) HoneyGold.copy(alpha = 0.08f) else BrandBlue.copy(alpha = 0.06f)
+    val glowColor2 = if (isDark) AccentViolet.copy(alpha = 0.06f) else BrandGreen.copy(alpha = 0.06f)
+    val textPrimary = if (isDark) TextWhite else TextDark
+    val textSecondary = if (isDark) TextGrayLight else TextGrayDark
+    val textMuted = if (isDark) TextGrayMuted else TextGrayDarker
+    val accentColor = if (isDark) HoneyGold else BrandBlue
+    val cardBg = if (isDark) Color.White.copy(alpha = 0.04f) else Color.Black.copy(alpha = 0.03f)
+    val cardBorder = if (isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.06f)
+    val inputBg = if (isDark) Color.White.copy(alpha = 0.05f) else Color.White
+    val inputBorder = if (isDark) Color.White.copy(alpha = 0.15f) else Color.Black.copy(alpha = 0.1f)
+    val progressInactive = if (isDark) Color.White.copy(alpha = 0.1f) else Color.Black.copy(alpha = 0.08f)
+    val btnDisabledBg = if (isDark) Color.White.copy(alpha = 0.1f) else Color.Black.copy(alpha = 0.05f)
+    val btnDisabledText = if (isDark) Color.White.copy(alpha = 0.3f) else Color.Black.copy(alpha = 0.25f)
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFF0A0A12),
-                        Color(0xFF0D0D1A),
-                        Color(0xFF12101F)
-                    )
-                )
-            )
+            .background(Brush.verticalGradient(colors = bgGradient))
     ) {
         // ── Ambient glow background ──
         Box(
@@ -90,14 +108,7 @@ fun OnboardingScreen(onComplete: () -> Unit) {
                 .size(300.dp)
                 .offset(x = (-50).dp, y = (-50).dp)
                 .blur(120.dp)
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            HoneyGold.copy(alpha = 0.08f),
-                            Color.Transparent
-                        )
-                    )
-                )
+                .background(Brush.radialGradient(colors = listOf(glowColor1, Color.Transparent)))
         )
         Box(
             modifier = Modifier
@@ -105,14 +116,7 @@ fun OnboardingScreen(onComplete: () -> Unit) {
                 .align(Alignment.BottomEnd)
                 .offset(x = 80.dp, y = 80.dp)
                 .blur(100.dp)
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            AccentViolet.copy(alpha = 0.06f),
-                            Color.Transparent
-                        )
-                    )
-                )
+                .background(Brush.radialGradient(colors = listOf(glowColor2, Color.Transparent)))
         )
 
         Column(
@@ -140,9 +144,9 @@ fun OnboardingScreen(onComplete: () -> Unit) {
                                 .clip(RoundedCornerShape(2.dp))
                                 .background(
                                     when {
-                                        isActive -> HoneyGold
-                                        isPast -> HoneyGold.copy(alpha = 0.5f)
-                                        else -> Color.White.copy(alpha = 0.1f)
+                                        isActive -> accentColor
+                                        isPast -> accentColor.copy(alpha = 0.5f)
+                                        else -> progressInactive
                                     }
                                 )
                         )
@@ -171,6 +175,16 @@ fun OnboardingScreen(onComplete: () -> Unit) {
                     0 -> WelcomePage(
                         userName = userName,
                         onNameChanged = { userName = it },
+                        isDark = isDark,
+                        textPrimary = textPrimary,
+                        textSecondary = textSecondary,
+                        textMuted = textMuted,
+                        accentColor = accentColor,
+                        cardBg = cardBg,
+                        inputBg = inputBg,
+                        inputBorder = inputBorder,
+                        btnDisabledBg = btnDisabledBg,
+                        btnDisabledText = btnDisabledText,
                         onNext = {
                             if (userName.isNotBlank()) {
                                 // Save name immediately
@@ -185,6 +199,13 @@ fun OnboardingScreen(onComplete: () -> Unit) {
                     1 -> ChooseProviderPage(
                         selected = selectedProvider,
                         onSelect = { selectedProvider = it },
+                        isDark = isDark,
+                        textPrimary = textPrimary,
+                        textSecondary = textSecondary,
+                        accentColor = accentColor,
+                        cardBorder = cardBorder,
+                        btnDisabledBg = btnDisabledBg,
+                        btnDisabledText = btnDisabledText,
                         onNext = { currentStep = 2 },
                         onBack = { currentStep = 0 }
                     )
@@ -193,10 +214,12 @@ fun OnboardingScreen(onComplete: () -> Unit) {
                         userName = userName,
                         onBack = { currentStep = 1 },
                         onComplete = {
-                            // Mark onboarding done
+                            // Save theme preference
+                            val themeValue = if (isDark) "dark" else "light"
                             context.getSharedPreferences("beemovil", Context.MODE_PRIVATE)
                                 .edit()
                                 .putBoolean("onboarding_completed", true)
+                                .putString("app_theme", themeValue)
                                 .apply()
                             onComplete()
                         }
@@ -215,6 +238,16 @@ fun OnboardingScreen(onComplete: () -> Unit) {
 private fun WelcomePage(
     userName: String,
     onNameChanged: (String) -> Unit,
+    isDark: Boolean,
+    textPrimary: Color,
+    textSecondary: Color,
+    textMuted: Color,
+    accentColor: Color,
+    cardBg: Color,
+    inputBg: Color,
+    inputBorder: Color,
+    btnDisabledBg: Color,
+    btnDisabledText: Color,
     onNext: () -> Unit
 ) {
     val focusManager = LocalFocusManager.current
@@ -249,73 +282,120 @@ private fun WelcomePage(
             .padding(horizontal = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(modifier = Modifier.height(40.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
-        // ── Logo ──
-        Box(
-            modifier = Modifier
-                .size(100.dp)
-                .scale(logoScale)
-                .alpha(logoAlpha)
-                .clip(CircleShape)
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(HoneyGold, HoneyAmber)
-                    )
-                ),
-            contentAlignment = Alignment.Center
+        // ── Theme toggle ──
+        AnimatedVisibility(
+            visible = logoVisible,
+            enter = fadeIn(tween(600, delayMillis = 400))
         ) {
-            Text(
-                "E",
-                fontSize = 44.sp,
-                fontWeight = FontWeight.Black,
-                color = Color.White
-            )
+            Surface(
+                onClick = {
+                    val newDark = !isDark
+                    BeeThemeState.forceDark.value = newDark
+                },
+                color = cardBg,
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, if (isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.06f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        if (isDark) Icons.Filled.DarkMode else Icons.Filled.LightMode,
+                        "Theme",
+                        tint = accentColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        if (isDark) "Modo Oscuro" else "Modo Claro",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = textPrimary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "· Toca para cambiar",
+                        fontSize = 12.sp,
+                        color = textSecondary
+                    )
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(24.dp))
+
+        // ── Logo ──
+        Image(
+            painter = painterResource(R.drawable.emma_logo),
+            contentDescription = "E.M.M.A. AI",
+            modifier = Modifier
+                .size(110.dp)
+                .scale(logoScale)
+                .alpha(logoAlpha)
+                .clip(RoundedCornerShape(24.dp)),
+            contentScale = ContentScale.Crop
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
 
         Text(
             "E.M.M.A. AI",
             fontSize = 28.sp,
             fontWeight = FontWeight.Bold,
-            color = TextWhite,
+            color = textPrimary,
             modifier = Modifier.alpha(logoAlpha)
         )
         Text(
             "Tu asistente de IA privado",
             fontSize = 16.sp,
-            color = TextGrayLight,
+            color = textSecondary,
             modifier = Modifier.alpha(logoAlpha)
         )
 
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(28.dp))
 
         // ── Features ──
         AnimatedVisibility(
             visible = featuresVisible,
             enter = fadeIn(tween(600)) + slideInVertically { 40 }
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 FeatureItem(
                     icon = Icons.Filled.Psychology,
                     text = "Procesa documentos, imágenes y voz",
+                    isDark = isDark,
+                    accentColor = accentColor,
+                    textColor = textPrimary,
+                    cardBg = cardBg,
                     delay = 0
                 )
                 FeatureItem(
                     icon = Icons.Filled.Lock,
                     text = "Tu data nunca sale del teléfono",
+                    isDark = isDark,
+                    accentColor = accentColor,
+                    textColor = textPrimary,
+                    cardBg = cardBg,
                     delay = 150
                 )
                 FeatureItem(
                     icon = Icons.Filled.AutoAwesome,
                     text = "18 herramientas nativas integradas",
+                    isDark = isDark,
+                    accentColor = accentColor,
+                    textColor = textPrimary,
+                    cardBg = cardBg,
                     delay = 300
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(40.dp))
+        Spacer(modifier = Modifier.height(32.dp))
 
         // ── Name input ──
         AnimatedVisibility(
@@ -327,14 +407,14 @@ private fun WelcomePage(
                     "¿Cómo te llamas?",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = TextWhite
+                    color = textPrimary
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 OutlinedTextField(
                     value = userName,
                     onValueChange = onNameChanged,
                     placeholder = {
-                        Text("Tu nombre", color = TextGrayMuted)
+                        Text("Tu nombre", color = textMuted)
                     },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
@@ -345,17 +425,17 @@ private fun WelcomePage(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = HoneyGold,
-                        unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
-                        cursorColor = HoneyGold,
-                        focusedTextColor = TextWhite,
-                        unfocusedTextColor = TextWhite,
-                        focusedContainerColor = Color.White.copy(alpha = 0.05f),
-                        unfocusedContainerColor = Color.White.copy(alpha = 0.03f)
+                        focusedBorderColor = accentColor,
+                        unfocusedBorderColor = inputBorder,
+                        cursorColor = accentColor,
+                        focusedTextColor = textPrimary,
+                        unfocusedTextColor = textPrimary,
+                        focusedContainerColor = inputBg,
+                        unfocusedContainerColor = inputBg.copy(alpha = if (isDark) 0.03f else 1f)
                     )
                 )
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(28.dp))
 
                 Button(
                     onClick = onNext,
@@ -365,10 +445,10 @@ private fun WelcomePage(
                         .height(54.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = HoneyGold,
-                        contentColor = Color.Black,
-                        disabledContainerColor = Color.White.copy(alpha = 0.1f),
-                        disabledContentColor = Color.White.copy(alpha = 0.3f)
+                        containerColor = accentColor,
+                        contentColor = if (isDark) Color.Black else Color.White,
+                        disabledContainerColor = btnDisabledBg,
+                        disabledContentColor = btnDisabledText
                     )
                 ) {
                     Text(
@@ -382,12 +462,20 @@ private fun WelcomePage(
             }
         }
 
-        Spacer(modifier = Modifier.height(40.dp))
+        Spacer(modifier = Modifier.height(32.dp))
     }
 }
 
 @Composable
-private fun FeatureItem(icon: ImageVector, text: String, delay: Int) {
+private fun FeatureItem(
+    icon: ImageVector,
+    text: String,
+    isDark: Boolean,
+    accentColor: Color,
+    textColor: Color,
+    cardBg: Color,
+    delay: Int
+) {
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         delay(delay.toLong())
@@ -401,23 +489,20 @@ private fun FeatureItem(icon: ImageVector, text: String, delay: Int) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(
-                    Color.White.copy(alpha = 0.04f),
-                    RoundedCornerShape(12.dp)
-                )
+                .background(cardBg, RoundedCornerShape(12.dp))
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 icon, text,
-                tint = HoneyGold,
+                tint = accentColor,
                 modifier = Modifier.size(24.dp)
             )
             Spacer(modifier = Modifier.width(14.dp))
             Text(
                 text,
                 fontSize = 14.sp,
-                color = TextWhite,
+                color = textColor,
                 fontWeight = FontWeight.Medium
             )
         }
@@ -432,6 +517,13 @@ private fun FeatureItem(icon: ImageVector, text: String, delay: Int) {
 private fun ChooseProviderPage(
     selected: String,
     onSelect: (String) -> Unit,
+    isDark: Boolean,
+    textPrimary: Color,
+    textSecondary: Color,
+    accentColor: Color,
+    cardBorder: Color,
+    btnDisabledBg: Color,
+    btnDisabledText: Color,
     onNext: () -> Unit,
     onBack: () -> Unit
 ) {
@@ -445,9 +537,9 @@ private fun ChooseProviderPage(
 
         // Back button
         TextButton(onClick = onBack) {
-            Icon(Icons.Filled.ArrowBack, "Back", tint = TextGrayLight, modifier = Modifier.size(18.dp))
+            Icon(Icons.Filled.ArrowBack, "Back", tint = textSecondary, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(4.dp))
-            Text("Atrás", color = TextGrayLight, fontSize = 14.sp)
+            Text("Atrás", color = textSecondary, fontSize = 14.sp)
         }
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -456,12 +548,12 @@ private fun ChooseProviderPage(
             "Elige cómo quieres usar tu IA",
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
-            color = TextWhite
+            color = textPrimary
         )
         Text(
             "Puedes cambiar esto después en Configuración",
             fontSize = 14.sp,
-            color = TextGrayLight
+            color = textSecondary
         )
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -518,10 +610,10 @@ private fun ChooseProviderPage(
                 .height(54.dp),
             shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = HoneyGold,
-                contentColor = Color.Black,
-                disabledContainerColor = Color.White.copy(alpha = 0.1f),
-                disabledContentColor = Color.White.copy(alpha = 0.3f)
+                containerColor = accentColor,
+                contentColor = if (isDark) Color.Black else Color.White,
+                disabledContainerColor = btnDisabledBg,
+                disabledContentColor = btnDisabledText
             )
         ) {
             Text("Continuar", fontSize = 16.sp, fontWeight = FontWeight.Bold)
