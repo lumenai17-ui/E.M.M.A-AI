@@ -498,12 +498,12 @@ private fun ChooseProviderPage(
         // ── Ollama ──
         ProviderCard(
             isSelected = selected == "ollama",
-            icon = Icons.Filled.Computer,
-            title = "IA Personal",
-            subtitle = "Ollama · Tu PC/Servidor",
-            description = "Corre modelos en tu computadora.\nControl total. Requiere Ollama instalado.",
+            icon = Icons.Filled.Cloud,
+            title = "IA en la Nube",
+            subtitle = "Ollama Cloud · Gemma 4 · DeepSeek · Qwen",
+            description = "Modelos open-source potentes en la nube.\nSolo necesitas una API key. Incluye\nmodelos con visión, código y razonamiento.",
             accentColor = AccentViolet,
-            tag = "AVANZADO",
+            tag = "OPEN SOURCE",
             onClick = { onSelect("ollama") }
         )
 
@@ -1275,7 +1275,7 @@ private fun OpenRouterSetupPage(
 
 
 // ───────────────────────────────────────────────────
-// 3C: OLLAMA SETUP
+// 3C: OLLAMA CLOUD SETUP
 // ───────────────────────────────────────────────────
 
 @Composable
@@ -1286,11 +1286,10 @@ private fun OllamaSetupPage(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var ollamaUrl by remember { mutableStateOf("https://") }
     var ollamaKey by remember { mutableStateOf("") }
     var showKey by remember { mutableStateOf(false) }
-    var isTesting by remember { mutableStateOf(false) }
-    var testResult by remember { mutableStateOf<String?>(null) }
+    var isValidating by remember { mutableStateOf(false) }
+    var validationResult by remember { mutableStateOf<String?>(null) }
     var isValid by remember { mutableStateOf(false) }
 
     Column(
@@ -1310,7 +1309,7 @@ private fun OllamaSetupPage(
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            "Conecta tu servidor Ollama",
+            "Configura Ollama Cloud",
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
             color = TextWhite
@@ -1318,40 +1317,55 @@ private fun OllamaSetupPage(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // ── URL input ──
-        OutlinedTextField(
-            value = ollamaUrl,
-            onValueChange = {
-                ollamaUrl = it
-                isValid = false
-                testResult = null
+        // ── Steps ──
+        SetupStep(
+            number = "1",
+            title = "Crea una cuenta en Ollama",
+            description = "Ve a ollama.com y regístrate gratis"
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Open browser button
+        Button(
+            onClick = {
+                val intent = android.content.Intent(
+                    android.content.Intent.ACTION_VIEW,
+                    android.net.Uri.parse("https://ollama.com/settings/keys")
+                )
+                context.startActivity(intent)
             },
-            label = { Text("URL del servidor Ollama") },
-            placeholder = { Text("https://tu-servidor:11434", color = TextGrayMuted) },
-            singleLine = true,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = AccentViolet.copy(alpha = 0.15f),
+                contentColor = AccentViolet
+            ),
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(14.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = AccentViolet,
-                unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
-                cursorColor = AccentViolet,
-                focusedTextColor = TextWhite,
-                unfocusedTextColor = TextWhite,
-                focusedContainerColor = Color.White.copy(alpha = 0.05f),
-                unfocusedContainerColor = Color.White.copy(alpha = 0.03f),
-                focusedLabelColor = AccentViolet,
-                unfocusedLabelColor = TextGrayLight
-            )
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Icon(Icons.Filled.OpenInBrowser, "Open", modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Abrir ollama.com/settings/keys", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        SetupStep(
+            number = "2",
+            title = "Copia tu API Key",
+            description = "Genera una key y pégala aquí abajo"
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         // ── API Key input ──
         OutlinedTextField(
             value = ollamaKey,
-            onValueChange = { ollamaKey = it },
-            label = { Text("API Key (Ollama Cloud)") },
-            placeholder = { Text("Dejar vacío si es Ollama local", color = TextGrayMuted) },
+            onValueChange = {
+                ollamaKey = it
+                isValid = false
+                validationResult = null
+            },
+            label = { Text("API Key de Ollama") },
+            placeholder = { Text("Tu API key de ollama.com", color = TextGrayMuted) },
             singleLine = true,
             visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
             trailingIcon = {
@@ -1379,26 +1393,22 @@ private fun OllamaSetupPage(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // ── Test connection ──
+        // ── Validate button ──
         Button(
             onClick = {
-                isTesting = true
-                testResult = null
+                isValidating = true
+                validationResult = null
                 scope.launch {
                     try {
                         val code = withContext(Dispatchers.IO) {
-                            val cleanUrl = ollamaUrl.trim().trimEnd('/')
-                            val tagsUrl = if (cleanUrl.contains("/api/")) cleanUrl.substringBefore("/api/") + "/api/tags"
-                                else "$cleanUrl/api/tags"
-
-                            val reqBuilder = okhttp3.Request.Builder().url(tagsUrl)
-                            if (ollamaKey.isNotBlank()) {
-                                reqBuilder.addHeader("Authorization", "Bearer ${ollamaKey.trim()}")
-                            }
+                            val request = okhttp3.Request.Builder()
+                                .url("https://ollama.com/api/tags")
+                                .addHeader("Authorization", "Bearer ${ollamaKey.trim()}")
+                                .build()
                             val response = okhttp3.OkHttpClient.Builder()
                                 .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
                                 .build()
-                                .newCall(reqBuilder.build()).execute()
+                                .newCall(request).execute()
                             val result = response.code
                             response.close()
                             result
@@ -1406,26 +1416,18 @@ private fun OllamaSetupPage(
                         when (code) {
                             200 -> {
                                 isValid = true
-                                testResult = "✅ Conexión exitosa"
+                                validationResult = "✅ API Key válida"
                             }
-                            401, 403 -> testResult = "❌ API Key incorrecta"
-                            else -> testResult = "⚠️ Error HTTP $code"
+                            401, 403 -> validationResult = "❌ Key inválida o expirada"
+                            else -> validationResult = "⚠️ Error HTTP $code"
                         }
                     } catch (e: Exception) {
-                        val msg = e.message ?: "desconocido"
-                        testResult = when {
-                            msg.contains("resolve", true) -> "❌ No se pudo encontrar el servidor"
-                            msg.contains("connect", true) || msg.contains("timeout", true) ->
-                                "❌ No se pudo conectar. ¿Ollama está corriendo?"
-                            msg.contains("SSL", true) || msg.contains("Certificate", true) ->
-                                "❌ Error SSL. Prueba con http:// en vez de https://"
-                            else -> "❌ Error: ${msg.take(80)}"
-                        }
+                        validationResult = "❌ Error de conexión: ${e.message?.take(60)}"
                     }
-                    isTesting = false
+                    isValidating = false
                 }
             },
-            enabled = ollamaUrl.length > 8 && !isTesting,
+            enabled = ollamaKey.isNotBlank() && !isValidating,
             modifier = Modifier.fillMaxWidth().height(48.dp),
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(
@@ -1434,22 +1436,22 @@ private fun OllamaSetupPage(
                 disabledContainerColor = Color.White.copy(alpha = 0.1f)
             )
         ) {
-            if (isTesting) {
+            if (isValidating) {
                 CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.White)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Probando...")
+                Text("Validando...")
             } else {
-                Icon(Icons.Filled.Cable, "Test", modifier = Modifier.size(18.dp))
+                Icon(Icons.Filled.Verified, "Validate", modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Probar conexión", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text("Validar Key", fontWeight = FontWeight.Bold, fontSize = 14.sp)
             }
         }
 
-        // Test result
-        if (testResult != null) {
+        // Validation result
+        if (validationResult != null) {
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                testResult!!,
+                validationResult!!,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = if (isValid) AccentGreen else AccentRed
@@ -1458,23 +1460,22 @@ private fun OllamaSetupPage(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // ── Info box ──
+        // ── Models info ──
         Surface(
             color = AccentViolet.copy(alpha = 0.08f),
             shape = RoundedCornerShape(10.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
-                Text("ℹ️ Para Ollama local (tu PC):", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = AccentViolet)
+                Text("🚀 Modelos disponibles en Ollama Cloud:", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = AccentViolet)
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    "1. Instala Ollama en tu PC (ollama.com)\n" +
-                    "2. Ejecuta: OLLAMA_ORIGINS=* ollama serve\n" +
-                    "3. El URL suele ser: http://tu-ip:11434\n\n" +
-                    "Para Ollama Cloud: usa api.ollama.com con tu API key",
-                    fontSize = 12.sp,
-                    color = TextGrayLight,
-                    lineHeight = 18.sp
+                    "• Gemma 4 — Google (Vision + Audio + Tools)\n" +
+                    "• DeepSeek R1 — Razonamiento profundo (671B)\n" +
+                    "• Qwen 3.5 — Alibaba multimodal\n" +
+                    "• Devstral 2 — Mistral coding agent\n" +
+                    "• Y muchos más...",
+                    fontSize = 12.sp, color = TextGrayLight, lineHeight = 18.sp
                 )
             }
         }
@@ -1489,11 +1490,8 @@ private fun OllamaSetupPage(
                 securePrefs.edit().putString("ollama_api_key", ollamaKey.trim()).apply()
 
                 val prefs = context.getSharedPreferences("beemovil", Context.MODE_PRIVATE)
-                val cleanUrl = ollamaUrl.trim().trimEnd('/')
-                val apiUrl = if (cleanUrl.endsWith("/api/chat")) cleanUrl else "$cleanUrl/api/chat"
                 prefs.edit()
                     .putString("selected_provider", "ollama")
-                    .putString("ollama_url", apiUrl)
                     .putString("selected_model", "gemma4:cloud")
                     .apply()
 
@@ -1512,7 +1510,7 @@ private fun OllamaSetupPage(
             )
         ) {
             Text(
-                if (isValid) "¡Listo! Entrar a E.M.M.A." else "Prueba la conexión primero",
+                if (isValid) "¡Listo! Entrar a E.M.M.A." else "Valida tu key primero",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold
             )
