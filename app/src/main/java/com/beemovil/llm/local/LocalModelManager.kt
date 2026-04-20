@@ -1,4 +1,4 @@
-﻿package com.beemovil.llm.local
+package com.beemovil.llm.local
 
 import android.content.Context
 import android.os.Handler
@@ -20,6 +20,13 @@ object LocalModelManager {
 
     private const val TAG = "LocalModelManager"
     private const val MODELS_SUBDIR = "models"
+
+    /**
+     * Bootstrap HuggingFace token for first-time Gemma 4 downloads.
+     * Read-only token — can only download public model files.
+     * Injected from local.properties via BuildConfig (never in source control).
+     */
+    val BOOTSTRAP_HF_TOKEN: String = com.beemovil.BuildConfig.HF_BOOTSTRAP_TOKEN
 
     // Main-thread handler for safe Compose state updates from background threads
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -154,18 +161,19 @@ object LocalModelManager {
             return
         }
 
-        // Get HuggingFace token from SecurePrefs
+        // Get HuggingFace token from SecurePrefs, fallback to bootstrap token
         val securePrefs = try {
             com.beemovil.security.SecurePrefs.get(ctx)
         } catch (e: Exception) {
             null
         }
-        val hfToken = securePrefs?.getString("huggingface_token", null)?.trim()
+        val userToken = securePrefs?.getString("huggingface_token", null)?.trim()
+        val hfToken = if (!userToken.isNullOrBlank()) userToken else BOOTSTRAP_HF_TOKEN
 
-        if (hfToken.isNullOrBlank()) {
+        if (hfToken.isBlank()) {
             mainHandler.post {
-                onComplete(false, "[HF] Necesitas un HuggingFace Token para descargar Gemma 4.\n" +
-                    "Ve a Settings → Proveedor AI → [DEV] Local y pega tu token.\n" +
+                onComplete(false, "[HF] No hay token de HuggingFace disponible.\n" +
+                    "Ve a Settings → Proveedor AI → Local y pega tu token.\n" +
                     "Obtener en: huggingface.co/settings/tokens")
             }
             return

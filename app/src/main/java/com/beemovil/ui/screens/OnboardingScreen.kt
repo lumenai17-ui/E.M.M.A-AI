@@ -1,0 +1,1555 @@
+package com.beemovil.ui.screens
+
+import android.content.Context
+import android.widget.Toast
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.beemovil.ui.theme.*
+import com.beemovil.llm.local.LocalModelManager
+import com.beemovil.security.SecurePrefs
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+/**
+ * OnboardingScreen — Mandatory first-time setup wizard.
+ *
+ * 3-step flow:
+ *   1. Welcome + Name input
+ *   2. Choose AI provider (Local / OpenRouter / Ollama)
+ *   3. Provider-specific configuration
+ *
+ * Cannot be skipped. User must complete valid configuration to proceed.
+ *
+ * @param onComplete Called when onboarding is done. MainActivity should navigate to Dashboard.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun OnboardingScreen(onComplete: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // ── State ──
+    var currentStep by remember { mutableIntStateOf(0) }  // 0=Welcome, 1=ChooseProvider, 2=Config
+    var userName by remember { mutableStateOf("") }
+    var selectedProvider by remember { mutableStateOf("") }  // "local", "openrouter", "ollama"
+
+    // Animation entrance
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(100)
+        visible = true
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFF0A0A12),
+                        Color(0xFF0D0D1A),
+                        Color(0xFF12101F)
+                    )
+                )
+            )
+    ) {
+        // ── Ambient glow background ──
+        Box(
+            modifier = Modifier
+                .size(300.dp)
+                .offset(x = (-50).dp, y = (-50).dp)
+                .blur(120.dp)
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            HoneyGold.copy(alpha = 0.08f),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
+        Box(
+            modifier = Modifier
+                .size(250.dp)
+                .align(Alignment.BottomEnd)
+                .offset(x = 80.dp, y = 80.dp)
+                .blur(100.dp)
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            AccentViolet.copy(alpha = 0.06f),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+        ) {
+            // ── Progress indicator ──
+            AnimatedVisibility(visible = visible) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 40.dp, vertical = 20.dp),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    repeat(3) { index ->
+                        val isActive = index == currentStep
+                        val isPast = index < currentStep
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(4.dp)
+                                .padding(horizontal = 4.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(
+                                    when {
+                                        isActive -> HoneyGold
+                                        isPast -> HoneyGold.copy(alpha = 0.5f)
+                                        else -> Color.White.copy(alpha = 0.1f)
+                                    }
+                                )
+                        )
+                    }
+                }
+            }
+
+            // ── Main content area ──
+            AnimatedContent(
+                targetState = currentStep,
+                label = "onboarding_step",
+                transitionSpec = {
+                    if (targetState > initialState) {
+                        slideInHorizontally { it / 2 } + fadeIn() togetherWith
+                            slideOutHorizontally { -it / 2 } + fadeOut()
+                    } else {
+                        slideInHorizontally { -it / 2 } + fadeIn() togetherWith
+                            slideOutHorizontally { it / 2 } + fadeOut()
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .weight(1f)
+            ) { step ->
+                when (step) {
+                    0 -> WelcomePage(
+                        userName = userName,
+                        onNameChanged = { userName = it },
+                        onNext = {
+                            if (userName.isNotBlank()) {
+                                // Save name immediately
+                                val memDb = try {
+                                    com.beemovil.memory.BeeMemoryDB(context)
+                                } catch (_: Exception) { null }
+                                memDb?.setSoul("name", userName.trim())
+                                currentStep = 1
+                            }
+                        }
+                    )
+                    1 -> ChooseProviderPage(
+                        selected = selectedProvider,
+                        onSelect = { selectedProvider = it },
+                        onNext = { currentStep = 2 },
+                        onBack = { currentStep = 0 }
+                    )
+                    2 -> ConfigProviderPage(
+                        provider = selectedProvider,
+                        userName = userName,
+                        onBack = { currentStep = 1 },
+                        onComplete = {
+                            // Mark onboarding done
+                            context.getSharedPreferences("beemovil", Context.MODE_PRIVATE)
+                                .edit()
+                                .putBoolean("onboarding_completed", true)
+                                .apply()
+                            onComplete()
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PAGE 1: WELCOME + NAME
+// ═══════════════════════════════════════════════════════════════
+
+@Composable
+private fun WelcomePage(
+    userName: String,
+    onNameChanged: (String) -> Unit,
+    onNext: () -> Unit
+) {
+    val focusManager = LocalFocusManager.current
+
+    // Logo animation
+    var logoVisible by remember { mutableStateOf(false) }
+    val logoScale by animateFloatAsState(
+        targetValue = if (logoVisible) 1f else 0.3f,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = 200f),
+        label = "logo_scale"
+    )
+    val logoAlpha by animateFloatAsState(
+        targetValue = if (logoVisible) 1f else 0f,
+        animationSpec = tween(800),
+        label = "logo_alpha"
+    )
+
+    // Staggered features
+    var featuresVisible by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        delay(200)
+        logoVisible = true
+        delay(600)
+        featuresVisible = true
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(modifier = Modifier.height(40.dp))
+
+        // ── Logo ──
+        Box(
+            modifier = Modifier
+                .size(100.dp)
+                .scale(logoScale)
+                .alpha(logoAlpha)
+                .clip(CircleShape)
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(HoneyGold, HoneyAmber)
+                    )
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                "E",
+                fontSize = 44.sp,
+                fontWeight = FontWeight.Black,
+                color = Color.White
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(
+            "E.M.M.A. AI",
+            fontSize = 28.sp,
+            fontWeight = FontWeight.Bold,
+            color = TextWhite,
+            modifier = Modifier.alpha(logoAlpha)
+        )
+        Text(
+            "Tu asistente de IA privado",
+            fontSize = 16.sp,
+            color = TextGrayLight,
+            modifier = Modifier.alpha(logoAlpha)
+        )
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        // ── Features ──
+        AnimatedVisibility(
+            visible = featuresVisible,
+            enter = fadeIn(tween(600)) + slideInVertically { 40 }
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                FeatureItem(
+                    icon = Icons.Filled.Psychology,
+                    text = "Procesa documentos, imágenes y voz",
+                    delay = 0
+                )
+                FeatureItem(
+                    icon = Icons.Filled.Lock,
+                    text = "Tu data nunca sale del teléfono",
+                    delay = 150
+                )
+                FeatureItem(
+                    icon = Icons.Filled.AutoAwesome,
+                    text = "18 herramientas nativas integradas",
+                    delay = 300
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(40.dp))
+
+        // ── Name input ──
+        AnimatedVisibility(
+            visible = featuresVisible,
+            enter = fadeIn(tween(800, delayMillis = 500)) + slideInVertically { 30 }
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    "¿Cómo te llamas?",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextWhite
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = userName,
+                    onValueChange = onNameChanged,
+                    placeholder = {
+                        Text("Tu nombre", color = TextGrayMuted)
+                    },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = {
+                        focusManager.clearFocus()
+                        if (userName.isNotBlank()) onNext()
+                    }),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = HoneyGold,
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                        cursorColor = HoneyGold,
+                        focusedTextColor = TextWhite,
+                        unfocusedTextColor = TextWhite,
+                        focusedContainerColor = Color.White.copy(alpha = 0.05f),
+                        unfocusedContainerColor = Color.White.copy(alpha = 0.03f)
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                Button(
+                    onClick = onNext,
+                    enabled = userName.isNotBlank(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = HoneyGold,
+                        contentColor = Color.Black,
+                        disabledContainerColor = Color.White.copy(alpha = 0.1f),
+                        disabledContentColor = Color.White.copy(alpha = 0.3f)
+                    )
+                ) {
+                    Text(
+                        "Comenzar",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(Icons.Filled.ArrowForward, "Next", modifier = Modifier.size(20.dp))
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(40.dp))
+    }
+}
+
+@Composable
+private fun FeatureItem(icon: ImageVector, text: String, delay: Int) {
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(delay.toLong())
+        visible = true
+    }
+
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(tween(400)) + slideInHorizontally { -30 }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Color.White.copy(alpha = 0.04f),
+                    RoundedCornerShape(12.dp)
+                )
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                icon, text,
+                tint = HoneyGold,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(14.dp))
+            Text(
+                text,
+                fontSize = 14.sp,
+                color = TextWhite,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PAGE 2: CHOOSE PROVIDER
+// ═══════════════════════════════════════════════════════════════
+
+@Composable
+private fun ChooseProviderPage(
+    selected: String,
+    onSelect: (String) -> Unit,
+    onNext: () -> Unit,
+    onBack: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 24.dp)
+    ) {
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // Back button
+        TextButton(onClick = onBack) {
+            Icon(Icons.Filled.ArrowBack, "Back", tint = TextGrayLight, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("Atrás", color = TextGrayLight, fontSize = 14.sp)
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            "Elige cómo quieres usar tu IA",
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            color = TextWhite
+        )
+        Text(
+            "Puedes cambiar esto después en Configuración",
+            fontSize = 14.sp,
+            color = TextGrayLight
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // ── Local/Gemma ──
+        ProviderCard(
+            isSelected = selected == "local",
+            isRecommended = true,
+            icon = Icons.Filled.PhoneAndroid,
+            title = "IA en tu Teléfono",
+            subtitle = "100% Offline · Sin costo · Privado",
+            description = "Gemma 4 corre directo en tu dispositivo.\nNo necesitas internet ni cuentas externas.",
+            accentColor = AccentGreen,
+            tag = "⭐ RECOMENDADO",
+            onClick = { onSelect("local") }
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // ── OpenRouter ──
+        ProviderCard(
+            isSelected = selected == "openrouter",
+            icon = Icons.Filled.Cloud,
+            title = "IA en la Nube",
+            subtitle = "OpenRouter · GPT-4o · Claude · Gemini",
+            description = "Accede a los modelos más potentes del mundo.\nTiene modelos gratuitos. Requiere API Key.",
+            accentColor = AccentBlue,
+            tag = "POTENCIA MÁXIMA",
+            onClick = { onSelect("openrouter") }
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // ── Ollama ──
+        ProviderCard(
+            isSelected = selected == "ollama",
+            icon = Icons.Filled.Computer,
+            title = "IA Personal",
+            subtitle = "Ollama · Tu PC/Servidor",
+            description = "Corre modelos en tu computadora.\nControl total. Requiere Ollama instalado.",
+            accentColor = AccentViolet,
+            tag = "AVANZADO",
+            onClick = { onSelect("ollama") }
+        )
+
+        Spacer(modifier = Modifier.height(28.dp))
+
+        // ── Continue button ──
+        Button(
+            onClick = onNext,
+            enabled = selected.isNotBlank(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(54.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = HoneyGold,
+                contentColor = Color.Black,
+                disabledContainerColor = Color.White.copy(alpha = 0.1f),
+                disabledContentColor = Color.White.copy(alpha = 0.3f)
+            )
+        ) {
+            Text("Continuar", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.width(8.dp))
+            Icon(Icons.Filled.ArrowForward, "Next", modifier = Modifier.size(20.dp))
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+    }
+}
+
+@Composable
+private fun ProviderCard(
+    isSelected: Boolean,
+    isRecommended: Boolean = false,
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    description: String,
+    accentColor: Color,
+    tag: String,
+    onClick: () -> Unit
+) {
+    val borderColor by animateColorAsState(
+        targetValue = if (isSelected) accentColor else Color.White.copy(alpha = 0.08f),
+        animationSpec = tween(300),
+        label = "border"
+    )
+    val bgAlpha by animateFloatAsState(
+        targetValue = if (isSelected) 0.12f else 0.04f,
+        animationSpec = tween(300),
+        label = "bg"
+    )
+
+    Surface(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
+                width = if (isSelected) 2.dp else 1.dp,
+                color = borderColor,
+                shape = RoundedCornerShape(16.dp)
+            ),
+        shape = RoundedCornerShape(16.dp),
+        color = accentColor.copy(alpha = bgAlpha)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Icon circle
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(accentColor.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, title, tint = accentColor, modifier = Modifier.size(22.dp))
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(title, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = TextWhite)
+                    Text(subtitle, fontSize = 12.sp, color = TextGrayLight)
+                }
+                // Tag
+                Surface(
+                    color = if (isRecommended) AccentGreen.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.08f),
+                    shape = RoundedCornerShape(6.dp)
+                ) {
+                    Text(
+                        tag,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isRecommended) AccentGreen else TextGrayLight,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(description, fontSize = 13.sp, color = TextGrayLight, lineHeight = 18.sp)
+
+            // Selection indicator
+            if (isSelected) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Filled.CheckCircle, "Selected",
+                        tint = accentColor,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Seleccionado", fontSize = 12.sp, color = accentColor, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+    }
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// PAGE 3: PROVIDER-SPECIFIC CONFIGURATION
+// ═══════════════════════════════════════════════════════════════
+
+@Composable
+private fun ConfigProviderPage(
+    provider: String,
+    userName: String,
+    onBack: () -> Unit,
+    onComplete: () -> Unit
+) {
+    when (provider) {
+        "local" -> LocalSetupPage(userName = userName, onBack = onBack, onComplete = onComplete)
+        "openrouter" -> OpenRouterSetupPage(onBack = onBack, onComplete = onComplete)
+        "ollama" -> OllamaSetupPage(onBack = onBack, onComplete = onComplete)
+    }
+}
+
+// ───────────────────────────────────────────────────
+// 3A: LOCAL GEMMA SETUP
+// ───────────────────────────────────────────────────
+
+@Composable
+private fun LocalSetupPage(
+    userName: String,
+    onBack: () -> Unit,
+    onComplete: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // Model states
+    val models = LocalModelManager.AVAILABLE_MODELS
+    var selectedModels by remember { mutableStateOf(setOf<String>()) }
+
+    // Download states
+    var isDownloading by remember { mutableStateOf(false) }
+    var downloadingModelId by remember { mutableStateOf("") }
+    var downloadProgress by remember { mutableStateOf(0f) }
+    var downloadedBytes by remember { mutableStateOf(0L) }
+    var totalBytes by remember { mutableStateOf(0L) }
+    var downloadStatus by remember { mutableStateOf("") }
+    var completedModels by remember { mutableStateOf(setOf<String>()) }
+    var downloadError by remember { mutableStateOf<String?>(null) }
+
+    // Check already downloaded
+    LaunchedEffect(Unit) {
+        LocalModelManager.appContext = context
+        val alreadyDownloaded = models
+            .filter { LocalModelManager.isModelDownloaded(it.id) }
+            .map { it.id }
+            .toSet()
+        completedModels = alreadyDownloaded
+    }
+
+    val storageGB = remember { LocalModelManager.getAvailableStorageGB() }
+    val canComplete = completedModels.isNotEmpty()
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 24.dp)
+    ) {
+        Spacer(modifier = Modifier.height(20.dp))
+
+        TextButton(onClick = onBack, enabled = !isDownloading) {
+            Icon(Icons.Filled.ArrowBack, "Back", tint = TextGrayLight, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("Atrás", color = TextGrayLight, fontSize = 14.sp)
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            "Descarga tu IA local",
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            color = TextWhite
+        )
+        Text(
+            "Elige uno o ambos modelos de Gemma 4",
+            fontSize = 14.sp,
+            color = TextGrayLight
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Storage info
+        Surface(
+            color = Color.White.copy(alpha = 0.05f),
+            shape = RoundedCornerShape(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Filled.Storage, "Storage", tint = TextGrayLight, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    "Espacio disponible: ${String.format("%.1f", storageGB)} GB",
+                    fontSize = 13.sp,
+                    color = TextGrayLight
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // ── Model cards ──
+        models.forEach { model ->
+            val isCompleted = completedModels.contains(model.id)
+            val isSelected = selectedModels.contains(model.id)
+            val isCurrentlyDownloading = isDownloading && downloadingModelId == model.id
+
+            ModelDownloadCard(
+                name = model.name,
+                description = model.description,
+                sizeDisplay = model.sizeDisplay,
+                isSelected = isSelected,
+                isCompleted = isCompleted,
+                isDownloading = isCurrentlyDownloading,
+                downloadProgress = if (isCurrentlyDownloading) downloadProgress else 0f,
+                downloadedMB = if (isCurrentlyDownloading) (downloadedBytes / 1_048_576) else 0L,
+                totalMB = if (isCurrentlyDownloading) (totalBytes / 1_048_576) else 0L,
+                enabled = !isDownloading,
+                onToggle = {
+                    if (!isCompleted && !isDownloading) {
+                        selectedModels = if (isSelected) {
+                            selectedModels - model.id
+                        } else {
+                            selectedModels + model.id
+                        }
+                    }
+                }
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        // ── Download error ──
+        if (downloadError != null) {
+            Surface(
+                color = AccentRed.copy(alpha = 0.1f),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text("❌ Error de descarga", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = AccentRed)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(downloadError!!, fontSize = 12.sp, color = AccentRed.copy(alpha = 0.8f), lineHeight = 16.sp)
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        // ── Download button ──
+        if (!canComplete || selectedModels.isNotEmpty()) {
+            Button(
+                onClick = {
+                    downloadError = null
+                    val modelsToDownload = selectedModels.filter { !completedModels.contains(it) }
+                    if (modelsToDownload.isEmpty()) return@Button
+
+                    // Inject bootstrap HF token if not set
+                    val securePrefs = SecurePrefs.get(context)
+                    val existingToken = securePrefs.getString("huggingface_token", null)?.trim()
+                    if (existingToken.isNullOrBlank()) {
+                        securePrefs.edit()
+                            .putString("huggingface_token", LocalModelManager.BOOTSTRAP_HF_TOKEN)
+                            .apply()
+                    }
+
+                    val modelId = modelsToDownload.first()
+                    isDownloading = true
+                    downloadingModelId = modelId
+                    downloadProgress = 0f
+                    downloadedBytes = 0L
+                    downloadStatus = "Conectando..."
+
+                    LocalModelManager.downloadModel(
+                        modelId = modelId,
+                        onProgress = { dl, total ->
+                            downloadedBytes = dl
+                            totalBytes = total
+                            downloadProgress = if (total > 0) dl.toFloat() / total else 0f
+                            downloadStatus = "${dl / 1_048_576} MB / ${total / 1_048_576} MB"
+                        },
+                        onComplete = { success, message ->
+                            isDownloading = false
+                            if (success) {
+                                completedModels = completedModels + modelId
+                                selectedModels = selectedModels - modelId
+                                downloadStatus = "✅ Completado"
+
+                                // If more models selected, start next
+                                val remaining = selectedModels.filter { !completedModels.contains(it) }
+                                if (remaining.isNotEmpty()) {
+                                    // Auto-start next model download
+                                    val nextId = remaining.first()
+                                    isDownloading = true
+                                    downloadingModelId = nextId
+                                    downloadProgress = 0f
+                                    downloadedBytes = 0L
+                                    downloadStatus = "Conectando siguiente modelo..."
+
+                                    LocalModelManager.downloadModel(
+                                        modelId = nextId,
+                                        onProgress = { dl, total ->
+                                            downloadedBytes = dl
+                                            totalBytes = total
+                                            downloadProgress = if (total > 0) dl.toFloat() / total else 0f
+                                        },
+                                        onComplete = { s2, m2 ->
+                                            isDownloading = false
+                                            if (s2) {
+                                                completedModels = completedModels + nextId
+                                                selectedModels = selectedModels - nextId
+                                            } else {
+                                                downloadError = m2
+                                            }
+                                        }
+                                    )
+                                }
+                            } else {
+                                downloadError = message
+                            }
+                        }
+                    )
+                },
+                enabled = selectedModels.any { !completedModels.contains(it) } && !isDownloading,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = AccentGreen,
+                    contentColor = Color.White,
+                    disabledContainerColor = Color.White.copy(alpha = 0.1f),
+                    disabledContentColor = Color.White.copy(alpha = 0.3f)
+                )
+            ) {
+                Icon(Icons.Filled.Download, "Download", modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    if (isDownloading) "Descargando..." else "Descargar seleccionados",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // ── Complete button ──
+        Button(
+            onClick = {
+                // Save provider config
+                val prefs = context.getSharedPreferences("beemovil", Context.MODE_PRIVATE)
+                val firstCompleted = completedModels.first()
+                prefs.edit()
+                    .putString("selected_provider", "local")
+                    .putString("selected_model", firstCompleted)
+                    .apply()
+                onComplete()
+            },
+            enabled = canComplete && !isDownloading,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(54.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = HoneyGold,
+                contentColor = Color.Black,
+                disabledContainerColor = Color.White.copy(alpha = 0.08f),
+                disabledContentColor = Color.White.copy(alpha = 0.2f)
+            )
+        ) {
+            Text(
+                if (canComplete) "¡Listo! Entrar a E.M.M.A." else "Descarga al menos un modelo",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+            if (canComplete) {
+                Spacer(modifier = Modifier.width(8.dp))
+                Icon(Icons.Filled.RocketLaunch, "Go", modifier = Modifier.size(20.dp))
+            }
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+    }
+}
+
+@Composable
+private fun ModelDownloadCard(
+    name: String,
+    description: String,
+    sizeDisplay: String,
+    isSelected: Boolean,
+    isCompleted: Boolean,
+    isDownloading: Boolean,
+    downloadProgress: Float,
+    downloadedMB: Long,
+    totalMB: Long,
+    enabled: Boolean,
+    onToggle: () -> Unit
+) {
+    val borderColor = when {
+        isCompleted -> AccentGreen
+        isSelected -> HoneyGold
+        else -> Color.White.copy(alpha = 0.08f)
+    }
+
+    Surface(
+        onClick = onToggle,
+        enabled = enabled && !isCompleted,
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
+                width = if (isSelected || isCompleted) 2.dp else 1.dp,
+                color = borderColor,
+                shape = RoundedCornerShape(14.dp)
+            ),
+        shape = RoundedCornerShape(14.dp),
+        color = when {
+            isCompleted -> AccentGreen.copy(alpha = 0.08f)
+            isSelected -> HoneyGold.copy(alpha = 0.08f)
+            else -> Color.White.copy(alpha = 0.03f)
+        }
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Checkbox/Status
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(
+                            when {
+                                isCompleted -> AccentGreen.copy(alpha = 0.2f)
+                                isSelected -> HoneyGold.copy(alpha = 0.2f)
+                                else -> Color.White.copy(alpha = 0.06f)
+                            }
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    when {
+                        isCompleted -> Icon(Icons.Filled.Check, "Done", tint = AccentGreen, modifier = Modifier.size(18.dp))
+                        isSelected -> Icon(Icons.Filled.Check, "Selected", tint = HoneyGold, modifier = Modifier.size(18.dp))
+                        else -> {}
+                    }
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(name, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = TextWhite)
+                    Text(description, fontSize = 12.sp, color = TextGrayLight)
+                }
+                Surface(
+                    color = Color.White.copy(alpha = 0.08f),
+                    shape = RoundedCornerShape(6.dp)
+                ) {
+                    Text(
+                        if (isCompleted) "✅ LISTO" else sizeDisplay,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isCompleted) AccentGreen else TextGrayLight,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            // ── Progress bar ──
+            if (isDownloading) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Column {
+                    LinearProgressIndicator(
+                        progress = { downloadProgress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(3.dp)),
+                        color = HoneyGold,
+                        trackColor = Color.White.copy(alpha = 0.1f)
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(
+                            "${(downloadProgress * 100).toInt()}%",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = HoneyGold
+                        )
+                        Text(
+                            "${downloadedMB} MB / ${totalMB} MB",
+                            fontSize = 11.sp,
+                            color = TextGrayLight
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+// ───────────────────────────────────────────────────
+// 3B: OPENROUTER SETUP
+// ───────────────────────────────────────────────────
+
+@Composable
+private fun OpenRouterSetupPage(
+    onBack: () -> Unit,
+    onComplete: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    var apiKey by remember { mutableStateOf("") }
+    var showKey by remember { mutableStateOf(false) }
+    var isValidating by remember { mutableStateOf(false) }
+    var validationResult by remember { mutableStateOf<String?>(null) }
+    var isValid by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 24.dp)
+    ) {
+        Spacer(modifier = Modifier.height(20.dp))
+
+        TextButton(onClick = onBack) {
+            Icon(Icons.Filled.ArrowBack, "Back", tint = TextGrayLight, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("Atrás", color = TextGrayLight, fontSize = 14.sp)
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            "Configura OpenRouter",
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            color = TextWhite
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // ── Steps ──
+        SetupStep(
+            number = "1",
+            title = "Crea una cuenta gratis",
+            description = "Ve a openrouter.ai y regístrate"
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Open browser button
+        Button(
+            onClick = {
+                val intent = android.content.Intent(
+                    android.content.Intent.ACTION_VIEW,
+                    android.net.Uri.parse("https://openrouter.ai/keys")
+                )
+                context.startActivity(intent)
+            },
+            colors = ButtonDefaults.buttonColors(
+                containerColor = AccentBlue.copy(alpha = 0.15f),
+                contentColor = AccentBlue
+            ),
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Icon(Icons.Filled.OpenInBrowser, "Open", modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Abrir openrouter.ai/keys", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        SetupStep(
+            number = "2",
+            title = "Copia tu API Key",
+            description = "Genera una key y pégala aquí abajo"
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // ── API Key input ──
+        OutlinedTextField(
+            value = apiKey,
+            onValueChange = {
+                apiKey = it
+                isValid = false
+                validationResult = null
+            },
+            label = { Text("API Key de OpenRouter") },
+            placeholder = { Text("sk-or-v1-...", color = TextGrayMuted) },
+            singleLine = true,
+            visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
+            trailingIcon = {
+                IconButton(onClick = { showKey = !showKey }) {
+                    Icon(
+                        if (showKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                        "Toggle",
+                        tint = TextGrayLight
+                    )
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = AccentBlue,
+                unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                cursorColor = AccentBlue,
+                focusedTextColor = TextWhite,
+                unfocusedTextColor = TextWhite,
+                focusedContainerColor = Color.White.copy(alpha = 0.05f),
+                unfocusedContainerColor = Color.White.copy(alpha = 0.03f),
+                focusedLabelColor = AccentBlue,
+                unfocusedLabelColor = TextGrayLight
+            )
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // ── Validate button ──
+        Button(
+            onClick = {
+                isValidating = true
+                validationResult = null
+                scope.launch {
+                    try {
+                        val result = withContext(Dispatchers.IO) {
+                            val request = okhttp3.Request.Builder()
+                                .url("https://openrouter.ai/api/v1/models")
+                                .addHeader("Authorization", "Bearer ${apiKey.trim()}")
+                                .build()
+                            val response = okhttp3.OkHttpClient().newCall(request).execute()
+                            val code = response.code
+                            response.close()
+                            code
+                        }
+                        when (result) {
+                            200 -> {
+                                isValid = true
+                                validationResult = "✅ API Key válida"
+                            }
+                            401, 403 -> {
+                                validationResult = "❌ Key inválida o expirada"
+                            }
+                            else -> {
+                                validationResult = "⚠️ Error HTTP $result"
+                            }
+                        }
+                    } catch (e: Exception) {
+                        validationResult = "❌ Error de conexión: ${e.message?.take(60)}"
+                    }
+                    isValidating = false
+                }
+            },
+            enabled = apiKey.isNotBlank() && !isValidating,
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = AccentBlue,
+                contentColor = Color.White,
+                disabledContainerColor = Color.White.copy(alpha = 0.1f)
+            )
+        ) {
+            if (isValidating) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                    color = Color.White
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Validando...")
+            } else {
+                Icon(Icons.Filled.Verified, "Validate", modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Validar Key", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            }
+        }
+
+        // Validation result
+        if (validationResult != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                validationResult!!,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = if (isValid) AccentGreen else AccentRed
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // ── Free models note ──
+        Surface(
+            color = AccentGreen.copy(alpha = 0.08f),
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Text("✨ Modelos 100% gratuitos incluidos:", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = AccentGreen)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "• Qwen 3.6+ — Coding + Razonamiento\n• Llama 3.3 70B — Meta flagship\n• Gemma 3 27B — Google con visión\n• Y muchos más...",
+                    fontSize = 12.sp, color = TextGrayLight, lineHeight = 18.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // ── Complete button ──
+        Button(
+            onClick = {
+                // Save provider config
+                val securePrefs = SecurePrefs.get(context)
+                securePrefs.edit().putString("openrouter_api_key", apiKey.trim()).apply()
+
+                val prefs = context.getSharedPreferences("beemovil", Context.MODE_PRIVATE)
+                prefs.edit()
+                    .putString("selected_provider", "openrouter")
+                    .putString("selected_model", "qwen/qwen3.6-plus:free")
+                    .apply()
+
+                onComplete()
+            },
+            enabled = isValid,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(54.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = HoneyGold,
+                contentColor = Color.Black,
+                disabledContainerColor = Color.White.copy(alpha = 0.08f),
+                disabledContentColor = Color.White.copy(alpha = 0.2f)
+            )
+        ) {
+            Text("¡Listo! Entrar a E.M.M.A.", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            if (isValid) {
+                Spacer(modifier = Modifier.width(8.dp))
+                Icon(Icons.Filled.RocketLaunch, "Go", modifier = Modifier.size(20.dp))
+            }
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+    }
+}
+
+
+// ───────────────────────────────────────────────────
+// 3C: OLLAMA SETUP
+// ───────────────────────────────────────────────────
+
+@Composable
+private fun OllamaSetupPage(
+    onBack: () -> Unit,
+    onComplete: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    var ollamaUrl by remember { mutableStateOf("https://") }
+    var ollamaKey by remember { mutableStateOf("") }
+    var showKey by remember { mutableStateOf(false) }
+    var isTesting by remember { mutableStateOf(false) }
+    var testResult by remember { mutableStateOf<String?>(null) }
+    var isValid by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 24.dp)
+    ) {
+        Spacer(modifier = Modifier.height(20.dp))
+
+        TextButton(onClick = onBack) {
+            Icon(Icons.Filled.ArrowBack, "Back", tint = TextGrayLight, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("Atrás", color = TextGrayLight, fontSize = 14.sp)
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            "Conecta tu servidor Ollama",
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            color = TextWhite
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // ── URL input ──
+        OutlinedTextField(
+            value = ollamaUrl,
+            onValueChange = {
+                ollamaUrl = it
+                isValid = false
+                testResult = null
+            },
+            label = { Text("URL del servidor Ollama") },
+            placeholder = { Text("https://tu-servidor:11434", color = TextGrayMuted) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = AccentViolet,
+                unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                cursorColor = AccentViolet,
+                focusedTextColor = TextWhite,
+                unfocusedTextColor = TextWhite,
+                focusedContainerColor = Color.White.copy(alpha = 0.05f),
+                unfocusedContainerColor = Color.White.copy(alpha = 0.03f),
+                focusedLabelColor = AccentViolet,
+                unfocusedLabelColor = TextGrayLight
+            )
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // ── API Key input ──
+        OutlinedTextField(
+            value = ollamaKey,
+            onValueChange = { ollamaKey = it },
+            label = { Text("API Key (Ollama Cloud)") },
+            placeholder = { Text("Dejar vacío si es Ollama local", color = TextGrayMuted) },
+            singleLine = true,
+            visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
+            trailingIcon = {
+                IconButton(onClick = { showKey = !showKey }) {
+                    Icon(
+                        if (showKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                        "Toggle", tint = TextGrayLight
+                    )
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = AccentViolet,
+                unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                cursorColor = AccentViolet,
+                focusedTextColor = TextWhite,
+                unfocusedTextColor = TextWhite,
+                focusedContainerColor = Color.White.copy(alpha = 0.05f),
+                unfocusedContainerColor = Color.White.copy(alpha = 0.03f),
+                focusedLabelColor = AccentViolet,
+                unfocusedLabelColor = TextGrayLight
+            )
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // ── Test connection ──
+        Button(
+            onClick = {
+                isTesting = true
+                testResult = null
+                scope.launch {
+                    try {
+                        val code = withContext(Dispatchers.IO) {
+                            val cleanUrl = ollamaUrl.trim().trimEnd('/')
+                            val tagsUrl = if (cleanUrl.contains("/api/")) cleanUrl.substringBefore("/api/") + "/api/tags"
+                                else "$cleanUrl/api/tags"
+
+                            val reqBuilder = okhttp3.Request.Builder().url(tagsUrl)
+                            if (ollamaKey.isNotBlank()) {
+                                reqBuilder.addHeader("Authorization", "Bearer ${ollamaKey.trim()}")
+                            }
+                            val response = okhttp3.OkHttpClient.Builder()
+                                .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+                                .build()
+                                .newCall(reqBuilder.build()).execute()
+                            val result = response.code
+                            response.close()
+                            result
+                        }
+                        when (code) {
+                            200 -> {
+                                isValid = true
+                                testResult = "✅ Conexión exitosa"
+                            }
+                            401, 403 -> testResult = "❌ API Key incorrecta"
+                            else -> testResult = "⚠️ Error HTTP $code"
+                        }
+                    } catch (e: Exception) {
+                        val msg = e.message ?: "desconocido"
+                        testResult = when {
+                            msg.contains("resolve", true) -> "❌ No se pudo encontrar el servidor"
+                            msg.contains("connect", true) || msg.contains("timeout", true) ->
+                                "❌ No se pudo conectar. ¿Ollama está corriendo?"
+                            msg.contains("SSL", true) || msg.contains("Certificate", true) ->
+                                "❌ Error SSL. Prueba con http:// en vez de https://"
+                            else -> "❌ Error: ${msg.take(80)}"
+                        }
+                    }
+                    isTesting = false
+                }
+            },
+            enabled = ollamaUrl.length > 8 && !isTesting,
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = AccentViolet,
+                contentColor = Color.White,
+                disabledContainerColor = Color.White.copy(alpha = 0.1f)
+            )
+        ) {
+            if (isTesting) {
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.White)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Probando...")
+            } else {
+                Icon(Icons.Filled.Cable, "Test", modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Probar conexión", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            }
+        }
+
+        // Test result
+        if (testResult != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                testResult!!,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = if (isValid) AccentGreen else AccentRed
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // ── Info box ──
+        Surface(
+            color = AccentViolet.copy(alpha = 0.08f),
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Text("ℹ️ Para Ollama local (tu PC):", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = AccentViolet)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "1. Instala Ollama en tu PC (ollama.com)\n" +
+                    "2. Ejecuta: OLLAMA_ORIGINS=* ollama serve\n" +
+                    "3. El URL suele ser: http://tu-ip:11434\n\n" +
+                    "Para Ollama Cloud: usa api.ollama.com con tu API key",
+                    fontSize = 12.sp,
+                    color = TextGrayLight,
+                    lineHeight = 18.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // ── Complete button ──
+        Button(
+            onClick = {
+                // Save config
+                val securePrefs = SecurePrefs.get(context)
+                securePrefs.edit().putString("ollama_api_key", ollamaKey.trim()).apply()
+
+                val prefs = context.getSharedPreferences("beemovil", Context.MODE_PRIVATE)
+                val cleanUrl = ollamaUrl.trim().trimEnd('/')
+                val apiUrl = if (cleanUrl.endsWith("/api/chat")) cleanUrl else "$cleanUrl/api/chat"
+                prefs.edit()
+                    .putString("selected_provider", "ollama")
+                    .putString("ollama_url", apiUrl)
+                    .putString("selected_model", "gemma4:cloud")
+                    .apply()
+
+                onComplete()
+            },
+            enabled = isValid,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(54.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = HoneyGold,
+                contentColor = Color.Black,
+                disabledContainerColor = Color.White.copy(alpha = 0.08f),
+                disabledContentColor = Color.White.copy(alpha = 0.2f)
+            )
+        ) {
+            Text(
+                if (isValid) "¡Listo! Entrar a E.M.M.A." else "Prueba la conexión primero",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+            if (isValid) {
+                Spacer(modifier = Modifier.width(8.dp))
+                Icon(Icons.Filled.RocketLaunch, "Go", modifier = Modifier.size(20.dp))
+            }
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+    }
+}
+
+
+// ───────────────────────────────────────────────────
+// SHARED COMPONENTS
+// ───────────────────────────────────────────────────
+
+@Composable
+private fun SetupStep(number: String, title: String, description: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top
+    ) {
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .clip(CircleShape)
+                .background(AccentBlue.copy(alpha = 0.2f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(number, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = AccentBlue)
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Column {
+            Text(title, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = TextWhite)
+            Text(description, fontSize = 13.sp, color = TextGrayLight)
+        }
+    }
+}

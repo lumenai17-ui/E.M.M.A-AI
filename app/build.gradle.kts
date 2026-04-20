@@ -14,6 +14,13 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
+// Load local.properties for bootstrap tokens
+val localPropertiesFile = rootProject.file("local.properties")
+val localProperties = Properties()
+if (localPropertiesFile.exists()) {
+    localProperties.load(FileInputStream(localPropertiesFile))
+}
+
 android {
     namespace = "com.beemovil"
     compileSdk = 35
@@ -27,6 +34,10 @@ android {
 
         // Multidex for 65K+ method count
         multiDexEnabled = true
+
+        // Bootstrap HF token for first-time Gemma downloads (from local.properties, gitignored)
+        buildConfigField("String", "HF_BOOTSTRAP_TOKEN",
+            "\"${localProperties.getProperty("hf.bootstrap.token", "")}\"")
     }
 
     // Sprint 7: Signing config
@@ -77,6 +88,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     composeOptions {

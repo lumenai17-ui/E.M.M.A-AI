@@ -2,24 +2,25 @@ package com.beemovil
 
 import android.content.Intent
 import android.os.Bundle
+import android.Manifest
+import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.*
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import com.beemovil.ui.ChatViewModel
 import com.beemovil.ui.screens.*
 import com.beemovil.ui.components.PremiumBottomNav
 import com.beemovil.ui.theme.*
-
-import android.Manifest
-import android.os.Build
-import androidx.activity.result.contract.ActivityResultContracts
 
 class MainActivity : ComponentActivity() {
 
@@ -75,73 +76,97 @@ class MainActivity : ComponentActivity() {
         setContent {
             BeeMovilTheme {
                 val isDark = BeeThemeState.forceDark.value ?: true
-                Scaffold(
-                    containerColor = if (isDark) BeeBlack else LightBackground,
-                    bottomBar = {
-                        val screen = viewModel.currentScreen.value
-                        if (screen in listOf("dashboard", "conversations", "tasks", "email_inbox", "settings")) {
-                            PremiumBottomNav(
-                                currentScreen = screen,
-                                onNavigate = { viewModel.currentScreen.value = it }
-                            )
-                        }
-                    }
-                ) { innerPadding ->
-                    Surface(
-                        modifier = Modifier.fillMaxSize().padding(innerPadding),
-                        color = BeeBlack
-                    ) {
-                        val currentScreen = viewModel.currentScreen.value
-                        AnimatedContent(
-                            targetState = currentScreen,
-                            label = "screen_transition",
-                            transitionSpec = {
-                                fadeIn(tween(250)) togetherWith fadeOut(tween(200))
+                
+                // ── Onboarding gate ──
+                val onboardingCompleted = remember {
+                    mutableStateOf(
+                        themePrefs.getBoolean("onboarding_completed", false)
+                    )
+                }
+                
+                if (!onboardingCompleted.value) {
+                    // First-time user → mandatory setup wizard
+                    OnboardingScreen(
+                        onComplete = {
+                            onboardingCompleted.value = true
+                            // Reload provider in viewModel after onboarding config
+                            val savedProvider = themePrefs.getString("selected_provider", null)
+                            val savedModel = themePrefs.getString("selected_model", null)
+                            if (savedProvider != null && savedModel != null) {
+                                viewModel.switchProvider(savedProvider, savedModel)
                             }
-                        ) { screen ->
-                            when (screen) {
-                                "chat" -> ChatScreen(
-                                    viewModel = viewModel,
-                                    agentId = "main",
-                                    onSettingsClick = { viewModel.currentScreen.value = "settings" },
-                                    onBackClick = { viewModel.currentScreen.value = "dashboard" }
+                        }
+                    )
+                } else {
+                    // Normal app flow
+                    Scaffold(
+                        containerColor = if (isDark) BeeBlack else LightBackground,
+                        bottomBar = {
+                            val screen = viewModel.currentScreen.value
+                            if (screen in listOf("dashboard", "conversations", "tasks", "email_inbox", "settings")) {
+                                PremiumBottomNav(
+                                    currentScreen = screen,
+                                    onNavigate = { viewModel.currentScreen.value = it }
                                 )
-                                "conversations" -> com.beemovil.ui.screens.ConversationsScreen(
-                                    viewModel = viewModel
-                                )
-                                "dashboard" -> DashboardScreen(
-                                    viewModel = viewModel,
-                                    onAgentClick = { threadId ->
-                                        viewModel.navigateToThread(threadId)
-                                    },
-                                    onSettingsClick = { viewModel.currentScreen.value = "settings" }
-                                )
-                                "tasks" -> com.beemovil.ui.screens.TasksScreen(
-                                    viewModel = viewModel
-                                )
-                                "email_inbox" -> com.beemovil.ui.screens.EmailInboxScreen(
-                                    viewModel = viewModel
-                                )
-                                "settings" -> SettingsScreen(
-                                    viewModel = viewModel,
-                                    onBack = { viewModel.currentScreen.value = "dashboard" }
-                                )
-                                "live_vision" -> LiveVisionScreen(
-                                    viewModel = viewModel,
-                                    onBack = { viewModel.currentScreen.value = "dashboard" }
-                                )
-                                "voice" -> VoiceChatScreen(
-                                    viewModel = viewModel,
-                                    onBack = { viewModel.currentScreen.value = "dashboard" }
-                                )
-                                // UI-02: Eliminada ruta "notifications" huérfana (nadie navegaba a ella)
-                                else -> DashboardScreen(
-                                    viewModel = viewModel,
-                                    onAgentClick = { threadId ->
-                                        viewModel.navigateToThread(threadId)
-                                    },
-                                    onSettingsClick = { viewModel.currentScreen.value = "settings" }
-                                )
+                            }
+                        }
+                    ) { innerPadding ->
+                        Surface(
+                            modifier = Modifier.fillMaxSize().padding(innerPadding),
+                            color = BeeBlack
+                        ) {
+                            val currentScreen = viewModel.currentScreen.value
+                            AnimatedContent(
+                                targetState = currentScreen,
+                                label = "screen_transition",
+                                transitionSpec = {
+                                    fadeIn(tween(250)) togetherWith fadeOut(tween(200))
+                                }
+                            ) { screen ->
+                                when (screen) {
+                                    "chat" -> ChatScreen(
+                                        viewModel = viewModel,
+                                        agentId = "main",
+                                        onSettingsClick = { viewModel.currentScreen.value = "settings" },
+                                        onBackClick = { viewModel.currentScreen.value = "dashboard" }
+                                    )
+                                    "conversations" -> com.beemovil.ui.screens.ConversationsScreen(
+                                        viewModel = viewModel
+                                    )
+                                    "dashboard" -> DashboardScreen(
+                                        viewModel = viewModel,
+                                        onAgentClick = { threadId ->
+                                            viewModel.navigateToThread(threadId)
+                                        },
+                                        onSettingsClick = { viewModel.currentScreen.value = "settings" }
+                                    )
+                                    "tasks" -> com.beemovil.ui.screens.TasksScreen(
+                                        viewModel = viewModel
+                                    )
+                                    "email_inbox" -> com.beemovil.ui.screens.EmailInboxScreen(
+                                        viewModel = viewModel
+                                    )
+                                    "settings" -> SettingsScreen(
+                                        viewModel = viewModel,
+                                        onBack = { viewModel.currentScreen.value = "dashboard" }
+                                    )
+                                    "live_vision" -> LiveVisionScreen(
+                                        viewModel = viewModel,
+                                        onBack = { viewModel.currentScreen.value = "dashboard" }
+                                    )
+                                    "voice" -> VoiceChatScreen(
+                                        viewModel = viewModel,
+                                        onBack = { viewModel.currentScreen.value = "dashboard" }
+                                    )
+                                    // UI-02: Eliminada ruta "notifications" huérfana (nadie navegaba a ella)
+                                    else -> DashboardScreen(
+                                        viewModel = viewModel,
+                                        onAgentClick = { threadId ->
+                                            viewModel.navigateToThread(threadId)
+                                        },
+                                        onSettingsClick = { viewModel.currentScreen.value = "settings" }
+                                    )
+                                }
                             }
                         }
                     }
