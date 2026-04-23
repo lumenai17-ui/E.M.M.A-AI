@@ -4,4 +4,6 @@
     <external-files-path name="emma_documents" path="Documents/" />
     <!-- Por si acaso en algunos SOs lo guarda genérico en files -->
     <external-files-path name="emma_files" path="." />
+    <!-- Cache interna: imágenes, música, videos y audio generados por Pollinations -->
+    <cache-path name="emma_cache" path="." />
 </paths>

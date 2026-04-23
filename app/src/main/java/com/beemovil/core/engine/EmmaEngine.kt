@@ -33,7 +33,7 @@ class EmmaEngine(private val context: Context) {
         - Si el usuario te pide un CÁLCULO matemático, una lógica compleja, o procesar texto, UTILIZA INMEDIATAMENTE la tool 'execute_js_script' para obtener un resultado determinista sin inventar datos.
         - Si el usuario envía una URL para que ACUMULES conocimiento o LEAS el artículo, saca el texto crudo usando 'scrape_website_text'.
         - Si el usuario adjunta una Foto/Imagen o Documento físico, USA 'read_image_text_ocr' o 'read_document_file' respectivamente para entender qué hay allí adentro.
-        - Si el usuario te pide un entregable formal (ensayo en PDF, tabla de Excel/CSV, o generar una página Web), NUNCA lo escribas en el chat. Utiliza las herramientas de generación ('generate_pdf_document', 'generate_csv_table' o 'generate_html_landing') y confírmale que estás abriendo el menú para descargarlo.
+        - Si el usuario te pide un entregable formal (ensayo en PDF, tabla de Excel/CSV, o generar una página Web), NUNCA lo escribas en el chat. Utiliza las herramientas de generación ('generate_pdf_document', 'generate_csv_table' o 'generate_html_landing') y confírmale que estás abriendo el menú para descargarlo. Para INCLUIR IMÁGENES EN PDFs, usa el marcador [IMG:url] en el body_text, por ejemplo: 'Texto aquí\n[IMG:https://image.pollinations.ai/prompt/descripcion_en_ingles]\nMás texto'. Para INCLUIR IMÁGENES EN HTML, usa tags <img> normales con URLs de Pollinations: <img src="https://image.pollinations.ai/prompt/descripcion_en_ingles?width=800&height=400&nologo=true">.
         - ¡TIENES ACCESO A SU TELÉFONO! Si te piden leer la agenda, agendar una junta, prender la linterna, poner una alarma o buscar en los Contactos, DEBES usar el plugin correspondiente ('os_god_mode_operations', 'calendar_os_operations', 'search_android_contacts') sin excusas. NO digas que no tienes acceso.
         - ERES UN COMUNICADOR EN RED: Si te piden mandar un correo o mandar un WhatsApp a alguien, JAMÁS digas que no puedes. Usa 'compose_email_intent' o 'send_whatsapp_message' automáticamente. Si necesitas consultar una API web o extraer datos, usa 'fetch_external_api'.
         - TIENES ACCESO AL ECOSISTEMA GOOGLE DEL USUARIO: Si preguntan por sus emails, usa 'google_gmail'. Si preguntan por su agenda o quieren crear un evento, usa 'google_calendar'. Si preguntan por tareas pendientes, usa 'google_tasks'. Si el usuario NO está conectado a Google, dile que vaya a Settings → Google.
@@ -430,7 +430,6 @@ class EmmaEngine(private val context: Context) {
         forcedProvider: String? = null,
         forcedModel: String? = null
     ): Pair<String, List<com.beemovil.llm.ToolCall>> {
-        // Fuente única de verdad: SecurePrefs (BUG-16)
         val prefs = context.getSharedPreferences("beemovil", Context.MODE_PRIVATE)
         val securePrefs = com.beemovil.security.SecurePrefs.get(context)
         
@@ -448,7 +447,30 @@ class EmmaEngine(private val context: Context) {
             val result = provider.complete(messages, tools)
             Pair(result.text ?: "", result.toolCalls)
         } catch (e: Exception) {
-            Pair("Error instanciando LLM: ${e.message}", emptyList())
+            Log.e(TAG, "executeProvider falló: preset=$preset model=$model keyLen=${key.length}", e)
+            
+            // Auto-retry con defaults si el modelo forzado falló
+            if (forcedProvider != null || forcedModel != null) {
+                try {
+                    Log.w(TAG, "Reintentando con provider por defecto...")
+                    val defaultKey = securePrefs.getString("openrouter_api_key", "") ?: ""
+                    val fallback = LlmFactory.createProvider("openrouter", defaultKey, "openai/gpt-4o-mini")
+                    val result = fallback.complete(messages, tools)
+                    return Pair(result.text ?: "", result.toolCalls)
+                } catch (retryEx: Exception) {
+                    Log.e(TAG, "Retry también falló", retryEx)
+                }
+            }
+
+            val friendlyMsg = when {
+                key.isBlank() -> "⚠️ No hay API key configurada. Ve a Settings y agrega tu key."
+                e.message?.contains("timeout", true) == true -> "⚠️ El servidor tardó demasiado. Intenta de nuevo."
+                e.message?.contains("401", false) == true -> "⚠️ API key inválida o expirada. Revísala en Settings."
+                e.message?.contains("429", false) == true -> "⚠️ Límite de peticiones alcanzado. Espera un momento."
+                e.message?.contains("Unable to resolve host", true) == true -> "⚠️ Sin conexión a internet."
+                else -> "⚠️ Error de conexión con el modelo. Intenta de nuevo. (${e.message?.take(80)})"
+            }
+            Pair(friendlyMsg, emptyList())
         }
     }
 }
