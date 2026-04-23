@@ -75,7 +75,7 @@ class MusicGenerationPlugin(private val context: Context) : EmmaPlugin {
                 Log.i(TAG, "Generating music: '$prompt' (${duration}s, model=$model)")
 
                 val url = PollinationsClient.musicUrl(prompt, model, duration)
-                val audioBytes = PollinationsClient.downloadMedia(context, url)
+                val audioBytes = PollinationsClient.downloadMedia(context, url, useHeavyClient = true)
                     ?: return@withContext "❌ No se pudo generar la música. Intenta con otro prompt o verifica tu API key."
 
                 // Save to cache

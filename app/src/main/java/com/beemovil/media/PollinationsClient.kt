@@ -16,6 +16,8 @@ import java.util.concurrent.TimeUnit
  *  - Audio/TTS (GET /audio/{text})
  *  - Music generation (GET /audio/{prompt}?model=elevenmusic)
  *  - Video generation (GET /image/{prompt}?model=ltx-2)
+ *
+ * Docs: https://enter.pollinations.ai/api/docs/llm.txt
  */
 object PollinationsClient {
 
@@ -27,9 +29,17 @@ object PollinationsClient {
     // This key is free tier and shared across all E.M.M.A. users
     private const val DEFAULT_KEY = "sk_4vnLOAllOzioqxUpx0lwf6OgwTja6nyx"
 
+    // Image/TTS client: moderate timeout
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(90, TimeUnit.SECONDS) // Media generation can be slow
+        .readTimeout(90, TimeUnit.SECONDS)
+        .followRedirects(true)
+        .build()
+
+    // Music/Video client: longer timeout (generation can take 2+ minutes)
+    private val heavyClient = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(180, TimeUnit.SECONDS)
         .followRedirects(true)
         .build()
 
@@ -59,23 +69,34 @@ object PollinationsClient {
 
     /**
      * Download binary content (image, audio, video) from a Pollinations URL.
-     * Adds Authorization header if API key is available.
+     * Auth via both Header AND query param for maximum compatibility.
      */
-    fun downloadMedia(context: Context, url: String): ByteArray? {
+    fun downloadMedia(context: Context, url: String, useHeavyClient: Boolean = false): ByteArray? {
         val apiKey = getApiKey(context)
+        
+        // Append key as query param too (some endpoints prefer this)
+        val finalUrl = if (apiKey.isNotBlank()) {
+            val separator = if (url.contains("?")) "&" else "?"
+            "$url${separator}key=$apiKey"
+        } else {
+            url
+        }
 
-        val requestBuilder = Request.Builder().url(url).get()
+        val requestBuilder = Request.Builder().url(finalUrl).get()
         if (apiKey.isNotBlank()) {
             requestBuilder.addHeader("Authorization", "Bearer $apiKey")
         }
 
+        val client = if (useHeavyClient) heavyClient else httpClient
+
         return try {
-            val response = httpClient.newCall(requestBuilder.build()).execute()
+            val response = client.newCall(requestBuilder.build()).execute()
             if (response.isSuccessful) {
                 response.body?.bytes()
             } else {
+                val code = response.code
                 val errorBody = response.body?.string()?.take(200) ?: "No body"
-                Log.e(TAG, "Pollinations error ${response.code}: $errorBody")
+                Log.e(TAG, "Pollinations error $code: $errorBody (url: ${url.take(100)})")
                 response.close()
                 null
             }
@@ -102,11 +123,11 @@ object PollinationsClient {
     }
 
     /**
-     * Build audio/TTS URL
+     * Build audio/TTS URL (model: elevenlabs default)
      */
     fun audioUrl(text: String, voice: String = "nova"): String {
         val encoded = java.net.URLEncoder.encode(text, "UTF-8")
-        return "$BASE_URL/audio/$encoded?voice=$voice"
+        return "$BASE_URL/audio/$encoded?voice=$voice&model=elevenlabs"
     }
 
     /**

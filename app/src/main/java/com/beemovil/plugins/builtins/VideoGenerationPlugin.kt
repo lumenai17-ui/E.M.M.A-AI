@@ -74,7 +74,7 @@ class VideoGenerationPlugin(private val context: Context) : EmmaPlugin {
                 Log.i(TAG, "Generating video: '$enhancedPrompt' (${duration}s, $aspectRatio)")
 
                 val url = PollinationsClient.videoUrl(enhancedPrompt, "ltx-2", duration, aspectRatio)
-                val videoBytes = PollinationsClient.downloadMedia(context, url)
+                val videoBytes = PollinationsClient.downloadMedia(context, url, useHeavyClient = true)
                     ?: return@withContext "❌ No se pudo generar el video. Intenta con otro prompt o verifica tu API key."
 
                 // Save to cache
