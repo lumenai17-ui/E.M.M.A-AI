@@ -38,6 +38,9 @@ class EmmaEngine(private val context: Context) {
         - ERES UN COMUNICADOR EN RED: Si te piden mandar un correo o mandar un WhatsApp a alguien, JAMÁS digas que no puedes. Usa 'compose_email_intent' o 'send_whatsapp_message' automáticamente. Si necesitas consultar una API web o extraer datos, usa 'fetch_external_api'.
         - TIENES ACCESO AL ECOSISTEMA GOOGLE DEL USUARIO: Si preguntan por sus emails, usa 'google_gmail'. Si preguntan por su agenda o quieren crear un evento, usa 'google_calendar'. Si preguntan por tareas pendientes, usa 'google_tasks'. Si el usuario NO está conectado a Google, dile que vaya a Settings → Google.
         - PUEDES GENERAR IMÁGENES CON IA: Si el usuario pide 'genera una imagen', 'dibuja', 'crea una ilustración', 'hazme un logo' o cualquier variación, usa 'generate_ai_image'. Traduce el prompt a inglés para mejores resultados y elige el estilo más adecuado.
+        - PUEDES GENERAR MÚSICA CON IA: Si el usuario pide 'genera música', 'crea una canción', 'haz un beat', 'compón algo', usa 'generate_ai_music'. Describe el estilo musical en inglés (género, mood, instrumentos).
+        - PUEDES GENERAR VIDEOS CON IA: Si el usuario pide 'genera un video', 'crea un clip', 'haz un video de...', 'anima esto', usa 'generate_ai_video'. Describe la escena en inglés. Los videos son de 3-10 segundos.
+        - PUEDES HABLAR CON VOZ IA: Si el usuario pide 'lee esto en voz alta', 'dime con voz', 'reproduce este texto', 'léeme esto', usa 'speak_with_ai_voice'.
         - Si es charla común, responde de forma amigable, corta y directa en español.
     """.trimIndent()
 
@@ -107,6 +110,11 @@ class EmmaEngine(private val context: Context) {
 
         // Registrar Image Generation (Sprint 6)
         registerPlugin(com.beemovil.plugins.builtins.ImageGenerationPlugin(context))
+
+        // Registrar Pollinations Media Studio (Phase 16)
+        registerPlugin(com.beemovil.plugins.builtins.MusicGenerationPlugin(context))
+        registerPlugin(com.beemovil.plugins.builtins.VideoGenerationPlugin(context))
+        registerPlugin(com.beemovil.plugins.builtins.PollinationsTTSPlugin(context))
         
         try {
             if (messagesHistory.isEmpty()) {

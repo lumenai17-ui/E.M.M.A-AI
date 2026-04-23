@@ -487,56 +487,92 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
-                models.forEach { model ->
-                    val isSelected = selectedModel == model.id
-                    val isDownloaded = if (selectedProvider == "local")
-                        com.beemovil.llm.local.LocalModelManager.isModelDownloaded(model.id) else true
-
-                    Surface(
-                        onClick = {
-                            selectedModel = model.id
-                        },
-                        color = if (isSelected) accent.copy(alpha = 0.15f) else Color.Transparent,
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                // ── Model Dropdown Selector ──
+                if (selectedProvider == "local") {
+                    // Local models: keep flat list (few items + download state)
+                    models.forEach { model ->
+                        val isSelected = selectedModel == model.id
+                        val isDownloaded = com.beemovil.llm.local.LocalModelManager.isModelDownloaded(model.id)
+                        Surface(
+                            onClick = { selectedModel = model.id },
+                            color = if (isSelected) accent.copy(alpha = 0.15f) else Color.Transparent,
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
                         ) {
-                            Text(
-                                when {
-                                    selectedProvider == "local" && isDownloaded -> "OK"
-                                    selectedProvider == "local" -> "DL"
-                                    model.free -> "Free"
-                                    else -> "Pro"
-                                },
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = when {
-                                    selectedProvider == "local" && isDownloaded -> Color(0xFF4CAF50)
-                                    model.free -> accent
-                                    else -> Color(0xFFBF5AF2)
-                                }
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(model.name, color = if (isSelected) accent else if (isDark) Color(0xFFE0E0E0) else TextDark, fontSize = 14.sp)
-                                if (selectedProvider == "local") {
+                            Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    if (isDownloaded) "OK" else "DL",
+                                    fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                                    color = if (isDownloaded) Color(0xFF4CAF50) else BeeGray
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(model.name, color = if (isSelected) accent else textPrimary, fontSize = 14.sp)
                                     Text(
                                         if (isDownloaded) "Listo para usar" else "Toca Descargar para usar",
-                                        color = if (isDownloaded) Color(0xFF4CAF50) else BeeGray,
-                                        fontSize = 10.sp
+                                        color = if (isDownloaded) Color(0xFF4CAF50) else BeeGray, fontSize = 10.sp
                                     )
-                                } else {
-                                    Text(model.id, color = textSecondary, fontSize = 10.sp)
                                 }
-                            }
-                            if (isSelected && (selectedProvider != "local" || isDownloaded)) {
-                                Icon(Icons.Filled.CheckCircle, "Selected", tint = accent, modifier = Modifier.size(18.dp))
+                                if (isSelected && isDownloaded) {
+                                    Icon(Icons.Filled.CheckCircle, "Selected", tint = accent, modifier = Modifier.size(18.dp))
+                                }
                             }
                         }
                     }
+                } else {
+                    // Cloud models: compact dropdown
+                    var modelDropdownExpanded by remember { mutableStateOf(false) }
+                    val currentModel = models.find { it.id == selectedModel }
+
+                    androidx.compose.material3.ExposedDropdownMenuBox(
+                        expanded = modelDropdownExpanded,
+                        onExpandedChange = { modelDropdownExpanded = it }
+                    ) {
+                        OutlinedTextField(
+                            value = currentModel?.name ?: selectedModel,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Modelo seleccionado") },
+                            trailingIcon = {
+                                androidx.compose.material3.ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelDropdownExpanded)
+                            },
+                            modifier = Modifier.fillMaxWidth().menuAnchor(),
+                            singleLine = true,
+                            colors = fieldColors()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = modelDropdownExpanded,
+                            onDismissRequest = { modelDropdownExpanded = false }
+                        ) {
+                            models.forEach { model ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                if (model.free) "Free" else "Pro",
+                                                fontSize = 9.sp, fontWeight = FontWeight.Bold,
+                                                color = if (model.free) accent else Color(0xFFBF5AF2),
+                                                modifier = Modifier.width(30.dp)
+                                            )
+                                            Column {
+                                                Text(model.name, fontSize = 13.sp, color = textPrimary)
+                                                Text(model.id, fontSize = 9.sp, color = textSecondary)
+                                            }
+                                        }
+                                    },
+                                    onClick = {
+                                        selectedModel = model.id
+                                        modelDropdownExpanded = false
+                                    },
+                                    trailingIcon = if (selectedModel == model.id) {{
+                                        Icon(Icons.Filled.CheckCircle, "Selected", tint = accent, modifier = Modifier.size(16.dp))
+                                    }} else null
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(selectedModel, fontSize = 10.sp, color = textSecondary)
                 }
 
                 // Download button for local models
@@ -1029,147 +1065,126 @@ fun SettingsScreen(
             }
 
             // ═══════════════════════════════════════
-            // MEDIA GENERATION (Phase 23)
+            // POLLINATIONS (ESTUDIO CREATIVO)
             // ═══════════════════════════════════════
             SectionCard {
-                SectionTitle("MEDIA IA (Imagenes + Video)")
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Genera imagenes y videos con IA desde cualquier chat", fontSize = 12.sp, color = textSecondary,
-                        modifier = Modifier.weight(1f))
-                    Surface(color = Color(0xFFFF9800).copy(alpha = 0.2f), shape = RoundedCornerShape(4.dp)) {
-                        Text("PRÓXIMAMENTE", fontSize = 9.sp, color = Color(0xFFFF9800), fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
-                    }
-                }
+                SectionTitle("POLLINATIONS (Estudio Creativo)")
+                Text("Imágenes, Música, Video y Voz con IA", fontSize = 12.sp, color = textSecondary)
                 Spacer(modifier = Modifier.height(8.dp))
 
-                var falKey by remember { mutableStateOf(securePrefs.getString("fal_api_key", "") ?: "") }
-                var showFalKey by remember { mutableStateOf(false) }
-                var togetherKey by remember { mutableStateOf(securePrefs.getString("together_api_key", "") ?: "") }
-                var showTogetherKey by remember { mutableStateOf(false) }
+                var pollinationsKey by remember { mutableStateOf(securePrefs.getString("pollinations_api_key", "") ?: "") }
+                var showPollinationsKey by remember { mutableStateOf(false) }
+                val hasPollinationsKey = pollinationsKey.isNotBlank()
+                val isOwnKey = com.beemovil.media.PollinationsClient.isUsingOwnKey(context)
 
-                // Status
-                val hasAnyProvider = falKey.isNotBlank() || togetherKey.isNotBlank() ||
-                    (openRouterKey.isNotBlank() && selectedProvider == "openrouter")
+                // Status card
                 Surface(
-                    color = if (hasAnyProvider) Color(0xFF4CAF50).copy(alpha = 0.12f) else Color(0xFFF44336).copy(alpha = 0.12f),
+                    color = Color(0xFF4CAF50).copy(alpha = 0.12f),
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            if (hasAnyProvider) Icons.Filled.Palette else Icons.Filled.Warning,
-                            "Status",
-                            tint = if (hasAnyProvider) Color(0xFF4CAF50) else Color(0xFFF44336),
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text(
-                                if (hasAnyProvider) "Listo para generar" else "Sin provider configurado",
-                                fontSize = 14.sp, fontWeight = FontWeight.Bold,
-                                color = Color(0xFFE0E0E0)
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.Palette, "Media", tint = Color(0xFF4CAF50), modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    if (hasPollinationsKey) "Estudio Creativo Activo" else "Imágenes activas (básico)",
+                                    fontSize = 14.sp, fontWeight = FontWeight.Bold, color = textPrimary
+                                )
+                                Text(
+                                    if (hasPollinationsKey && isOwnKey) "Usando tu key personal ✅"
+                                    else if (hasPollinationsKey) "Usando key compartida ⚡"
+                                    else "Sin key: solo imágenes disponibles",
+                                    fontSize = 11.sp, color = textSecondary
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        // Service badges
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            val services = listOf(
+                                Triple("🎨 Imágenes", true, "Siempre activo"),
+                                Triple("🎵 Música", hasPollinationsKey, "Requiere key"),
+                                Triple("🎬 Video", hasPollinationsKey, "Requiere key"),
+                                Triple("🎙️ Voz", hasPollinationsKey, "Requiere key")
                             )
-                            Text(
-                                buildString {
-                                    val providers = mutableListOf<String>()
-                                    if (falKey.isNotBlank()) providers.add("fal.ai (Flux)")
-                                    if (togetherKey.isNotBlank()) providers.add("Together (Flux)")
-                                    if (openRouterKey.isNotBlank()) providers.add("OpenRouter (DALL-E)")
-                                    append(if (providers.isNotEmpty()) providers.joinToString(" · ") else "Configura al menos un provider")
-                                },
-                                fontSize = 11.sp, color = textSecondary
-                            )
-                            // Show image count
-                            val imgDir = java.io.File(
-                                android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOCUMENTS),
-                                "BeeMovil/images"
-                            )
-                            val imgCount = if (imgDir.exists()) imgDir.listFiles()?.size ?: 0 else 0
-                            if (imgCount > 0) {
-                                Text("$imgCount imagenes generadas", fontSize = 10.sp, color = accent)
+                            services.forEach { (name, active, _) ->
+                                Surface(
+                                    color = if (active) accent.copy(alpha = 0.15f) else textSecondary.copy(alpha = 0.1f),
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text(
+                                        name,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (active) accent else textSecondary,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
                             }
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
-                // fal.ai key
+                // API Key field
                 OutlinedTextField(
-                    value = falKey,
-                    onValueChange = { falKey = it },
-                    label = { Text("fal.ai API Key") },
-                    placeholder = { Text("fal_xxxxxxxxxxxx", color = textSecondary) },
+                    value = pollinationsKey,
+                    onValueChange = { pollinationsKey = it },
+                    label = { Text("Pollinations API Key") },
+                    placeholder = { Text("pk_... o sk_...", color = textSecondary) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    visualTransformation = if (showFalKey) VisualTransformation.None else PasswordVisualTransformation(),
+                    visualTransformation = if (showPollinationsKey) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
-                        IconButton(onClick = { showFalKey = !showFalKey }) {
-                            Icon(if (showFalKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Toggle", tint = textSecondary)
+                        IconButton(onClick = { showPollinationsKey = !showPollinationsKey }) {
+                            Icon(if (showPollinationsKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Toggle", tint = textSecondary)
                         }
                     },
                     colors = fieldColors()
                 )
-                Text("Flux Schnell/Pro — el mas rapido. fal.ai/dashboard", fontSize = 10.sp, color = textSecondary.copy(alpha = 0.7f))
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                // Together AI key
-                OutlinedTextField(
-                    value = togetherKey,
-                    onValueChange = { togetherKey = it },
-                    label = { Text("Together AI API Key") },
-                    placeholder = { Text("tok_xxxxxxxxxxxx", color = textSecondary) },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    visualTransformation = if (showTogetherKey) VisualTransformation.None else PasswordVisualTransformation(),
-                    trailingIcon = {
-                        IconButton(onClick = { showTogetherKey = !showTogetherKey }) {
-                            Icon(if (showTogetherKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Toggle", tint = textSecondary)
-                        }
-                    },
-                    colors = fieldColors()
-                )
-                Text("Flux.1 Schnell — creditos iniciales gratis. together.ai", fontSize = 10.sp, color = textSecondary.copy(alpha = 0.7f))
 
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Button(
                     onClick = {
-                        securePrefs.edit()
-                            .putString("fal_api_key", falKey.trim())
-                            .putString("together_api_key", togetherKey.trim())
-                            .apply()
-                        Toast.makeText(context, "Media generation configurado", Toast.LENGTH_SHORT).show()
+                        securePrefs.edit().putString("pollinations_api_key", pollinationsKey.trim()).apply()
+                        Toast.makeText(context,
+                            if (pollinationsKey.isNotBlank()) "Pollinations activado — Música, Video y Voz habilitados"
+                            else "Pollinations: solo imágenes (sin key)",
+                            Toast.LENGTH_SHORT).show()
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFAB47BC), contentColor = textPrimary),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B5CF6), contentColor = Color.White),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Icon(Icons.Filled.Palette, "Save", modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Guardar Media Keys", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text("Guardar Pollinations", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
 
                 Spacer(modifier = Modifier.height(6.dp))
 
-                // Cost warning
+                // Guidance
                 Surface(
-                    color = Color(0xFFFF9800).copy(alpha = 0.12f),
+                    color = Color(0xFF8B5CF6).copy(alpha = 0.08f),
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.Top) {
-                        Icon(Icons.Filled.Info, "Info", tint = Color(0xFFFF9800), modifier = Modifier.size(16.dp))
+                        Icon(Icons.Filled.Info, "Info", tint = Color(0xFF8B5CF6), modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            "La generacion de imagenes y videos puede tener costo dependiendo del provider que uses. " +
-                            "fal.ai y Together AI ofrecen creditos iniciales gratis. " +
-                            "Revisa los precios en la pagina del provider que prefieras antes de usar.\n\n" +
-                            "Prioridad: fal.ai → Together AI → OpenRouter\n" +
-                            "Di 'genera una imagen de...' o 'genera un video de...' en cualquier chat.",
-                            fontSize = 11.sp, color = Color(0xFFE0E0E0), lineHeight = 16.sp
+                            "Crea tu key GRATIS en enter.pollinations.ai con tu cuenta de GitHub.\n\n" +
+                            "Con key activa puedes decirle a Emma:\n" +
+                            "• \"Genera una imagen de un gato astronauta\"\n" +
+                            "• \"Crea una canción de rock sobre programar\"\n" +
+                            "• \"Genera un video de un atardecer en la playa\"\n" +
+                            "• \"Lee esto en voz alta\"\n\n" +
+                            "Sin key solo las imágenes están disponibles.",
+                            fontSize = 11.sp, color = textPrimary, lineHeight = 16.sp
                         )
                     }
                 }

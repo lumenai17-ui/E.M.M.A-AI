@@ -5,22 +5,21 @@ import android.graphics.BitmapFactory
 import android.util.Log
 import com.beemovil.files.PublicFileWriter
 import com.beemovil.llm.ToolDefinition
+import com.beemovil.media.PollinationsClient
 import com.beemovil.plugins.EmmaPlugin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
-import java.util.concurrent.TimeUnit
 
 /**
- * Sprint 6: Image Generation Plugin for E.M.M.A.
+ * Image Generation Plugin for E.M.M.A.
  *
- * Uses Pollinations.ai (free, no API key needed) for text-to-image generation.
- * Falls back gracefully if the service is unavailable.
+ * Uses Pollinations.ai for text-to-image generation.
+ * - With API key: uses gen.pollinations.ai with advanced models (Flux, GPT Image, etc.)
+ * - Without API key: falls back to legacy image.pollinations.ai (still works, free)
  *
  * Generated images are:
  *   1. Saved to internal cache
@@ -33,15 +32,9 @@ class ImageGenerationPlugin(private val context: Context) : EmmaPlugin {
     private val TAG = "ImageGenPlugin"
 
     companion object {
-        private const val POLLINATIONS_URL = "https://image.pollinations.ai/prompt/"
         private const val DEFAULT_WIDTH = 1024
         private const val DEFAULT_HEIGHT = 1024
     }
-
-    private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS) // Image gen can be slow
-        .build()
 
     override fun getToolDefinition(): ToolDefinition {
         return ToolDefinition(
@@ -96,12 +89,17 @@ class ImageGenerationPlugin(private val context: Context) : EmmaPlugin {
 
         return withContext(Dispatchers.IO) {
             try {
-                // Build enhanced prompt with style
                 val enhancedPrompt = buildEnhancedPrompt(prompt, style)
                 Log.i(TAG, "Generating image: $enhancedPrompt (${width}x${height})")
 
-                // Download image from Pollinations
-                val imageBytes = downloadImage(enhancedPrompt, width, height)
+                // Use new API if key available, otherwise fallback to legacy
+                val url = if (PollinationsClient.hasApiKey(context)) {
+                    PollinationsClient.imageUrl(enhancedPrompt, width, height, "flux")
+                } else {
+                    PollinationsClient.legacyImageUrl(enhancedPrompt, width, height)
+                }
+
+                val imageBytes = PollinationsClient.downloadMedia(context, url)
                     ?: return@withContext "❌ No se pudo generar la imagen. El servicio no está disponible."
 
                 // Save to internal cache
@@ -123,38 +121,16 @@ class ImageGenerationPlugin(private val context: Context) : EmmaPlugin {
                 }
 
                 // Copy to public Downloads/EMMA/
-                val publicUri = PublicFileWriter.copyToPublicDownloads(
-                    context, localFile, "image/png"
-                )
+                PublicFileWriter.copyToPublicDownloads(context, localFile, "image/png")
 
                 Log.i(TAG, "Image generated: ${options.outWidth}x${options.outHeight} → $fileName")
 
-                // Return signal for chat attachment
                 "TOOL_CALL::file_generated::${localFile.absolutePath}"
 
             } catch (e: Exception) {
                 Log.e(TAG, "Image generation error: ${e.message}", e)
                 "❌ Error generando imagen: ${e.message}"
             }
-        }
-    }
-
-    private fun downloadImage(prompt: String, width: Int, height: Int): ByteArray? {
-        val encodedPrompt = java.net.URLEncoder.encode(prompt, "UTF-8")
-        val url = "${POLLINATIONS_URL}${encodedPrompt}?width=$width&height=$height&nologo=true&seed=${System.currentTimeMillis() % 100000}"
-
-        val request = Request.Builder()
-            .url(url)
-            .get()
-            .build()
-
-        val response = httpClient.newCall(request).execute()
-        return if (response.isSuccessful) {
-            response.body?.bytes()
-        } else {
-            Log.e(TAG, "Pollinations error: ${response.code}")
-            response.close()
-            null
         }
     }
 
