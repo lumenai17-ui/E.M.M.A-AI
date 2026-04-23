@@ -17,9 +17,19 @@ local.properties
 # Keystore
 *.jks
 *.keystore
+keystore.properties
 
 # Crash logs
 crash.log
 
 # API keys (never commit)
 secrets.properties
+
+# Build logs and binaries
+*.apk
+*.log
+*.txt
+build_*.txt
+build_*.log
+test_build*.log
+errors.txt

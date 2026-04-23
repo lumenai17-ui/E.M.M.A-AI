@@ -445,25 +445,25 @@ class TelegramBotService : Service() {
     }
 
     private fun isAuthorized(username: String, chatId: Long): Boolean {
-        // If no owner is set, allow everyone (open mode)
+        // Reject if no owner is configured
         if (ownerUsername.isBlank()) {
-            Log.d(TAG, "Auth: Open mode (no owner set). Allowing chatId=$chatId")
-            return true
+            Log.w(TAG, "Auth DENIED: No owner configured. chatId=$chatId")
+            return false
         }
-        
+
         // Normalize both usernames for robust comparison
         val normalizedOwner = ownerUsername.removePrefix("@").trim().lowercase()
         val normalizedSender = username.removePrefix("@").trim().lowercase()
-        
+
         Log.d(TAG, "Auth check: owner='$normalizedOwner' vs sender='$normalizedSender' chatId=$chatId")
-        
+
         // Check owner username (normalized)
         if (normalizedSender.isNotBlank() && normalizedSender == normalizedOwner) {
             // Auto-register this chat ID for future messages (even if username changes)
             autoRegisterChatId(chatId)
             return true
         }
-        
+
         // Check allowed chat IDs (covers cases where username is empty or changed)
         val prefs = getSharedPreferences("beemovil", Context.MODE_PRIVATE)
         val allowedStr = prefs.getString(PREF_ALLOWED_CHATS, "") ?: ""
@@ -474,15 +474,7 @@ class TelegramBotService : Service() {
                 return true
             }
         }
-        
-        // If sender has no username (Telegram allows this), auto-authorize 
-        // the first message and save the chat ID for future auth
-        if (normalizedSender.isBlank()) {
-            Log.i(TAG, "Auth: Sender has no username. Auto-authorizing chatId=$chatId")
-            autoRegisterChatId(chatId)
-            return true
-        }
-        
+
         Log.w(TAG, "Auth DENIED: '$normalizedSender' != '$normalizedOwner' and chatId=$chatId not in allowlist")
         return false
     }

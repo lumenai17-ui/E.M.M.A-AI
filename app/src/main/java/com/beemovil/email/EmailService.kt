@@ -317,7 +317,6 @@ class EmailService(private val context: Context) {
         put("mail.imaps.host", config.imapHost)
         put("mail.imaps.port", config.imapPort.toString())
         put("mail.imaps.ssl.enable", "true")
-        put("mail.imaps.ssl.trust", "*")
         put("mail.imaps.timeout", "15000")
         put("mail.imaps.connectiontimeout", "15000")
     }
@@ -331,7 +330,6 @@ class EmailService(private val context: Context) {
             put("mail.smtp.port", "465")
             put("mail.smtp.auth", "true")
             put("mail.smtp.ssl.enable", "true")
-            put("mail.smtp.ssl.trust", "*")
             put("mail.smtp.socketFactory.port", "465")
             put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory")
             put("mail.smtp.socketFactory.fallback", "false")
@@ -343,7 +341,6 @@ class EmailService(private val context: Context) {
             put("mail.smtp.port", config.smtpPort.toString())
             put("mail.smtp.auth", "true")
             put("mail.smtp.starttls.enable", "true")
-            put("mail.smtp.ssl.trust", "*")
             put("mail.smtp.timeout", "15000")
             put("mail.smtp.connectiontimeout", "15000")
         }

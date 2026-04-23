@@ -105,6 +105,11 @@ class DeepgramVoiceManager(private val context: Context) {
                 override fun onEndOfSpeech() {}
                 override fun onError(error: Int) {
                     onError?.invoke("Native STT Error: $error")
+                    // Recreate STT instance after error so next attempt doesn't fail silently
+                    nativeSTT?.destroy()
+                    nativeSTT = if (android.speech.SpeechRecognizer.isRecognitionAvailable(context)) {
+                        android.speech.SpeechRecognizer.createSpeechRecognizer(context)
+                    } else null
                 }
                 override fun onResults(results: android.os.Bundle?) {
                     val matches = results?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)

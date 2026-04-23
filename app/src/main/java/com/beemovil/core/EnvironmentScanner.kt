@@ -52,6 +52,8 @@ class EnvironmentScanner(private val context: Context) {
             if (location != null) {
                 return@withContext Pair(location.latitude, location.longitude)
             }
+        } catch (e: SecurityException) {
+            // Location permission revoked or Play Services unavailable
         } catch (e: Exception) {
             e.printStackTrace()
         }

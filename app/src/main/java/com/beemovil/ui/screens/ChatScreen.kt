@@ -19,7 +19,7 @@ import com.beemovil.R
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import com.beemovil.ui.ChatViewModel
 import com.beemovil.ui.theme.*
@@ -58,7 +58,7 @@ fun ChatScreen(
     val fileSurface = if (isDark) Color(0xFF1E1E2C).copy(alpha=0.6f) else LightCard
 
     var inputText by remember { mutableStateOf("") }
-    var showMenuForMessage by remember { mutableStateOf<String?>(null) }
+    var showMenuForMessage by remember { mutableStateOf<Int?>(null) }
     var attachedFileUri by remember { mutableStateOf<android.net.Uri?>(null) }
     
     var showTopMenu by remember { mutableStateOf(false) }
@@ -264,7 +264,7 @@ fun ChatScreen(
                 modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
                 contentPadding = PaddingValues(top = 16.dp, bottom = 100.dp)
             ) {
-                items(displayMessages) { msg ->
+                itemsIndexed(displayMessages) { index, msg ->
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                         horizontalArrangement = if (msg.isUser) Arrangement.End else Arrangement.Start
@@ -277,7 +277,7 @@ fun ChatScreen(
                                     .background(if (msg.isUser) userBubble else assistantBubble)
                                     .combinedClickable(
                                         onClick = {},
-                                        onLongClick = { showMenuForMessage = msg.text }
+                                        onLongClick = { showMenuForMessage = index }
                                     )
                                     .padding(12.dp)
                             ) {
@@ -286,10 +286,10 @@ fun ChatScreen(
                                         val fPath = msg.filePaths.first()
                                         val fName = msg.attachmentNames.firstOrNull() ?: java.io.File(fPath).name
                                         val fMime = msg.attachmentMimeTypes.firstOrNull() ?: ""
-                                        
-                                        val isImage = fMime.startsWith("image/") || 
-                                            fPath.endsWith(".jpg") || fPath.endsWith(".jpeg") || 
-                                            fPath.endsWith(".png") || fPath.endsWith(".webp") || 
+
+                                        val isImage = fMime.startsWith("image/") ||
+                                            fPath.endsWith(".jpg") || fPath.endsWith(".jpeg") ||
+                                            fPath.endsWith(".png") || fPath.endsWith(".webp") ||
                                             fPath.endsWith(".gif")
 
                                         Surface(
@@ -319,7 +319,7 @@ fun ChatScreen(
                                                             android.widget.Toast.makeText(context, "No se pudo abrir: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
                                                         }
                                                     },
-                                                    onLongClick = { showMenuForMessage = msg.text }
+                                                    onLongClick = { showMenuForMessage = index }
                                                 )
                                         ) {
                                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(8.dp)) {
@@ -362,9 +362,9 @@ fun ChatScreen(
                                     }
                                 }
                             }
-                            
+
                             DropdownMenu(
-                                expanded = showMenuForMessage == msg.text,
+                                expanded = showMenuForMessage == index,
                                 onDismissRequest = { showMenuForMessage = null }
                             ) {
                                 DropdownMenuItem(
@@ -378,7 +378,7 @@ fun ChatScreen(
                                 if (msg.filePaths.isNotEmpty()) {
                                     val rawPath = msg.filePaths.first()
                                     val fileMime = msg.attachmentMimeTypes.firstOrNull() ?: "*/*"
-                                    
+
                                     DropdownMenuItem(
                                         text = { Text("Abrir archivo") },
                                         onClick = {

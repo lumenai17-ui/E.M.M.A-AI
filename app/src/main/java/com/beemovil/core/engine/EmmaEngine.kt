@@ -121,10 +121,9 @@ class EmmaEngine(private val context: Context) {
         }
     }
 
-    fun clearMemoryAndHistory(customSystemPrompt: String? = null) {
+    suspend fun clearMemoryAndHistory(customSystemPrompt: String? = null) {
         Log.d(TAG, "Clearing volatile context...")
-        // Sync clear — called from coroutine context, safe with historyMutex callers
-        synchronized(messagesHistory) {
+        historyMutex.withLock {
             messagesHistory.clear()
             val pastMemories = memoryDB?.getAllMemories()?.joinToString("\n") ?: ""
             val memoryInjection = if (pastMemories.isNotBlank()) "\nMEMORIAS PREVIAS DEL USUARIO:\n$pastMemories\n" else ""

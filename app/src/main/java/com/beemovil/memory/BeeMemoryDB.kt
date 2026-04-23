@@ -18,7 +18,7 @@ class BeeMemoryDB(context: Context) {
     }
     
     fun saveMemory(memoryFragment: String) {
-        val count = getMemoryCount()
+        val count = prefs.all.keys.count { it.startsWith("mem_") }
         prefs.edit().putString("mem_$count", memoryFragment).apply()
     }
 

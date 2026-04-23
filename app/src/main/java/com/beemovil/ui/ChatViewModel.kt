@@ -9,6 +9,7 @@ import android.content.Context
 import com.beemovil.core.engine.EmmaEngine
 import com.beemovil.voice.DeepgramVoiceManager
 import kotlinx.coroutines.launch
+import android.util.Log
 import java.util.Locale
 
 data class ChatUiMessage(
@@ -684,8 +685,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             ))
             
             swarmInsight.value = ""
-            val response = engine.processUserMessage(enrichedText, capturedProvider, capturedModel) { progress ->
-                swarmInsight.value = progress
+            val response = try {
+                engine.processUserMessage(enrichedText, capturedProvider, capturedModel) { progress ->
+                    swarmInsight.value = progress
+                }
+            } catch (e: Exception) {
+                Log.e("ChatViewModel", "Error en processUserMessage: ${e.message}", e)
+                "⚠️ Error interno: ${e.message?.take(200) ?: "desconocido"}"
             }
             swarmInsight.value = ""
             isLoading.value = false
