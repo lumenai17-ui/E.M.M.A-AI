@@ -695,10 +695,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 "$text\n\n[Archivo adjunto: $label (tipo: ${fileMimeType ?: "desconocido"}) — contenido binario no extraíble]"
             }
         } else text
-        
+
+        // U-06 fix: Guardar mensaje del usuario ANTES de llamar al LLM
         viewModelScope.launch {
-            // U-06 fix: Guardar mensaje del usuario ANTES de llamar al LLM
-            // Si la app se cierra o el LLM falla, al menos el mensaje del usuario NO se pierde
             chatHistoryDB.chatHistoryDao().insertMessage(com.beemovil.database.ChatMessageEntity(
                 threadId = capturedThreadId,
                 senderId = "user",
@@ -709,37 +708,127 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             ))
         }
 
-        // Delegate to ForegroundService — survives app backgrounding
-        val taskId = System.currentTimeMillis()
-        pendingTaskIds.add(taskId)
-        swarmInsight.value = ""
-
-        val serviceIntent = Intent(context, EmmaTaskService::class.java).apply {
-            action = EmmaTaskService.ACTION_PROCESS
-            putExtra(EmmaTaskService.EXTRA_MESSAGE, enrichedText)
-            putExtra(EmmaTaskService.EXTRA_THREAD_ID, capturedThreadId)
-            putExtra(EmmaTaskService.EXTRA_AGENT_ID, capturedAgentId)
-            putExtra(EmmaTaskService.EXTRA_PROVIDER, capturedProvider)
-            putExtra(EmmaTaskService.EXTRA_MODEL, capturedModel)
-            putExtra(EmmaTaskService.EXTRA_TASK_ID, taskId)
-            val agentPrompt = activeAgentConfig.value?.systemPrompt
-            if (!agentPrompt.isNullOrBlank()) {
-                putExtra(EmmaTaskService.EXTRA_SYSTEM_PROMPT, agentPrompt)
+        // Start EmmaTaskService as keep-alive shield (notification + WakeLock only)
+        try {
+            val keepAliveIntent = Intent(context, EmmaTaskService::class.java).apply {
+                action = EmmaTaskService.ACTION_KEEPALIVE
             }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(keepAliveIntent)
+            } else {
+                context.startService(keepAliveIntent)
+            }
+        } catch (e: Exception) {
+            Log.w("ChatViewModel", "Keep-alive service unavailable: ${e.message}")
         }
 
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(serviceIntent)
-            } else {
-                context.startService(serviceIntent)
+        // Process in applicationScope — survives Activity/ViewModel destruction
+        val appScope = (context as com.beemovil.BeeMovilApp).applicationScope
+        appScope.launch {
+            swarmInsight.value = ""
+            val response = try {
+                engine.processUserMessage(
+                    enrichedText, capturedProvider, capturedModel,
+                    onProgress = { progress -> swarmInsight.value = progress },
+                    threadId = capturedThreadId,
+                    senderId = capturedAgentId
+                )
+            } catch (e: Exception) {
+                Log.e("ChatViewModel", "Engine error: ${e.message}", e)
+                "⚠️ Error procesando tu mensaje: ${e.message?.take(200) ?: "desconocido"}"
             }
-            Log.i("ChatViewModel", "Task $taskId delegated to EmmaTaskService")
-        } catch (e: Exception) {
-            Log.e("ChatViewModel", "Failed to start service, falling back to in-process", e)
-            pendingTaskIds.remove(taskId)
-            // Fallback: execute in-process if service can't start
-            executeInProcess(enrichedText, capturedProvider, capturedModel, capturedThreadId, capturedAgentId)
+            swarmInsight.value = ""
+            isLoading.value = false
+
+            // Stop the keep-alive shield
+            try {
+                val doneIntent = Intent(context, EmmaTaskService::class.java).apply {
+                    action = EmmaTaskService.ACTION_DONE
+                }
+                context.startService(doneIntent)
+            } catch (_: Exception) {}
+
+            if (response.isBlank()) return@launch
+
+            // Detect file results
+            if (response.startsWith("TOOL_CALL::open_browser::")) {
+                val urlToOpen = response.removePrefix("TOOL_CALL::open_browser::")
+                browserUrl.value = urlToOpen
+                showBrowser.value = true
+                val feedback = "Aquí tienes la navegación interactiva que pediste."
+                messages.add(ChatUiMessage(feedback, false))
+                if (!isMuted.value) {
+                    voiceManager.speak(feedback, language = Locale.getDefault().language)
+                }
+            } else if (response.startsWith("TOOL_CALL::file_generated::")) {
+                val filePath = response.removePrefix("TOOL_CALL::file_generated::")
+                val generatedName = java.io.File(filePath).name
+                val extension = generatedName.substringAfterLast('.', "").lowercase()
+                val isImage = extension in listOf("png", "jpg", "jpeg", "webp", "gif")
+                val mimeType = when (extension) {
+                    "png" -> "image/png"
+                    "jpg", "jpeg" -> "image/jpeg"
+                    "webp" -> "image/webp"
+                    "gif" -> "image/gif"
+                    "pdf" -> "application/pdf"
+                    "csv" -> "text/csv"
+                    "html" -> "text/html"
+                    "mp4" -> "video/mp4"
+                    "mp3" -> "audio/mpeg"
+                    else -> "application/octet-stream"
+                }
+                val feedback = if (isImage) {
+                    "🎨 ¡Listo! He generado tu imagen '$generatedName'. La puedes ver aquí abajo y también está guardada en Downloads/EMMA/."
+                } else {
+                    "📄 He generado tu documento '$generatedName' y lo he archivado aquí en la conversación."
+                }
+
+                messages.add(ChatUiMessage(
+                    feedback, false,
+                    filePaths = listOf(filePath),
+                    attachmentNames = listOf(generatedName),
+                    attachmentMimeTypes = listOf(mimeType)
+                ))
+
+                if (!isMuted.value) {
+                    voiceManager.speak(feedback, language = Locale.getDefault().language)
+                }
+
+                // Save to Room with file metadata
+                val aiMetaJson = org.json.JSONObject().apply {
+                    put("file_path", filePath)
+                    put("file_name", generatedName)
+                    put("mime_type", mimeType)
+                }.toString()
+                chatHistoryDB.chatHistoryDao().insertMessage(com.beemovil.database.ChatMessageEntity(
+                    threadId = capturedThreadId,
+                    senderId = capturedAgentId,
+                    timestamp = System.currentTimeMillis(),
+                    role = "assistant",
+                    content = feedback,
+                    metadataJson = aiMetaJson
+                ))
+            } else {
+                messages.add(ChatUiMessage(response, false))
+
+                // Save to Room
+                chatHistoryDB.chatHistoryDao().insertMessage(com.beemovil.database.ChatMessageEntity(
+                    threadId = capturedThreadId,
+                    senderId = capturedAgentId,
+                    timestamp = System.currentTimeMillis(),
+                    role = "assistant",
+                    content = response
+                ))
+
+                if (!isMuted.value) {
+                    voiceManager.speak(response, language = Locale.getDefault().language, onError = { err ->
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            android.widget.Toast.makeText(getApplication(), "Avisos de Voz: $err", android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    })
+                }
+            }
+            refreshHistoryCount()
         }
     }
     
@@ -760,6 +849,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         if (result.response.isBlank()) return
 
+        // Detect file results by BOTH the flag AND the response prefix (safety net)
+        val isFile = result.isFileGenerated || result.response.startsWith("TOOL_CALL::file_generated::")
+        val filePath = result.filePath 
+            ?: if (result.response.startsWith("TOOL_CALL::file_generated::")) result.response.removePrefix("TOOL_CALL::file_generated::") else null
+
         when {
             result.response.startsWith("TOOL_CALL::open_browser::") -> {
                 val urlToOpen = result.response.removePrefix("TOOL_CALL::open_browser::")
@@ -771,11 +865,22 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     voiceManager.speak(feedback, language = Locale.getDefault().language)
                 }
             }
-            result.isFileGenerated && result.filePath != null -> {
-                val generatedName = result.fileName ?: java.io.File(result.filePath).name
+            isFile && filePath != null -> {
+                val generatedName = result.fileName ?: java.io.File(filePath).name
                 val extension = generatedName.substringAfterLast('.', "").lowercase()
                 val isImage = extension in listOf("png", "jpg", "jpeg", "webp", "gif")
-                val mimeType = result.mimeType ?: "application/octet-stream"
+                val mimeType = result.mimeType ?: when (extension) {
+                    "png" -> "image/png"
+                    "jpg", "jpeg" -> "image/jpeg"
+                    "webp" -> "image/webp"
+                    "gif" -> "image/gif"
+                    "pdf" -> "application/pdf"
+                    "csv" -> "text/csv"
+                    "html" -> "text/html"
+                    "mp4" -> "video/mp4"
+                    "mp3" -> "audio/mpeg"
+                    else -> "application/octet-stream"
+                }
                 val feedback = if (isImage) {
                     "🎨 ¡Listo! He generado tu imagen '$generatedName'. La puedes ver aquí abajo y también está guardada en Downloads/EMMA/."
                 } else {
@@ -783,7 +888,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 messages.add(ChatUiMessage(
                     feedback, false,
-                    filePaths = listOf(result.filePath),
+                    filePaths = listOf(filePath),
                     attachmentNames = listOf(generatedName),
                     attachmentMimeTypes = listOf(mimeType)
                 ))
@@ -819,9 +924,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             swarmInsight.value = ""
             val response = try {
-                engine.processUserMessage(message, provider, model) { progress ->
-                    swarmInsight.value = progress
-                }
+                engine.processUserMessage(
+                    message, provider, model,
+                    onProgress = { progress -> swarmInsight.value = progress },
+                    threadId = threadId,
+                    senderId = agentId
+                )
             } catch (e: Exception) {
                 Log.e("ChatViewModel", "In-process fallback error: ${e.message}", e)
                 "⚠️ Error interno: ${e.message?.take(200) ?: "desconocido"}"

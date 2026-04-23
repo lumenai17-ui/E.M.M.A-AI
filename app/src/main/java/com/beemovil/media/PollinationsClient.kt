@@ -68,8 +68,15 @@ object PollinationsClient {
     }
 
     /**
+     * Custom exception for 402 Payment Required — user needs pollen credits.
+     */
+    class InsufficientPollenException(message: String) : Exception(message)
+
+    /**
      * Download binary content (image, audio, video) from a Pollinations URL.
      * Auth via both Header AND query param for maximum compatibility.
+     *
+     * @throws InsufficientPollenException when the API returns 402 (no pollen credits)
      */
     fun downloadMedia(context: Context, url: String, useHeavyClient: Boolean = false): ByteArray? {
         val apiKey = getApiKey(context)
@@ -98,8 +105,17 @@ object PollinationsClient {
                 val errorBody = response.body?.string()?.take(200) ?: "No body"
                 Log.e(TAG, "Pollinations error $code: $errorBody (url: ${url.take(100)})")
                 response.close()
+                
+                if (code == 402) {
+                    throw InsufficientPollenException(
+                        "Tu cuenta de Pollinations no tiene créditos suficientes. " +
+                        "Ve a enter.pollinations.ai para recargar o conectar tu cuenta."
+                    )
+                }
                 null
             }
+        } catch (e: InsufficientPollenException) {
+            throw e // Re-throw so plugins can catch it
         } catch (e: Exception) {
             Log.e(TAG, "Network error: ${e.message}", e)
             null
@@ -143,6 +159,6 @@ object PollinationsClient {
      */
     fun videoUrl(prompt: String, model: String = "ltx-2", durationSecs: Int = 5, aspectRatio: String = "16:9"): String {
         val encoded = java.net.URLEncoder.encode(prompt, "UTF-8")
-        return "$BASE_URL/video/$encoded?model=$model&duration=$durationSecs&aspectRatio=$aspectRatio&nologo=true"
+        return "$BASE_URL/image/$encoded?model=$model&duration=$durationSecs&aspectRatio=$aspectRatio&nologo=true"
     }
 }

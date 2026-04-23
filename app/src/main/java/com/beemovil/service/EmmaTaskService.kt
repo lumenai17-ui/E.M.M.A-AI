@@ -41,6 +41,8 @@ class EmmaTaskService : Service() {
 
         const val ACTION_PROCESS = "ACTION_PROCESS"
         const val ACTION_CANCEL = "ACTION_CANCEL"
+        const val ACTION_KEEPALIVE = "ACTION_KEEPALIVE"
+        const val ACTION_DONE = "ACTION_DONE"
 
         const val EXTRA_MESSAGE = "EXTRA_MESSAGE"
         const val EXTRA_THREAD_ID = "EXTRA_THREAD_ID"
@@ -128,6 +130,17 @@ class EmmaTaskService : Service() {
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
+            ACTION_KEEPALIVE -> {
+                Log.i(TAG, "Keep-alive mode: notification + WakeLock only")
+                startForeground(NOTIFICATION_ID, buildProgressNotification("E.M.M.A. está procesando tu solicitud..."))
+                acquireWakeLock()
+            }
+            ACTION_DONE -> {
+                Log.i(TAG, "Task done, stopping service")
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                releaseWakeLock()
+                stopSelf()
+            }
             else -> {
                 stopSelf()
             }
@@ -167,12 +180,17 @@ class EmmaTaskService : Service() {
                 Log.i(TAG, "[$taskId] Processing: '${message.take(60)}...' on $provider:$model")
 
                 // Step 2: Execute LLM request (this is what survives backgrounding)
-                val response = engine.processUserMessage(message, provider, model) { progress ->
-                    // Update notification with progress
-                    updateNotification(progress)
-                    // Notify ViewModel if alive
-                    taskProgress.postValue(TaskProgress(taskId, threadId, progress))
-                }
+                val response = engine.processUserMessage(
+                    message, provider, model,
+                    onProgress = { progress ->
+                        // Update notification with progress
+                        updateNotification(progress)
+                        // Notify ViewModel if alive
+                        taskProgress.postValue(TaskProgress(taskId, threadId, progress))
+                    },
+                    threadId = threadId,
+                    senderId = agentId
+                )
 
                 // Step 3: Handle result
                 if (response.isBlank()) {

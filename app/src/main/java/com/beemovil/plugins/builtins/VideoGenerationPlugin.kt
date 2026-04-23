@@ -93,13 +93,13 @@ class VideoGenerationPlugin(private val context: Context) : EmmaPlugin {
                     return@withContext "❌ El video generado no es válido. Intenta con otro prompt."
                 }
 
-                // Copy to public Downloads/EMMA/videos/
-                PublicFileWriter.copyToPublicDownloads(context, localFile, "video/mp4")
+                // Copy to public Downloads/EMMA/ and use that path for the chat
+                val publicPath = PublicFileWriter.copyToPublicDownloads(context, localFile, "video/mp4")
 
                 val sizeMB = localFile.length() / (1024 * 1024f)
-                Log.i(TAG, "Video generated: ${String.format("%.1f", sizeMB)}MB → $fileName")
+                Log.i(TAG, "Video generated: ${String.format("%.1f", sizeMB)}MB → $fileName (public: $publicPath)")
 
-                "TOOL_CALL::file_generated::${localFile.absolutePath}"
+                "TOOL_CALL::file_generated::$publicPath"
 
             } catch (e: Exception) {
                 Log.e(TAG, "Video generation error: ${e.message}", e)

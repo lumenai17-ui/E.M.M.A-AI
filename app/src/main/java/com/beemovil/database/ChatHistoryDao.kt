@@ -34,6 +34,9 @@ interface ChatHistoryDao {
     @Query("SELECT * FROM agent_config")
     suspend fun getAllAgents(): List<AgentConfigEntity>
 
+    @Query("SELECT * FROM agent_config")
+    fun getAllAgentsSync(): List<AgentConfigEntity>
+
     @Insert
     suspend fun createThread(thread: ChatThreadEntity)
 

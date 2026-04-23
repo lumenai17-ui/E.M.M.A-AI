@@ -266,4 +266,37 @@ object DynamicModelFetcher {
     fun clearCache(context: Context) {
         context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit().clear().apply()
     }
+
+    // ═══════════════════════════════════════
+    // UNIFIED HELPER FOR LA FORJA
+    // ═══════════════════════════════════════
+
+    /**
+     * Fetch models for a given provider. Returns dynamic list if available,
+     * falls back to ModelRegistry static list.
+     */
+    suspend fun fetchForProvider(context: Context, provider: String, apiKey: String = "", ollamaUrl: String = ""): List<ModelRegistry.ModelEntry> {
+        return when (provider) {
+            "openrouter" -> {
+                val key = apiKey.ifBlank {
+                    com.beemovil.security.SecurePrefs.get(context).getString("openrouter_api_key", null) ?: ""
+                }
+                if (key.isNotBlank()) fetchOpenRouterModels(context, key)
+                else getCachedOpenRouterModels(context)
+            }
+            "ollama" -> {
+                val url = ollamaUrl.ifBlank {
+                    com.beemovil.security.SecurePrefs.get(context).getString("ollama_base_url", null) ?: "https://ollama.cloud"
+                }
+                fetchOllamaModels(context, url)
+            }
+            "local" -> getLocalModels()
+            else -> emptyList()
+        }
+    }
+
+    /** Get on-device models with download status */
+    fun getLocalModels(): List<ModelRegistry.ModelEntry> {
+        return ModelRegistry.LOCAL
+    }
 }

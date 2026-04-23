@@ -82,7 +82,7 @@ class ImageGenerationPlugin(private val context: Context) : EmmaPlugin {
     }
 
     override suspend fun execute(args: Map<String, Any>): String {
-        val prompt = args["prompt"] as? String ?: return "❌ Falta el prompt para generar la imagen."
+        val prompt = args["prompt"] as? String ?: return "ERROR_TOOL_FAILED: Falta el prompt para generar la imagen."
         val style = args["style"] as? String ?: "digital_art"
         val width = (args["width"] as? Number)?.toInt()?.coerceIn(256, 1536) ?: DEFAULT_WIDTH
         val height = (args["height"] as? Number)?.toInt()?.coerceIn(256, 1536) ?: DEFAULT_HEIGHT
@@ -99,8 +99,16 @@ class ImageGenerationPlugin(private val context: Context) : EmmaPlugin {
                     PollinationsClient.legacyImageUrl(enhancedPrompt, width, height)
                 }
 
-                val imageBytes = PollinationsClient.downloadMedia(context, url)
-                    ?: return@withContext "❌ No se pudo generar la imagen. El servicio no está disponible."
+                // Attempt with automatic retry on failure
+                var imageBytes = PollinationsClient.downloadMedia(context, url)
+                if (imageBytes == null) {
+                    Log.w(TAG, "First attempt failed, retrying...")
+                    kotlinx.coroutines.delay(2000)
+                    imageBytes = PollinationsClient.downloadMedia(context, url)
+                }
+                if (imageBytes == null) {
+                    return@withContext "ERROR_TOOL_FAILED: La generación de imagen falló después de 2 intentos. El servicio de Pollinations no respondió. Informa al usuario que hubo un timeout y que puede intentar de nuevo."
+                }
 
                 // Save to internal cache
                 val timestamp = System.currentTimeMillis()
@@ -117,19 +125,19 @@ class ImageGenerationPlugin(private val context: Context) : EmmaPlugin {
                 BitmapFactory.decodeFile(localFile.absolutePath, options)
                 if (options.outWidth <= 0) {
                     localFile.delete()
-                    return@withContext "❌ La imagen generada no es válida. Intenta con otro prompt."
+                    return@withContext "ERROR_TOOL_FAILED: La imagen descargada no es válida. Pide al usuario que intente con otro prompt."
                 }
 
-                // Copy to public Downloads/EMMA/
-                PublicFileWriter.copyToPublicDownloads(context, localFile, "image/png")
+                // Copy to public Downloads/EMMA/ and use that path for the chat
+                val publicPath = PublicFileWriter.copyToPublicDownloads(context, localFile, "image/png")
 
-                Log.i(TAG, "Image generated: ${options.outWidth}x${options.outHeight} → $fileName")
+                Log.i(TAG, "Image generated: ${options.outWidth}x${options.outHeight} → $fileName (public: $publicPath)")
 
-                "TOOL_CALL::file_generated::${localFile.absolutePath}"
+                "TOOL_CALL::file_generated::$publicPath"
 
             } catch (e: Exception) {
                 Log.e(TAG, "Image generation error: ${e.message}", e)
-                "❌ Error generando imagen: ${e.message}"
+                "ERROR_TOOL_FAILED: Error generando imagen: ${e.message}. Informa al usuario del error."
             }
         }
     }

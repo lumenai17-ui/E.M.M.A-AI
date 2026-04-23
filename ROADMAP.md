@@ -198,19 +198,59 @@ Este documento traza las fases precisas para convertir la herencia de Bee en una
   - `ImageGenerationPlugin` via Pollinations.ai (10 estilos artísticos), image preview full-width en chat, context window auto-trimming, error messages amigables.
 - **Sprint 7: Build Release** [COMPLETADO]
   - ProGuard/R8 rules (15+ dependencias), version bump a v6.0.0, debug/release build types, signing config template, MultiDex, lint non-blocking. APK exitoso: 184 MB.
+- **Sprint 8: Pollinations Media Studio** [COMPLETADO]
+  - Fix video endpoint (`/image/` para todo), fix música endpoint. `InsufficientPollenException` con mensaje claro cuando la API key no tiene créditos (HTTP 402). Detección de falso "Sin internet" al cancelar coroutines.
+- **Sprint 9: Background Persistence + Premium PDF** [COMPLETADO]
+  - `EmmaTaskService.kt`: ForegroundService que mantiene requests del LLM vivos cuando la app se backgroundea. WakeLock, notificación de progreso, resultado a Room DB + LiveData.
+  - `PremiumPdfPlugin.kt`: Genera PDFs profesionales renderizando HTML+CSS completo (tipo landing page) a través de un WebView headless → `PrintDocumentAdapter` → PDF pixel-perfect. Gradientes, imágenes, tipografía, diseño moderno preservado.
+  - `PdfPrinter.java`: Helper Java en package `android.print` para acceder a callbacks package-private del PrintDocumentAdapter.
+- **Sprint 10: Estabilización de Embebido de Archivos + Arquitectura Híbrida** [COMPLETADO]
+  - **Bug:** El `EmmaTaskService` creaba su propio `EmmaEngine` aislado, lo cual causaba que el LLM no accediera a las herramientas reales (plugins). Resultado: el LLM **inventaba** rutas de archivos sin generar nada, y no se mostraban previews en el chat.
+  - **Fix Arquitectural (ApplicationScope + KeepAlive Shield):** Se migró el procesamiento de vuelta al engine del ViewModel (probado y funcional) pero ejecutándolo en un `applicationScope` a nivel de `BeeMovilApp.kt` — un CoroutineScope que sobrevive la destrucción de Activity/ViewModel. El `EmmaTaskService` se reconvirtió en un "escudo" que solo mantiene la notificación de ForegroundService + WakeLock sin procesar nada.
+  - **Fix de Prompt (Anti-Alucinación de Archivos):** Se agregó regla absoluta al system prompt que **prohíbe** al LLM inventar rutas o simular que generó archivos. Debe invocar la herramienta o el usuario no verá nada.
+  - **Resultado:** Engine directo con herramientas funcionales + persistencia en background + archivos/imágenes embebidos correctamente en el chat con preview, abrir y compartir.
 
 ---
 
 ## 🔮 PRÓXIMAS FASES
 
-### FASE 14: Monetización y Distribución
-- [ ] Firma criptográfica con keystore de producción
-- [ ] Generación de AAB para Play Store
-- [ ] Vinculación con BEE Smart Portal (suscripciones)
-- [ ] Play Store listing (screenshots, descripción, assets)
+### FASE 14: Pollinations BYOP + Monetización
+*Meta: Implementar el modelo "Bring Your Own Pollen" para que cada usuario conecte su cuenta de Pollinations y pague sus propios créditos (video, música, TTS). Preparar la app para distribución comercial.*
 
-### FASE 15: Expansión de Capacidades
-- [ ] Integración Google Drive completa (browse, upload, download desde chat)
-- [ ] Modo offline mejorado (caché de respuestas, queue de acciones)
-- [ ] Widget de Home Screen con insight del dashboard
-- [ ] Notificaciones proactivas (clima, recordatorios, emails)
+- [ ] **BYOP OAuth Flow:** Crear flujo de autorización con `pk_` app key → `enter.pollinations.ai/authorize` → redirect con `sk_` del usuario → guardar en SecurePrefs
+- [ ] **UI Settings BYOP:** Botón "Conectar cuenta Pollinations" en Settings con indicador de estado (conectado/desconectado/créditos)
+- [ ] **Firma criptográfica** con keystore de producción
+- [ ] **Generación de AAB** para Play Store
+- [ ] **Vinculación con BEE Smart Portal** (suscripciones)
+- [ ] **Play Store listing** (screenshots, descripción, assets)
+
+### FASE 15: Refinamiento de Experiencia
+*Meta: Pulir la experiencia del usuario con features que marcan la diferencia entre un MVP y un producto premium.*
+
+- [ ] **Onboarding Wizard v2:** Flujo guiado que configura proveedor LLM + Pollinations + permisos en un solo wizard de 3 pasos
+- [ ] **Chat History Search & Export:** Búsqueda full-text en historial, exportar conversaciones completas como PDF premium
+- [ ] **Smart Retry on 402:** Si un plugin falla por créditos, ofrecer alternativa gratis automáticamente (ej: imagen en vez de video)
+- [ ] **Streaming Response UI:** Mostrar la respuesta del LLM token-by-token en la burbuja (efecto "typing" real)
+- [ ] **Widget de Home Screen** con insight del dashboard
+
+### FASE 15.5: Agentic Loop — Workflows Multi-Paso
+*Meta: Convertir el motor de tools de E.M.M.A. de ejecución lineal (una ronda) a un ciclo agéntico que permita al LLM encadenar herramientas secuencialmente, donde el paso 2 depende del resultado del paso 1.*
+
+- [ ] **Agentic Loop en EmmaEngine:** Cambiar `processUserMessage()` de ejecución lineal a `while` loop: ejecutar tools → devolver resultados al LLM → si pide más tools → ejecutarlos → repetir hasta que el LLM responda solo con texto. Máximo N iteraciones para evitar loops infinitos.
+- [ ] **Workflows habilitados:**
+  - Generar imagen → insertarla en PDF → adjuntarla a email
+  - Scraping web → analizar datos → exportar CSV
+  - Componer email → adjuntar archivo generado previamente
+  - Buscar contacto → enviar WhatsApp con documento adjunto
+- [ ] **Progress UI:** Mostrar al usuario cada paso del workflow en tiempo real: "Paso 1/3: Generando imagen... → Paso 2/3: Creando PDF... → Paso 3/3: Abriendo email..."
+- [ ] **Guard Rails:** Límite de rondas (ej: max 5), timeout global por workflow, detección de loops repetitivos
+
+### FASE 16: Expansión de Capacidades
+*Meta: Nuevas integraciones y modos de operación que amplían el alcance de E.M.M.A.*
+
+- [ ] **Integración Google Drive completa** (browse, upload, download desde chat)
+- [ ] **Modo offline mejorado** (caché de respuestas, queue de acciones)
+- [ ] **Notificaciones proactivas** (clima, recordatorios, emails)
+- [ ] **Multi-modal input:** Cámara en vivo → análisis visual continuo
+- [ ] **Agent Marketplace:** Compartir/importar configuraciones de agentes personalizados
+- [ ] **Explorador de Archivos EMMA:** Pestaña con acceso a Downloads/EMMA/ organizado por tipo (imágenes, videos, documentos, música)

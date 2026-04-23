@@ -23,7 +23,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.beemovil.llm.DynamicModelFetcher
+import com.beemovil.llm.ModelRegistry
 import com.beemovil.ui.theme.*
+import kotlinx.coroutines.launch
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -43,18 +46,62 @@ fun AgentFactorySheet(
     var agentName by remember { mutableStateOf("") }
     var agentIcon by remember { mutableStateOf("🤖") }
     var systemPrompt by remember { mutableStateOf("") }
-    var selectedModel by remember { mutableStateOf("koog-engine") }
     var selectedAvatarUri by remember { mutableStateOf<Uri?>(null) }
     var savedAvatarPath by remember { mutableStateOf<String?>(null) }
 
+    // Two-dropdown state
+    var selectedProvider by remember { mutableStateOf("default") }
+    var selectedModelId by remember { mutableStateOf("") }
+    var availableModels by remember { mutableStateOf<List<ModelRegistry.ModelEntry>>(emptyList()) }
+    var isLoadingModels by remember { mutableStateOf(false) }
+    var expandedProvider by remember { mutableStateOf(false) }
+    var expandedModel by remember { mutableStateOf(false) }
+
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // Provider options
+    val providerOptions = remember {
+        listOf(
+            "default" to "⚙️ Usar Config Global (Default)",
+            "openrouter" to "🌐 OpenRouter",
+            "ollama" to "☁️ Ollama Cloud",
+            "local" to "📱 Local (On-Device)",
+            "hermes-a2a" to "🔗 Hermes A2A (Túnel Remoto)"
+        )
+    }
+
+    // Load models when provider changes
+    LaunchedEffect(selectedProvider) {
+        if (selectedProvider in listOf("default", "hermes-a2a")) {
+            availableModels = emptyList()
+            selectedModelId = ""
+            return@LaunchedEffect
+        }
+        isLoadingModels = true
+        selectedModelId = ""
+        try {
+            val models = DynamicModelFetcher.fetchForProvider(context, selectedProvider)
+            availableModels = models
+            // Auto-select first model if available
+            if (models.isNotEmpty()) {
+                selectedModelId = models.first().id
+            }
+        } catch (e: Exception) {
+            // Fallback to static registry
+            availableModels = ModelRegistry.getModelsForProvider(selectedProvider)
+            if (availableModels.isNotEmpty()) {
+                selectedModelId = availableModels.first().id
+            }
+        }
+        isLoadingModels = false
+    }
 
     // Photo picker
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
-            // Copy to app's internal storage so it persists
             try {
                 val agentsDir = File(context.filesDir, "agent_avatars")
                 agentsDir.mkdirs()
@@ -71,28 +118,27 @@ fun AgentFactorySheet(
         }
     }
 
-    val modelOptions = remember {
-        val options = mutableListOf<Pair<String, String>>()
-        options.add("koog-engine" to "⚙️ Usar config global (Default)")
-        options.add("hermes-a2a" to "🔗 Hermes A2A (Túnel Remoto)")
-        
-        // OpenRouter models with free/premium badges
-        com.beemovil.llm.ModelRegistry.OPENROUTER.forEach { model ->
-            val badge = if (model.free) "🆓" else "💎"
-            options.add("openrouter:${model.id}" to "$badge ${model.name}")
-        }
-        // Ollama Cloud
-        com.beemovil.llm.ModelRegistry.OLLAMA_CLOUD.forEach { model ->
-            options.add("ollama:${model.id}" to "☁️ ${model.name}")
-        }
-        // Local on-device
-        com.beemovil.llm.ModelRegistry.LOCAL.forEach { model ->
-            options.add("local:${model.id}" to "📱 ${model.name}")
-        }
-        options
+    // Build the final model string for onForgeAgent
+    fun buildModelString(): String = when (selectedProvider) {
+        "default" -> "koog-engine"
+        "hermes-a2a" -> "hermes-a2a"
+        "openrouter" -> "openrouter:$selectedModelId"
+        "ollama" -> "ollama:$selectedModelId"
+        "local" -> "local:$selectedModelId"
+        else -> "koog-engine"
     }
 
-    var expandedMenu by remember { mutableStateOf(false) }
+    // Format model display with badges
+    fun ModelRegistry.ModelEntry.badgedName(): String {
+        val badges = buildString {
+            if (free) append("🆓 ")
+            else append("💎 ")
+            if (hasTools) append("🔧")
+            if (hasVision) append("👁️")
+            if (hasThinking) append("🧠")
+        }
+        return "$badges $name"
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -188,17 +234,22 @@ fun AgentFactorySheet(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // AI Engine Selection
+            // ═══════════════════════════════════════
+            // DROPDOWN 1: PROVIDER SELECTION
+            // ═══════════════════════════════════════
+            Text("Motor de Inteligencia", color = textSecondary, fontSize = 12.sp)
+            Spacer(modifier = Modifier.height(4.dp))
+
             ExposedDropdownMenuBox(
-                expanded = expandedMenu,
-                onExpandedChange = { expandedMenu = !expandedMenu }
+                expanded = expandedProvider,
+                onExpandedChange = { expandedProvider = !expandedProvider }
             ) {
                 OutlinedTextField(
                     readOnly = true,
-                    value = modelOptions.find { it.first == selectedModel }?.second ?: selectedModel,
+                    value = providerOptions.find { it.first == selectedProvider }?.second ?: "",
                     onValueChange = {},
-                    label = { Text("Motor de Inteligencia", color = textSecondary) },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedMenu) },
+                    label = { Text("Proveedor", color = textSecondary) },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedProvider) },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = textPrimary, unfocusedTextColor = textPrimary,
                         focusedBorderColor = accent, unfocusedBorderColor = textSecondary
@@ -206,18 +257,117 @@ fun AgentFactorySheet(
                     modifier = Modifier.menuAnchor().fillMaxWidth()
                 )
                 ExposedDropdownMenu(
-                    expanded = expandedMenu,
-                    onDismissRequest = { expandedMenu = false },
+                    expanded = expandedProvider,
+                    onDismissRequest = { expandedProvider = false },
                     modifier = Modifier.background(dropdownBg)
                 ) {
-                    modelOptions.forEach { selectionOption ->
+                    providerOptions.forEach { (key, label) ->
                         DropdownMenuItem(
-                            text = { Text(selectionOption.second, color = textPrimary) },
+                            text = { Text(label, color = textPrimary) },
                             onClick = {
-                                selectedModel = selectionOption.first
-                                expandedMenu = false
+                                selectedProvider = key
+                                expandedProvider = false
                             }
                         )
+                    }
+                }
+            }
+
+            // ═══════════════════════════════════════
+            // DROPDOWN 2: MODEL SELECTION (dynamic)
+            // ═══════════════════════════════════════
+            if (selectedProvider !in listOf("default", "hermes-a2a")) {
+                Spacer(modifier = Modifier.height(12.dp))
+
+                if (isLoadingModels) {
+                    // Loading state
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = accent,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text("Cargando modelos disponibles...", color = textSecondary, fontSize = 13.sp)
+                    }
+                } else {
+                    // Model count indicator
+                    Text(
+                        "✅ ${availableModels.size} modelos disponibles",
+                        color = textSecondary,
+                        fontSize = 11.sp
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    ExposedDropdownMenuBox(
+                        expanded = expandedModel,
+                        onExpandedChange = { expandedModel = !expandedModel }
+                    ) {
+                        OutlinedTextField(
+                            readOnly = true,
+                            value = availableModels.find { it.id == selectedModelId }?.badgedName() ?: "Selecciona un modelo",
+                            onValueChange = {},
+                            label = { Text("Modelo", color = textSecondary) },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedModel) },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = textPrimary, unfocusedTextColor = textPrimary,
+                                focusedBorderColor = accent, unfocusedBorderColor = textSecondary
+                            ),
+                            modifier = Modifier.menuAnchor().fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = expandedModel,
+                            onDismissRequest = { expandedModel = false },
+                            modifier = Modifier
+                                .background(dropdownBg)
+                                .heightIn(max = 300.dp)
+                        ) {
+                            // Group by category
+                            val grouped = availableModels.groupBy { it.category }
+                            grouped.forEach { (category, models) ->
+                                // Category header
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            "── ${category.icon} ${category.label} ──",
+                                            color = accent,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    },
+                                    onClick = {},
+                                    enabled = false
+                                )
+                                // Models in this category
+                                models.forEach { model ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Column {
+                                                Text(model.badgedName(), color = textPrimary, fontSize = 14.sp)
+                                                if (model.description.isNotBlank()) {
+                                                    Text(
+                                                        "${model.sizeLabel} • ${model.description}",
+                                                        color = textSecondary,
+                                                        fontSize = 11.sp,
+                                                        maxLines = 1
+                                                    )
+                                                }
+                                            }
+                                        },
+                                        onClick = {
+                                            selectedModelId = model.id
+                                            expandedModel = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -228,10 +378,11 @@ fun AgentFactorySheet(
             Button(
                 onClick = {
                     if (agentName.isNotBlank() && systemPrompt.isNotBlank()) {
+                        val modelString = buildModelString()
                         if (onForgeAgentWithAvatar != null) {
-                            onForgeAgentWithAvatar(agentName, agentIcon, systemPrompt, selectedModel, savedAvatarPath)
+                            onForgeAgentWithAvatar(agentName, agentIcon, systemPrompt, modelString, savedAvatarPath)
                         } else {
-                            onForgeAgent(agentName, agentIcon, systemPrompt, selectedModel)
+                            onForgeAgent(agentName, agentIcon, systemPrompt, modelString)
                         }
                     }
                 },

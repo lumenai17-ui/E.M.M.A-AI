@@ -94,12 +94,12 @@ class MusicGenerationPlugin(private val context: Context) : EmmaPlugin {
                     return@withContext "❌ La música generada no es válida. Intenta con otro prompt."
                 }
 
-                // Copy to public Downloads/EMMA/music/
-                PublicFileWriter.copyToPublicDownloads(context, localFile, "audio/mpeg")
+                // Copy to public Downloads/EMMA/ and use that path for the chat
+                val publicPath = PublicFileWriter.copyToPublicDownloads(context, localFile, "audio/mpeg")
 
-                Log.i(TAG, "Music generated: ${localFile.length() / 1024}KB → $fileName")
+                Log.i(TAG, "Music generated: ${localFile.length() / 1024}KB → $fileName (public: $publicPath)")
 
-                "TOOL_CALL::file_generated::${localFile.absolutePath}"
+                "TOOL_CALL::file_generated::$publicPath"
 
             } catch (e: Exception) {
                 Log.e(TAG, "Music generation error: ${e.message}", e)

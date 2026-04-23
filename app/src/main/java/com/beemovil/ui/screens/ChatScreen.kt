@@ -433,14 +433,29 @@ fun ChatScreen(
                 }
                 if (viewModel.isLoading.value) {
                     item {
-                        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                            if (viewModel.swarmInsight.value.isNotBlank()) {
-                                Text(
-                                    text = viewModel.swarmInsight.value,
-                                    color = accent,
-                                    fontSize = 12.sp,
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp)
+                        ) {
+                            val progressText = viewModel.swarmInsight.value
+                            if (progressText.isNotBlank()) {
+                                // Detect agentic loop rounds for enhanced display
+                                val isRoundProgress = progressText.startsWith("Ronda ")
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.padding(bottom = 6.dp)
-                                )
+                                ) {
+                                    if (isRoundProgress) {
+                                        Text("⚙️", fontSize = 14.sp, modifier = Modifier.padding(end = 6.dp))
+                                    }
+                                    Text(
+                                        text = progressText,
+                                        color = accent,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (isRoundProgress) androidx.compose.ui.text.font.FontWeight.Medium else null
+                                    )
+                                }
                             }
                             Row(horizontalArrangement = Arrangement.Start) {
                                 CircularProgressIndicator(color = accent, modifier = Modifier.size(24.dp))

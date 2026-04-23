@@ -6,4 +6,6 @@
     <external-files-path name="emma_files" path="." />
     <!-- Cache interna: imágenes, música, videos y audio generados por Pollinations -->
     <cache-path name="emma_cache" path="." />
+    <!-- Acceso al directorio público Downloads/EMMA/ donde se guardan archivos generados -->
+    <external-path name="emma_downloads" path="Download/EMMA/" />
 </paths>

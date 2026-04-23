@@ -7,9 +7,16 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.beemovil.telemetry.TelemetryWorker
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import java.util.concurrent.TimeUnit
 
 class BeeMovilApp : Application() {
+
+    /** Scope that lives as long as the app process — survives Activity/ViewModel destruction */
+    val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
     override fun onCreate() {
         super.onCreate()
 

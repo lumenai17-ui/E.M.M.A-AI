@@ -34,14 +34,15 @@ class EmmaEngine(private val context: Context) {
         - Si el usuario te pide un CÁLCULO matemático, una lógica compleja, o procesar texto, UTILIZA INMEDIATAMENTE la tool 'execute_js_script' para obtener un resultado determinista sin inventar datos.
         - Si el usuario envía una URL para que ACUMULES conocimiento o LEAS el artículo, saca el texto crudo usando 'scrape_website_text'.
         - Si el usuario adjunta una Foto/Imagen o Documento físico, USA 'read_image_text_ocr' o 'read_document_file' respectivamente para entender qué hay allí adentro.
-        - Si el usuario te pide un entregable formal (ensayo en PDF, tabla de Excel/CSV, o generar una página Web), NUNCA lo escribas en el chat. Utiliza las herramientas de generación ('generate_pdf_document', 'generate_csv_table' o 'generate_html_landing') y confírmale que estás abriendo el menú para descargarlo. Para INCLUIR IMÁGENES EN PDFs, usa el marcador [IMG:url] en el body_text, por ejemplo: 'Texto aquí\n[IMG:https://image.pollinations.ai/prompt/descripcion_en_ingles]\nMás texto'. Para INCLUIR IMÁGENES EN HTML, usa tags <img> normales con URLs de Pollinations: <img src="https://image.pollinations.ai/prompt/descripcion_en_ingles?width=800&height=400&nologo=true">.
+        - Si el usuario te pide un entregable formal (ensayo en PDF, tabla de Excel/CSV, o generar una página Web), NUNCA lo escribas en el chat. Para PDFs BONITOS o profesionales (propuestas, reportes, catálogos, curriculums, presentaciones) usa 'generate_premium_pdf': genera TODO el HTML+CSS como si fuera una landing page premium con diseño moderno (gradientes, secciones coloridas, tipografía elegante, imágenes con Pollinations) y el sistema lo convierte a PDF preservando el diseño visual exacto. Para PDFs de texto simple, usa 'generate_pdf_document'. Para tablas usa 'generate_csv_table'. Para webs usa 'generate_html_landing'. INCLUIR IMÁGENES: en premium PDF y HTML usa tags <img> normales con URLs de Pollinations: <img src="https://image.pollinations.ai/prompt/descripcion_en_ingles?width=800&height=400&nologo=true">. En PDF básico usa el marcador [IMG:https://image.pollinations.ai/prompt/descripcion_en_ingles] dentro del body_text.
         - ¡TIENES ACCESO A SU TELÉFONO! Si te piden leer la agenda, agendar una junta, prender la linterna, poner una alarma o buscar en los Contactos, DEBES usar el plugin correspondiente ('os_god_mode_operations', 'calendar_os_operations', 'search_android_contacts') sin excusas. NO digas que no tienes acceso.
         - ERES UN COMUNICADOR EN RED: Si te piden mandar un correo o mandar un WhatsApp a alguien, JAMÁS digas que no puedes. Usa 'compose_email_intent' o 'send_whatsapp_message' automáticamente. Si necesitas consultar una API web o extraer datos, usa 'fetch_external_api'.
         - TIENES ACCESO AL ECOSISTEMA GOOGLE DEL USUARIO: Si preguntan por sus emails, usa 'google_gmail'. Si preguntan por su agenda o quieren crear un evento, usa 'google_calendar'. Si preguntan por tareas pendientes, usa 'google_tasks'. Si el usuario NO está conectado a Google, dile que vaya a Settings → Google.
-        - PUEDES GENERAR IMÁGENES CON IA: Si el usuario pide 'genera una imagen', 'dibuja', 'crea una ilustración', 'hazme un logo' o cualquier variación, usa 'generate_ai_image'. Traduce el prompt a inglés para mejores resultados y elige el estilo más adecuado.
+        - PUEDES GENERAR IMÁGENES CON IA: Si el usuario pide 'genera una imagen', 'dibuja', 'crea una ilustración', 'hazme un logo' o cualquier variación, usa 'generate_ai_image'. Traduce el prompt a inglés para mejores resultados y elige el estilo más adecuado. La imagen generada aparecerá automáticamente embebida dentro del chat — NO digas que no puedes mostrarla, el sistema la incrusta automáticamente.
         - PUEDES GENERAR MÚSICA CON IA: Si el usuario pide 'genera música', 'crea una canción', 'haz un beat', 'compón algo', usa 'generate_ai_music'. Describe el estilo musical en inglés (género, mood, instrumentos).
         - PUEDES GENERAR VIDEOS CON IA: Si el usuario pide 'genera un video', 'crea un clip', 'haz un video de...', 'anima esto', usa 'generate_ai_video'. Describe la escena en inglés. Los videos son de 3-10 segundos.
         - PUEDES HABLAR CON VOZ IA: Si el usuario pide 'lee esto en voz alta', 'dime con voz', 'reproduce este texto', 'léeme esto', usa 'speak_with_ai_voice'.
+        - REGLA ABSOLUTA DE ARCHIVOS: ESTÁ PROHIBIDO inventar rutas de archivos o simular que generaste algo. Para generar imágenes, PDFs, HTML, CSV, música o video DEBES INVOCAR LA HERRAMIENTA correspondiente (generate_ai_image, generate_premium_pdf, export_pdf, export_csv, generate_html_page, generate_ai_music, generate_ai_video). Si no invocas la herramienta, el usuario NO verá ningún archivo. El sistema embebe automáticamente los archivos generados en el chat con preview, botón de abrir y compartir. NUNCA escribas rutas de archivo en texto plano.
         - Si es charla común, responde de forma amigable, corta y directa en español.
     """.trimIndent()
 
@@ -90,6 +91,7 @@ class EmmaEngine(private val context: Context) {
 
         // Registrar Generators (Phase 10.3)
         registerPlugin(com.beemovil.plugins.builtins.ExportPdfPlugin(context))
+        registerPlugin(com.beemovil.plugins.builtins.PremiumPdfPlugin(context))
         registerPlugin(com.beemovil.plugins.builtins.ExportCsvPlugin(context))
         registerPlugin(com.beemovil.plugins.builtins.HTMLForgePlugin(context))
         
@@ -117,12 +119,24 @@ class EmmaEngine(private val context: Context) {
         registerPlugin(com.beemovil.plugins.builtins.VideoGenerationPlugin(context))
         registerPlugin(com.beemovil.plugins.builtins.PollinationsTTSPlugin(context))
         
+        // Registrar Agent-to-Agent Delegation (Agentic Loop Phase E)
+        registerPlugin(com.beemovil.plugins.builtins.DelegateToAgentPlugin(context))
+        
         try {
             if (messagesHistory.isEmpty()) {
                 val pastMemories = memoryDB?.getAllMemories()?.joinToString("\n") ?: ""
-                val memoryInjection = if (pastMemories.isNotBlank()) "\nMEMORIAS PREVIAS DEL USUARIO:\n\$pastMemories\n" else ""
+                val memoryInjection = if (pastMemories.isNotBlank()) "\nMEMORIAS PREVIAS DEL USUARIO:\n$pastMemories\n" else ""
                 
-                messagesHistory.add(ChatMessage("system", EMMA_SUPERVISOR_PROMPT + memoryInjection))
+                // Inject available agents list for A2A delegation
+                val agentInjection = try {
+                    val agents = chatHistoryDB.chatHistoryDao().getAllAgentsSync()
+                    if (agents.isNotEmpty()) {
+                        val agentList = agents.joinToString("\n") { "  - ${it.name} (${it.icon}): ${it.systemPrompt.take(80)}..." }
+                        "\n\nAGENTES ESPECIALIZADOS DISPONIBLES (usa delegate_to_agent para delegarles tareas):\n$agentList\n"
+                    } else ""
+                } catch (e: Exception) { "" }
+                
+                messagesHistory.add(ChatMessage("system", EMMA_SUPERVISOR_PROMPT + memoryInjection + agentInjection))
             }
             delay(500)
         } catch (e: Exception) {
@@ -158,7 +172,9 @@ class EmmaEngine(private val context: Context) {
         message: String, 
         forcedProvider: String? = null, 
         forcedModel: String? = null,
-        onProgress: ((String) -> Unit)? = null
+        onProgress: ((String) -> Unit)? = null,
+        threadId: String? = null,
+        senderId: String? = null
     ): String {
         return withContext(Dispatchers.IO) {
             try {
@@ -202,15 +218,66 @@ class EmmaEngine(private val context: Context) {
                     }
                 }
                 
-                val (response1, toolCalls1) = executeProvider(messagesHistory.toList(), activeTools, forcedProvider, forcedModel)
-                
-                if (toolCalls1.isNotEmpty()) {
-                    Log.i(TAG, "[PASO 2] El modelo decidió llamar a ${toolCalls1.size} herramientas.")
-                    onProgress?.invoke("Evaluando uso de Herramientas Especializadas...")
-                    historyMutex.withLock { messagesHistory.add(ChatMessage("assistant", null, toolCalls1, "call_" + System.currentTimeMillis())) }
-                    
-                    // 2. Ejecutar cada herramienta
-                    for (call in toolCalls1) {
+                // ═══════════════════════════════════════════════════════════
+                // AGENTIC LOOP — Multi-round sequential tool calling
+                // The LLM can chain tools across rounds. Round 2 sees
+                // results of Round 1 and can call more tools.
+                // ═══════════════════════════════════════════════════════════
+
+                val maxRounds = resolveMaxRounds(forcedProvider, forcedModel)
+                val startTime = System.currentTimeMillis()
+                val TIMEOUT_MS = 180_000L // 3 minutes max for entire workflow
+                var round = 0
+                var lastFileResult: String? = null
+                val executedToolCalls = mutableListOf<String>() // Anti-repetition tracker
+
+                while (round < maxRounds) {
+                    round++
+
+                    // Timeout guard
+                    if (System.currentTimeMillis() - startTime > TIMEOUT_MS) {
+                        Log.w(TAG, "[AGENTIC] Timeout global alcanzado en ronda $round")
+                        break
+                    }
+
+                    if (round == 1) {
+                        Log.d(TAG, "[AGENTIC] Ronda $round/$maxRounds — Primera consulta al modelo")
+                    } else {
+                        Log.d(TAG, "[AGENTIC] Ronda $round/$maxRounds — Continuando con resultados previos")
+                        onProgress?.invoke("Ronda $round/$maxRounds: Consultando al modelo...")
+                    }
+
+                    // Context compression for local models (protect 8K context window)
+                    if (round > 1 && isLocalProvider(forcedProvider)) {
+                        compressToolResults(messagesHistory, keepLastN = 1)
+                    }
+
+                    val historySnapshot = historyMutex.withLock { messagesHistory.toList() }
+                    val (response, toolCalls) = executeProvider(historySnapshot, activeTools, forcedProvider, forcedModel)
+
+                    // ── No tool calls → LLM responded with text → EXIT LOOP ──
+                    if (toolCalls.isEmpty()) {
+                        historyMutex.withLock { messagesHistory.add(ChatMessage("assistant", response)) }
+                        // If we collected a file result in a prior round, return it
+                        // so the ViewModel can render the preview
+                        return@withContext lastFileResult ?: response
+                    }
+
+                    // ── Tool calls detected → execute them ──
+                    Log.i(TAG, "[AGENTIC] Ronda $round: ${toolCalls.size} herramientas detectadas")
+                    onProgress?.invoke("Ronda $round/$maxRounds: Ejecutando ${toolCalls.size} herramientas...")
+                    historyMutex.withLock { messagesHistory.add(ChatMessage("assistant", null, toolCalls, "call_${System.currentTimeMillis()}")) }
+
+                    for (call in toolCalls) {
+                        // Anti-repetition: detect identical tool calls
+                        val callSignature = "${call.name}::${call.params}"
+                        if (executedToolCalls.count { it == callSignature } >= 2) {
+                            Log.w(TAG, "[AGENTIC] Anti-repetición: ${call.name} ya ejecutado 2x con mismos params")
+                            historyMutex.withLock { messagesHistory.add(ChatMessage("tool", "ERROR: Esta herramienta ya fue ejecutada con los mismos parámetros. No se puede repetir.", toolCallId = call.id)) }
+                            continue
+                        }
+                        executedToolCalls.add(callSignature)
+
                         val plugin = plugins[call.name]
                         if (plugin != null) {
                             try {
@@ -221,6 +288,12 @@ class EmmaEngine(private val context: Context) {
                                 }
                                 val result = plugin.execute(argsMap)
                                 historyMutex.withLock { messagesHistory.add(ChatMessage("tool", result, toolCallId = call.id)) }
+
+                                // Track file results but DON'T exit — let the loop continue
+                                if (result.startsWith("TOOL_CALL::file_generated::")) {
+                                    lastFileResult = result
+                                    Log.i(TAG, "[AGENTIC] Archivo generado en ronda $round, loop continúa")
+                                }
                             } catch (e: Exception) {
                                 historyMutex.withLock { messagesHistory.add(ChatMessage("tool", "Error interno en herramienta: ${e.message}", toolCallId = call.id)) }
                             }
@@ -229,34 +302,51 @@ class EmmaEngine(private val context: Context) {
                                 val url = call.params.optString("url", "https://google.com")
                                 return@withContext "TOOL_CALL::open_browser::$url"
                             }
-                            historyMutex.withLock { messagesHistory.add(ChatMessage("tool", "Error: Herramienta no encontrada", toolCallId = call.id)) }
+                            historyMutex.withLock { messagesHistory.add(ChatMessage("tool", "Error: Herramienta '${call.name}' no encontrada", toolCallId = call.id)) }
                         }
                     }
-                    
-                    // U-02 fix: Interceptar señales de archivo generado ANTES de la segunda pasada
-                    // Si algún plugin generó un archivo, retornarlo directamente sin pasar por el LLM otra vez
-                    val fileGeneratedResult = historyMutex.withLock {
-                        messagesHistory.lastOrNull { 
-                            it.role == "tool" && it.content?.startsWith("TOOL_CALL::file_generated::") == true 
-                        }?.content
+
+                    // ── Checkpoint: save round progress to Room ──
+                    if (threadId != null && round > 1) {
+                        try {
+                            val toolsSummary = executedToolCalls.takeLast(3).joinToString(", ") { it.substringBefore("::") }
+                            chatHistoryDB.chatHistoryDao().insertMessage(
+                                com.beemovil.database.ChatMessageEntity(
+                                    threadId = threadId,
+                                    senderId = senderId ?: "emma",
+                                    timestamp = System.currentTimeMillis(),
+                                    role = "system",
+                                    content = "[CHECKPOINT] Ronda $round/$maxRounds completada. Tools: $toolsSummary"
+                                )
+                            )
+                            Log.d(TAG, "[AGENTIC] Checkpoint guardado para ronda $round")
+                        } catch (e: Exception) {
+                            Log.w(TAG, "[AGENTIC] No se pudo guardar checkpoint: ${e.message}")
+                        }
                     }
-                    if (fileGeneratedResult != null) {
-                        Log.i(TAG, "[PASO 2.5] Archivo generado detectado. Saltando segunda inferencia.")
-                        historyMutex.withLock { messagesHistory.add(ChatMessage("assistant", "Archivo generado exitosamente.")) }
-                        return@withContext fileGeneratedResult
+
+                    // If this is the last allowed round, don't loop back to LLM
+                    if (round >= maxRounds) {
+                        Log.w(TAG, "[AGENTIC] Límite de rondas alcanzado ($maxRounds)")
+                        if (lastFileResult != null) {
+                            historyMutex.withLock { messagesHistory.add(ChatMessage("assistant", "Workflow completado en $round rondas.")) }
+                            return@withContext lastFileResult!!
+                        }
+                        // One final LLM call to summarize
+                        onProgress?.invoke("Ensamblando respuesta final...")
+                        val finalSnapshot = historyMutex.withLock { messagesHistory.toList() }
+                        val (finalResponse, _) = executeProvider(finalSnapshot, activeTools, forcedProvider, forcedModel)
+                        historyMutex.withLock { messagesHistory.add(ChatMessage("assistant", finalResponse)) }
+                        return@withContext finalResponse
                     }
-                    
-                    Log.d(TAG, "[PASO 3] Consultando de nuevo con resultados inyectados...")
-                    onProgress?.invoke("Ensamblando respuesta de herramientas...")
-                    val historySnapshot = historyMutex.withLock { messagesHistory.toList() }
-                    val (finalResponse, _) = executeProvider(historySnapshot, activeTools, forcedProvider, forcedModel)
-                    historyMutex.withLock { messagesHistory.add(ChatMessage("assistant", finalResponse)) }
-                    return@withContext finalResponse
+
+                    // Loop continues — LLM will see tool results and decide next action
                 }
 
-                // Sin herramientas
-                historyMutex.withLock { messagesHistory.add(ChatMessage("assistant", response1)) }
-                return@withContext response1
+                // Fallback: if we somehow exit the while without returning
+                return@withContext lastFileResult 
+                    ?: historyMutex.withLock { messagesHistory.lastOrNull { it.role == "assistant" }?.content }
+                    ?: "Procesamiento completado."
 
             } catch (e: CancellationException) {
                 // Coroutine was cancelled (user left chat, app went to background)
@@ -389,6 +479,55 @@ class EmmaEngine(private val context: Context) {
                 return@withContext "Error en Orquestación: ${e.message}"
             }
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // AGENTIC LOOP HELPERS
+    // ═══════════════════════════════════════════════════════════
+
+    /**
+     * Adaptive MAX_ROUNDS based on provider capabilities.
+     * Cloud models get 5 rounds, free models 3, local models 2.
+     */
+    private fun resolveMaxRounds(provider: String?, model: String?): Int {
+        return when {
+            provider == "local" || provider?.startsWith("gemma") == true -> 2
+            provider?.startsWith("hermes") == true -> 1
+            model?.contains(":free") == true -> 3
+            // OpenRouter premium + Ollama Cloud get full 5 rounds
+            else -> 5
+        }
+    }
+
+    /** Check if the provider runs on-device (RAM constrained) */
+    private fun isLocalProvider(provider: String?): Boolean {
+        return provider == "local" || provider?.startsWith("gemma") == true
+    }
+
+    /**
+     * Compress tool results from earlier rounds to protect context window.
+     * Keeps the last N tool results intact, compresses the rest.
+     * Replaces ChatMessage entries in-place since content is val.
+     */
+    private fun compressToolResults(history: MutableList<ChatMessage>, keepLastN: Int) {
+        val toolIndices = history.indices.filter { history[it].role == "tool" }
+        if (toolIndices.size <= keepLastN) return
+        
+        val toCompressIndices = toolIndices.dropLast(keepLastN)
+        toCompressIndices.forEach { idx ->
+            val msg = history[idx]
+            val content = msg.content ?: return@forEach
+            val compressed = when {
+                content.startsWith("TOOL_CALL::file_generated::") -> {
+                    val name = java.io.File(content.removePrefix("TOOL_CALL::file_generated::")).name
+                    "Archivo generado: $name ✅"
+                }
+                content.length > 300 -> content.take(200) + "... [comprimido]"
+                else -> return@forEach // Already short, skip
+            }
+            history[idx] = msg.copy(content = compressed)
+        }
+        Log.d(TAG, "[AGENTIC] Historial comprimido: ${toCompressIndices.size} resultados de tools reducidos")
     }
 
     /**
