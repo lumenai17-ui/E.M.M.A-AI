@@ -99,6 +99,13 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- Servicio de procesamiento de tareas AI (survives backgrounding) -->
+        <service
+            android:name=".service.EmmaTaskService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
         <!-- FileProvider para compartir archivos exportables autogenerados seguros (Fase 10.3) -->
         <provider
             android:name="androidx.core.content.FileProvider"

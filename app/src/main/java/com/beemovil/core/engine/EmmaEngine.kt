@@ -2,6 +2,7 @@ package com.beemovil.core.engine
 
 import android.content.Context
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
@@ -257,8 +258,26 @@ class EmmaEngine(private val context: Context) {
                 historyMutex.withLock { messagesHistory.add(ChatMessage("assistant", response1)) }
                 return@withContext response1
 
+            } catch (e: CancellationException) {
+                // Coroutine was cancelled (user left chat, app went to background)
+                // Don't show error — just silently stop
+                Log.w(TAG, "Pipeline cancelado (usuario salió o app en background)")
+                return@withContext ""
             } catch (e: Exception) {
                 Log.e(TAG, "Excepción en el Pipeline", e)
+                
+                // Check if this is really a cancellation wrapped in an IOException
+                val isCancellation = e.cause is CancellationException ||
+                    e.message?.contains("Canceled", true) == true ||
+                    e.message?.contains("Socket closed", true) == true ||
+                    (e.message?.contains("Unable to resolve host", true) == true && 
+                     e.cause?.message?.contains("interrupted", true) == true)
+                
+                if (isCancellation) {
+                    Log.w(TAG, "Conexión interrumpida (app en background), no es falta de internet")
+                    return@withContext ""
+                }
+                
                 val friendlyError = when {
                     e.message?.contains("Unable to resolve host", true) == true -> 
                         "Sin conexión a internet. Verifica tu red e intenta de nuevo."
@@ -462,6 +481,12 @@ class EmmaEngine(private val context: Context) {
                 }
             }
 
+            // Re-throw cancellation so the outer catch in processUserMessage handles it
+            if (e is CancellationException) throw e
+            if (e.cause is CancellationException || e.message?.contains("Canceled", true) == true || e.message?.contains("Socket closed", true) == true) {
+                throw CancellationException("Connection interrupted")
+            }
+            
             val friendlyMsg = when {
                 key.isBlank() -> "⚠️ No hay API key configurada. Ve a Settings y agrega tu key."
                 e.message?.contains("timeout", true) == true -> "⚠️ El servidor tardó demasiado. Intenta de nuevo."

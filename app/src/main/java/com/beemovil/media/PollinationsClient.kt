@@ -143,6 +143,6 @@ object PollinationsClient {
      */
     fun videoUrl(prompt: String, model: String = "ltx-2", durationSecs: Int = 5, aspectRatio: String = "16:9"): String {
         val encoded = java.net.URLEncoder.encode(prompt, "UTF-8")
-        return "$BASE_URL/image/$encoded?model=$model&duration=$durationSecs&aspectRatio=$aspectRatio&nologo=true"
+        return "$BASE_URL/video/$encoded?model=$model&duration=$durationSecs&aspectRatio=$aspectRatio&nologo=true"
     }
 }
