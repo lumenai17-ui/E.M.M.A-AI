@@ -805,39 +805,119 @@ fun LiveVisionScreen(
             )
         }
 
-        // R3-4: Places bottom sheet
+        // R4-1: Interactive Places sheet
         if (showPlacesSheet) {
-            val allPlaces = remember { memoryManager.placeProfileManager.getAllProfiles() }
+            var places by remember { mutableStateOf(memoryManager.placeProfileManager.getAllProfiles()) }
+            var editingPlace by remember { mutableStateOf<PlaceProfileManager.PlaceProfile?>(null) }
+            var editLabelText by remember { mutableStateOf("") }
+            var showAddManual by remember { mutableStateOf(false) }
+            var manualName by remember { mutableStateOf("") }
+            var deleteConfirm by remember { mutableStateOf<PlaceProfileManager.PlaceProfile?>(null) }
+
             AlertDialog(
                 onDismissRequest = { showPlacesSheet = false },
                 title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Filled.Place, "Places", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Mis Lugares (${allPlaces.size})", fontWeight = FontWeight.Bold)
+                        Text("Mis Lugares (${places.size})", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        IconButton(onClick = {
+                            if (currentGpsData.latitude != 0.0) {
+                                val profile = memoryManager.placeProfileManager.getOrCreate(
+                                    currentGpsData.latitude, currentGpsData.longitude, currentGpsData.address
+                                )
+                                memoryManager.placeProfileManager.recordVisit(profile, selectedMode)
+                                places = memoryManager.placeProfileManager.getAllProfiles()
+                                liveResult = "Lugar guardado: ${currentGpsData.address}"
+                            }
+                        }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Filled.AddLocation, "Agregar actual", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                        }
                     }
                 },
                 text = {
-                    if (allPlaces.isEmpty()) {
-                        Text("Aun no hay lugares guardados. Se guardan automaticamente al visitar con Vision activo.",
-                            fontSize = 13.sp, color = Color.Gray)
-                    } else {
-                        Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                            allPlaces.forEach { place ->
-                                val daysAgo = ((System.currentTimeMillis() - place.lastVisit) / 86_400_000).toInt()
-                                Surface(
-                                    color = MaterialTheme.colorScheme.surfaceVariant,
-                                    shape = RoundedCornerShape(10.dp),
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)
+                    Column(modifier = Modifier.verticalScroll(rememberScrollState()).fillMaxWidth()) {
+                        // Manual add with label
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                        ) {
+                            if (showAddManual) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text("Guardar ubicacion actual como:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        OutlinedTextField(
+                                            value = manualName,
+                                            onValueChange = { manualName = it },
+                                            placeholder = { Text("Casa, Trabajo, Gym...") },
+                                            singleLine = true,
+                                            modifier = Modifier.weight(1f),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                                unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                                                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                                unfocusedTextColor = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        IconButton(onClick = {
+                                            if (manualName.isNotBlank() && currentGpsData.latitude != 0.0) {
+                                                val profile = memoryManager.placeProfileManager.getOrCreate(
+                                                    currentGpsData.latitude, currentGpsData.longitude, currentGpsData.address
+                                                )
+                                                memoryManager.placeProfileManager.updateLabel(
+                                                    memoryManager.placeProfileManager.recordVisit(profile, selectedMode),
+                                                    manualName
+                                                )
+                                                places = memoryManager.placeProfileManager.getAllProfiles()
+                                                manualName = ""
+                                                showAddManual = false
+                                            }
+                                        }, modifier = Modifier.size(36.dp)) {
+                                            Icon(Icons.Filled.Check, "Save", tint = MaterialTheme.colorScheme.primary)
+                                        }
+                                    }
+                                }
+                            } else {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Row(
-                                        modifier = Modifier.padding(12.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
+                                    Icon(Icons.Filled.AddLocation, "Add", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    TextButton(onClick = { showAddManual = true }) {
+                                        Text("Guardar ubicacion actual", fontSize = 13.sp)
+                                    }
+                                }
+                            }
+                        }
+
+                        if (places.isEmpty()) {
+                            Text("Aun no hay lugares guardados.", fontSize = 13.sp, color = Color.Gray,
+                                modifier = Modifier.padding(vertical = 16.dp))
+                        }
+
+                        places.forEach { place ->
+                            val daysAgo = ((System.currentTimeMillis() - place.lastVisit) / 86_400_000).toInt()
+                            val isEditing = editingPlace == place
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
                                         Column(modifier = Modifier.weight(1f)) {
+                                            if (place.label.isNotBlank()) {
+                                                Text(place.label, fontWeight = FontWeight.Bold, fontSize = 14.sp,
+                                                    color = MaterialTheme.colorScheme.primary)
+                                            }
                                             Text(
                                                 place.address.ifBlank { "${place.latitude.toInt()}, ${place.longitude.toInt()}" },
-                                                fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
+                                                fontWeight = if (place.label.isBlank()) FontWeight.SemiBold else FontWeight.Normal,
+                                                fontSize = if (place.label.isBlank()) 13.sp else 11.sp,
                                                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                                                 color = MaterialTheme.colorScheme.onSurface
                                             )
@@ -845,24 +925,55 @@ fun LiveVisionScreen(
                                                 "${place.visitCount} visitas | hace ${daysAgo}d | ~${place.avgDurationMinutes}min",
                                                 fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
-                                            if (place.frequentMode != null) {
-                                                Text("Modo: ${place.frequentMode}", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary)
+                                        }
+                                        IconButton(onClick = {
+                                            editingPlace = if (isEditing) null else place
+                                            editLabelText = place.label
+                                        }, modifier = Modifier.size(28.dp)) {
+                                            Icon(Icons.Filled.Edit, "Edit", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                                        }
+                                        IconButton(onClick = {
+                                            gpsNavigator.startNavigation(NavigationDestination(place.address, place.latitude, place.longitude, "profile"))
+                                            isNavigating = true
+                                            showPlacesSheet = false
+                                            liveResult = "Navegando a ${place.label.ifBlank { place.address }}"
+                                        }, modifier = Modifier.size(28.dp)) {
+                                            Icon(Icons.Filled.Navigation, "Ir", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                                        }
+                                        IconButton(onClick = { deleteConfirm = place }, modifier = Modifier.size(28.dp)) {
+                                            Icon(Icons.Filled.Delete, "Del", tint = Color(0xFFFF6B6B), modifier = Modifier.size(16.dp))
+                                        }
+                                    }
+                                    if (isEditing) {
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            OutlinedTextField(
+                                                value = editLabelText,
+                                                onValueChange = { editLabelText = it },
+                                                placeholder = { Text("Casa, Trabajo, Gym...") },
+                                                singleLine = true,
+                                                modifier = Modifier.weight(1f),
+                                                colors = OutlinedTextFieldDefaults.colors(
+                                                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                                    unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                                                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface
+                                                )
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            IconButton(onClick = {
+                                                memoryManager.placeProfileManager.updateLabel(place, editLabelText)
+                                                places = memoryManager.placeProfileManager.getAllProfiles()
+                                                editingPlace = null
+                                            }, modifier = Modifier.size(32.dp)) {
+                                                Icon(Icons.Filled.Check, "Save", tint = MaterialTheme.colorScheme.primary)
                                             }
                                         }
-                                        IconButton(
-                                            onClick = {
-                                                // Navigate to this place
-                                                gpsNavigator.startNavigation(
-                                                    NavigationDestination(place.address, place.latitude, place.longitude, "profile")
-                                                )
-                                                isNavigating = true
-                                                showPlacesSheet = false
-                                                liveResult = "Navegando a ${place.address}"
-                                            },
-                                            modifier = Modifier.size(32.dp)
-                                        ) {
-                                            Icon(Icons.Filled.Navigation, "Ir", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-                                        }
+                                    }
+                                    if (place.observations.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text("Notas: ${place.observations.last()}", fontSize = 10.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                                     }
                                 }
                             }
@@ -873,6 +984,24 @@ fun LiveVisionScreen(
                     TextButton(onClick = { showPlacesSheet = false }) { Text("Cerrar") }
                 }
             )
+
+            if (deleteConfirm != null) {
+                AlertDialog(
+                    onDismissRequest = { deleteConfirm = null },
+                    title = { Text("Eliminar lugar?") },
+                    text = { Text("Se eliminara ${deleteConfirm?.label?.ifBlank { deleteConfirm?.address } ?: "este lugar"} del historial.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            deleteConfirm?.let { memoryManager.placeProfileManager.deleteProfile(it) }
+                            places = memoryManager.placeProfileManager.getAllProfiles()
+                            deleteConfirm = null
+                        }) { Text("Eliminar", color = Color(0xFFFF6B6B)) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { deleteConfirm = null }) { Text("Cancelar") }
+                    }
+                )
+            }
         }
 
         // ── BUG-3 FIX: Dashcam HUD — MiniMap + Speed badge (only in DASHCAM mode) ──
@@ -1152,7 +1281,10 @@ fun LiveVisionScreen(
                     modifier = Modifier.size(32.dp)
                 )
             }
-            // REC (V5: timelapse recording) -- R3-5 FIX: Show path after save
+            // REC (V5: timelapse) -- R4-2: Post-recording menu with PDF + video
+            var showRecMenu by remember { mutableStateOf(false) }
+            var recResult by remember { mutableStateOf<VisionRecorder.RecordingResult?>(null) }
+
             ControlButton(
                 icon = if (isRecording) Icons.Filled.Stop else Icons.Filled.FiberManualRecord,
                 label = if (isRecording) "${visionRecorder.getFrameCount()}" else "REC",
@@ -1161,16 +1293,8 @@ fun LiveVisionScreen(
                 onClick = {
                     if (isRecording) {
                         isRecording = false
-                        val result = visionRecorder.stopRecording()
-                        coroutineScope.launch {
-                            val mp4 = visionRecorder.encodeToMp4(withOverlay = false)
-                            if (mp4 != null) {
-                                liveResult = "Video guardado en Downloads/EMMA/ (${result.frameCount} frames, ${result.durationSeconds}s)"
-                            } else {
-                                liveResult = "Grabacion finalizada: ${result.frameCount} frames (encoding fallo)"
-                            }
-                            visionRecorder.cleanup()
-                        }
+                        recResult = visionRecorder.stopRecording()
+                        showRecMenu = true
                     } else {
                         visionRecorder.startRecording(selectedMode.name.lowercase())
                         isRecording = true
@@ -1178,6 +1302,122 @@ fun LiveVisionScreen(
                     }
                 }
             )
+
+            // Post-recording options dialog
+            if (showRecMenu && recResult != null) {
+                var isProcessing by remember { mutableStateOf(false) }
+                AlertDialog(
+                    onDismissRequest = {
+                        if (!isProcessing) {
+                            visionRecorder.cleanup()
+                            showRecMenu = false
+                        }
+                    },
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.VideoLibrary, "Rec", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Grabacion finalizada", fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    text = {
+                        Column {
+                            Text("${recResult?.frameCount} frames | ${recResult?.durationSeconds}s | ${(recResult?.sizeBytes ?: 0) / 1024}KB",
+                                fontSize = 12.sp, color = Color.Gray)
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            if (isProcessing) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text("Procesando...", fontSize = 13.sp)
+                                }
+                            } else {
+                                // Video option
+                                Surface(
+                                    onClick = {
+                                        isProcessing = true
+                                        coroutineScope.launch {
+                                            val mp4 = visionRecorder.encodeToMp4(withOverlay = false)
+                                            if (mp4 != null) {
+                                                liveResult = "Video guardado en Downloads/EMMA/"
+                                            } else {
+                                                liveResult = "Error al codificar video"
+                                            }
+                                            visionRecorder.cleanup()
+                                            isProcessing = false
+                                            showRecMenu = false
+                                        }
+                                    },
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)
+                                ) {
+                                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Filled.Videocam, "MP4", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Column {
+                                            Text("Exportar Video MP4", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                                            Text("Timelapse en Downloads/EMMA/", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
+                                }
+
+                                // PDF option
+                                Surface(
+                                    onClick = {
+                                        isProcessing = true
+                                        coroutineScope.launch {
+                                            val html = visionRecorder.generateSessionHtml()
+                                            if (html != null) {
+                                                try {
+                                                    val pdfPlugin = com.beemovil.plugins.builtins.PremiumPdfPlugin(context)
+                                                    val result = pdfPlugin.execute(mapOf(
+                                                        "document_title" to "Vision_Session_${visionRecorder.getFrameCount()}",
+                                                        "html_content" to html
+                                                    ))
+                                                    liveResult = if (result.contains("file_generated")) {
+                                                        "PDF guardado en Downloads/EMMA/"
+                                                    } else {
+                                                        "Error generando PDF"
+                                                    }
+                                                } catch (e: Exception) {
+                                                    liveResult = "Error: ${e.message}"
+                                                }
+                                            } else {
+                                                liveResult = "No hay frames para el PDF"
+                                            }
+                                            visionRecorder.cleanup()
+                                            isProcessing = false
+                                            showRecMenu = false
+                                        }
+                                    },
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)
+                                ) {
+                                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Filled.PictureAsPdf, "PDF", tint = Color(0xFFE53935), modifier = Modifier.size(20.dp))
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Column {
+                                            Text("Exportar PDF Premium", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                                            Text("Imagenes + analisis AI en PDF", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        if (!isProcessing) {
+                            TextButton(onClick = {
+                                visionRecorder.cleanup()
+                                showRecMenu = false
+                            }) { Text("Descartar") }
+                        }
+                    }
+                )
+            }
             // R2-6 FIX: Image analysis button (replaces unused Chat/Share)
             ControlButton(
                 icon = Icons.Filled.PhotoCamera,

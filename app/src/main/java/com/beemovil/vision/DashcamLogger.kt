@@ -84,9 +84,17 @@ class DashcamLogger(private val context: Context) {
     fun stopSession() {
         save()
         val count = entries.length()
+        // R4-3: Copy to public Downloads/EMMA/
+        sessionFile?.let { file ->
+            if (file.exists()) {
+                com.beemovil.files.PublicFileWriter.copyToPublicDownloads(
+                    context, file, "application/json"
+                )
+            }
+        }
         sessionFile = null
         entries = JSONArray()
-        Log.i(TAG, "Dashcam session stopped ($count entries)")
+        Log.i(TAG, "Dashcam session stopped ($count entries) — saved to Downloads/EMMA/")
     }
 
     private fun save() {

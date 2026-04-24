@@ -288,4 +288,98 @@ class VisionRecorder(private val context: Context) {
         frameMetadata.clear()
         frameIndex = 0
     }
+
+    /** R4-2: Get all recordings from Downloads/EMMA/ */
+    fun getAllRecordings(): List<RecordingInfo> {
+        val recordings = mutableListOf<RecordingInfo>()
+        try {
+            // Scan cache dir for any unfinished sessions
+            val cacheRecDir = File(context.cacheDir, "vision_recordings")
+            if (cacheRecDir.exists()) {
+                cacheRecDir.listFiles()?.forEach { dir ->
+                    if (dir.isDirectory) {
+                        val frameCount = dir.listFiles()?.count { it.extension == "jpg" } ?: 0
+                        if (frameCount > 0) {
+                            recordings.add(RecordingInfo(
+                                name = dir.name,
+                                path = dir.absolutePath,
+                                sizeBytes = dir.listFiles()?.sumOf { it.length() } ?: 0,
+                                frameCount = frameCount,
+                                createdAt = dir.lastModified(),
+                                isEncoded = false
+                            ))
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error scanning recordings: ${e.message}")
+        }
+        return recordings.sortedByDescending { it.createdAt }
+    }
+
+    /** R4-4: Generate an HTML report with all frames for PremiumPdfPlugin */
+    fun generateSessionHtml(): String? {
+        val dir = sessionDir ?: return null
+        val frames = dir.listFiles()
+            ?.filter { it.extension == "jpg" }
+            ?.sortedBy { it.name }
+            ?: return null
+
+        if (frames.isEmpty()) return null
+
+        val sdf = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault())
+
+        return buildString {
+            append("""
+                <html><head><style>
+                body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+                .header { background: linear-gradient(135deg, #1a1a2e, #16213e); color: white; 
+                    padding: 30px; border-radius: 12px; margin-bottom: 20px; }
+                .header h1 { margin: 0; font-size: 24px; }
+                .header p { margin: 5px 0 0; opacity: 0.8; font-size: 14px; }
+                .frame-card { background: white; border-radius: 10px; padding: 15px; 
+                    margin-bottom: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); page-break-inside: avoid; }
+                .frame-card img { width: 100%; border-radius: 8px; margin-bottom: 8px; }
+                .frame-meta { font-size: 11px; color: #666; }
+                .frame-text { font-size: 13px; margin-top: 8px; color: #333; }
+                .stats { display: flex; gap: 15px; margin-top: 10px; }
+                .stat { background: rgba(255,255,255,0.15); padding: 8px 15px; border-radius: 8px; }
+                </style></head><body>
+                <div class="header">
+                    <h1>E.M.M.A. Vision - Sesion de Captura</h1>
+                    <p>${sessionName}</p>
+                    <div class="stats">
+                        <div class="stat">${frames.size} frames</div>
+                        <div class="stat">${sdf.format(java.util.Date())}</div>
+                    </div>
+                </div>
+            """.trimIndent())
+
+            frames.forEachIndexed { i, frame ->
+                val meta = frameMetadata.getOrNull(i)
+                // Convert frame to base64 for embedding
+                val bytes = frame.readBytes()
+                val b64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+                append("""
+                    <div class="frame-card">
+                        <img src="data:image/jpeg;base64,$b64" />
+                        <div class="frame-meta">Frame ${i + 1} | ${meta?.gpsAddress ?: ""}</div>
+                        ${if (meta?.aiText != null) "<div class=\"frame-text\">${meta.aiText.take(200)}</div>" else ""}
+                    </div>
+                """.trimIndent())
+            }
+
+            append("</body></html>")
+        }
+    }
+
+    data class RecordingInfo(
+        val name: String,
+        val path: String,
+        val sizeBytes: Long,
+        val frameCount: Int,
+        val createdAt: Long,
+        val isEncoded: Boolean
+    )
 }

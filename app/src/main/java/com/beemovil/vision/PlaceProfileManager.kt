@@ -26,6 +26,7 @@ class PlaceProfileManager(private val context: Context) {
         val latitude: Double,
         val longitude: Double,
         val address: String,
+        val label: String = "",                // R4-1: User-assigned name (Casa, Trabajo, Gym)
         val visitCount: Int,
         val firstVisit: Long,
         val lastVisit: Long,
@@ -36,21 +37,22 @@ class PlaceProfileManager(private val context: Context) {
     ) {
         /** Generate natural language context for prompt injection */
         fun toPromptContext(): String = buildString {
-            append("LUGAR CONOCIDO: $address\n")
-            append("• Visitas: $visitCount")
+            val displayName = if (label.isNotBlank()) "$label ($address)" else address
+            append("LUGAR CONOCIDO: $displayName\n")
+            append("Visitas: $visitCount")
             val daysAgo = ((System.currentTimeMillis() - lastVisit) / 86_400_000).toInt()
-            if (daysAgo > 0) append(" (última hace ${daysAgo}d)")
+            if (daysAgo > 0) append(" (ultima hace ${daysAgo}d)")
             appendLine()
             if (visitDays.isNotEmpty()) {
-                val dayNames = listOf("Dom","Lun","Mar","Mié","Jue","Vie","Sáb")
+                val dayNames = listOf("Dom","Lun","Mar","Mie","Jue","Vie","Sab")
                 val names = visitDays.sorted().map { dayNames.getOrElse(it - 1) { "?" } }
-                appendLine("• Días frecuentes: ${names.joinToString(", ")}")
+                appendLine("Dias frecuentes: ${names.joinToString(", ")}")
             }
             if (observations.isNotEmpty()) {
-                appendLine("• Notas previas: ${observations.takeLast(3).joinToString("; ")}")
+                appendLine("Notas previas: ${observations.takeLast(3).joinToString("; ")}")
             }
             if (frequentMode != null) {
-                appendLine("• Modo usual: $frequentMode")
+                appendLine("Modo usual: $frequentMode")
             }
         }
     }
@@ -149,6 +151,15 @@ class PlaceProfileManager(private val context: Context) {
         Log.d(TAG, "Deleted profile: ${profile.address}")
     }
 
+    /**
+     * R4-1: Update the label (user-assigned name) of a place profile.
+     */
+    fun updateLabel(profile: PlaceProfile, newLabel: String): PlaceProfile {
+        val updated = profile.copy(label = newLabel)
+        save(updated)
+        return updated
+    }
+
     private fun save(profile: PlaceProfile) {
         cache.save(
             profile.latitude, profile.longitude,
@@ -162,6 +173,7 @@ class PlaceProfileManager(private val context: Context) {
             put("lat", profile.latitude)
             put("lng", profile.longitude)
             put("addr", profile.address)
+            put("label", profile.label)
             put("visits", profile.visitCount)
             put("first", profile.firstVisit)
             put("last", profile.lastVisit)
@@ -188,6 +200,7 @@ class PlaceProfileManager(private val context: Context) {
             latitude = obj.getDouble("lat"),
             longitude = obj.getDouble("lng"),
             address = obj.optString("addr", ""),
+            label = obj.optString("label", ""),
             visitCount = obj.optInt("visits", 1),
             firstVisit = obj.optLong("first", System.currentTimeMillis()),
             lastVisit = obj.optLong("last", System.currentTimeMillis()),
