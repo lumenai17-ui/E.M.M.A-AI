@@ -150,6 +150,10 @@ class MainActivity : ComponentActivity() {
                                         viewModel = viewModel,
                                         onBack = { viewModel.currentScreen.value = "dashboard" }
                                     )
+                                    "camera" -> CameraScreen(
+                                        viewModel = viewModel,
+                                        onBack = { viewModel.currentScreen.value = "dashboard" }
+                                    )
                                     "live_vision" -> LiveVisionScreen(
                                         viewModel = viewModel,
                                         onBack = { viewModel.currentScreen.value = "dashboard" }

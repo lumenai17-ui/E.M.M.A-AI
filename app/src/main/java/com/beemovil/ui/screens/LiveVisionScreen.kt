@@ -1,90 +1,1218 @@
 package com.beemovil.ui.screens
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.*
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
+import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
+import com.beemovil.llm.*
 import com.beemovil.ui.ChatViewModel
-import com.beemovil.ui.theme.*
+import com.beemovil.ui.components.VisionModeSelector
+import com.beemovil.ui.components.suggestModeBySpeed
+import com.beemovil.service.PocketVisionService
+import com.beemovil.vision.*
+import com.beemovil.voice.DeepgramVoiceManager
+import kotlinx.coroutines.launch
+import java.util.concurrent.Executors
 
+/**
+ * LiveVisionScreen — Phase V2: La Mirada
+ *
+ * Real-time camera analysis. Clean UI (~350 lines), logic in VisionCaptureLoop.
+ * Controls: Play/Pause, Mute, Interval slider, Back. No tap-to-focus/pinch-to-zoom.
+ * Theme-aware via MaterialTheme.colorScheme.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LiveVisionScreen(
     viewModel: ChatViewModel,
     onBack: () -> Unit
 ) {
-    val isDark = isDarkTheme()
-    val textPrimary = if (isDark) BeeWhite else TextDark
-    val textSecondary = if (isDark) BeeGray else TextGrayDark
-    val accent = if (isDark) BeeYellow else BrandBlue
-    val bg = if (isDark) Color.Black else LightBackground
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val prefs = remember { context.getSharedPreferences("beemovil", 0) }
+    val colorScheme = MaterialTheme.colorScheme
+    val coroutineScope = rememberCoroutineScope()
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(bg)
-    ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            TopAppBar(
-                title = { Text("Live Vision (Offline)", fontWeight = FontWeight.Bold, color = textPrimary) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, "Back", tint = accent)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent
-                )
-            )
+    // ── Permissions ──
+    var hasPermissions by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val permLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> hasPermissions = granted }
 
-            Column(
-                modifier = Modifier.fillMaxSize().padding(32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Surface(
-                    color = Color(0xFF00C853).copy(alpha = 0.15f),
-                    shape = CircleShape,
-                    modifier = Modifier.size(80.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Filled.Videocam, "WIP", tint = Color(0xFF00C853), modifier = Modifier.size(40.dp))
+    // ── Vision state ──
+    var isLiveActive by remember { mutableStateOf(false) }
+    var isMuted by remember { mutableStateOf(false) }
+    var liveResult by remember { mutableStateOf("") }
+    var frameCount by remember { mutableIntStateOf(0) }
+    var intervalSeconds by remember { mutableIntStateOf(5) }
+    var showSettings by remember { mutableStateOf(false) }
+    var customPrompt by remember { mutableStateOf("Describe lo que ves en esta imagen. Sé conciso y en español.") }
+    var selectedModel by remember {
+        mutableStateOf(prefs.getString("vision_model", "") ?: "")
+    }
+
+    // ── V3: Voice state ──
+    var isListening by remember { mutableStateOf(false) }
+    var voiceState by remember { mutableStateOf(VisionVoiceController.VoiceState.IDLE) }
+    var selectedPersonality by remember { mutableStateOf(NARRATOR_PERSONALITIES.first()) }
+    var isNarrationEnabled by remember { mutableStateOf(true) }
+
+    // ── V4: GPS state ──
+    var currentGpsData by remember { mutableStateOf(GpsData()) }
+    var weatherInfo by remember { mutableStateOf("") }
+    var webContext by remember { mutableStateOf("") }
+    var navUpdate by remember { mutableStateOf<NavigationUpdate?>(null) }
+    var isNavigating by remember { mutableStateOf(false) }
+
+    // ── V5: Mode + Recording state ──
+    var selectedMode by remember { mutableStateOf(VisionMode.GENERAL) }
+    var suggestedMode by remember { mutableStateOf<VisionMode?>(null) }
+    var isRecording by remember { mutableStateOf(false) }
+    var targetLanguage by remember { mutableStateOf("") } // V6: for translator mode
+
+    // ── Camera ──
+    val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
+    var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
+
+    // ── Engines ──
+    val captureLoop = remember { VisionCaptureLoop(context) }
+    val voiceManager = remember { DeepgramVoiceManager(context).also { it.initialize() } }
+    val voiceController = remember { VisionVoiceController(context, voiceManager) }
+    val conversation = remember { VisionConversation() }
+    val gpsModule = remember { GpsModule(context) }
+    val contextProvider = remember { LiveContextProvider(context) }
+    val gpsNavigator = remember { GpsNavigator() }
+    val intentDetector = remember { VisionIntentDetector(context) }
+    val envScanner = remember { com.beemovil.core.EnvironmentScanner(context) }
+    val visionRecorder = remember { VisionRecorder(context) }
+    val offlineCache = remember { OfflineContextCache.getInstance(context) }
+    // V7: Intelligence engines
+    val visionAssessor = remember { VisionAssessor() }
+    val temporalDetector = remember { TemporalPatternDetector() }
+    val memoryManager = remember { VisionMemoryManager(context) }
+    val emmaEngine = remember { com.beemovil.core.engine.EmmaEngine(context) }
+    val visionBridge = remember { VisionBridge(context, emmaEngine.plugins) }
+    // V8: Profile engines
+    val emergencyProtocol = remember { EmergencyProtocol(context) }
+    val summaryGenerator = remember { SessionSummaryGenerator(context) }
+    // V9: Experience engines
+    val faceDetector = remember { FaceDetectionModule() }
+    var currentFaceHint by remember { mutableStateOf("") }
+    var showDashboard by remember { mutableStateOf(false) }
+    var showHistory by remember { mutableStateOf(false) }
+
+    // V6: Wire offline cache to context provider
+    LaunchedEffect(Unit) {
+        contextProvider.setOfflineCache(offlineCache)
+        offlineCache.cleanup() // Clean expired entries on startup
+    }
+
+    // Auto-select vision model if not set
+    LaunchedEffect(Unit) {
+        if (selectedModel.isBlank()) {
+            selectedModel = autoSelectVisionModel(context, viewModel)
+            prefs.edit().putString("vision_model", selectedModel).apply()
+        }
+    }
+
+    // ── V4: Start GPS + fetch weather once ──
+    LaunchedEffect(Unit) {
+        if (gpsModule.hasPermission) {
+            gpsModule.onLocationUpdate = { data ->
+                currentGpsData = data
+                // Update navigator if active
+                if (gpsNavigator.isNavigating) {
+                    val update = gpsNavigator.update(data)
+                    navUpdate = update
+                    isNavigating = update.phase != NavPhase.IDLE
+                    if (update.phase == NavPhase.ARRIVED) {
+                        gpsNavigator.stopNavigation()
                     }
                 }
-                Spacer(modifier = Modifier.height(24.dp))
-                Text(
-                    "Motor de Visión Suspendido",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = textPrimary
+            }
+            gpsModule.start()
+        }
+        // Fetch weather once
+        val loc = envScanner.getCurrentLocation()
+        if (loc != null) {
+            weatherInfo = envScanner.fetchWeather(loc.first, loc.second)
+        }
+    }
+
+    // ── Auto-capture coroutine ──
+    LaunchedEffect(isLiveActive, intervalSeconds, selectedModel) {
+        if (!isLiveActive) return@LaunchedEffect
+
+        val mySessionId = captureLoop.newSession()
+        conversation.markSessionStart() // V8: track session timing
+
+        // V8: Record place visit
+        if (currentGpsData.address.isNotBlank()) {
+            val profile = memoryManager.placeProfileManager.getOrCreate(
+                currentGpsData.latitude, currentGpsData.longitude, currentGpsData.address
+            )
+            memoryManager.placeProfileManager.recordVisit(profile, selectedMode)
+        }
+
+        // Resolve provider
+        val modelEntry = ModelRegistry.findModel(selectedModel)
+        val providerType = modelEntry?.provider ?: viewModel.currentProvider.value
+        val apiKey = getApiKeyForProvider(context, providerType)
+
+        if (apiKey.isBlank() && providerType != "local") {
+            liveResult = "⚠️ Configura API key de $providerType en Settings"
+            return@LaunchedEffect
+        }
+
+        val provider = captureLoop.getOrCreateProvider(providerType, apiKey, selectedModel)
+        if (provider == null) {
+            liveResult = "⚠️ Error creando provider"
+            return@LaunchedEffect
+        }
+
+        // Set callbacks — V3: narrate, V5: two-pass + recorder, V7: assessor gate
+        captureLoop.onResult = { result ->
+            liveResult = result
+            conversation.addFrame(result)
+
+            // V7: Assessor — decide IF to narrate
+            val assessment = visionAssessor.assess(
+                result = result,
+                previousResults = conversation.getPreviousResults(),
+                mode = selectedMode,
+                speedKmh = currentGpsData.speedKmh
+            )
+
+            if (assessment.shouldNarrate) {
+                voiceController.narrate(result)
+                visionAssessor.markNarrated()
+            }
+
+            // V7: Memory — save if notable
+            if (assessment.shouldSave) {
+                memoryManager.saveVisionMemory(
+                    lat = currentGpsData.latitude,
+                    lng = currentGpsData.longitude,
+                    result = result,
+                    mode = selectedMode,
+                    address = currentGpsData.address
                 )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    "Se desactivó Live Vision temporalmente mientras se instala Koog VLM. La lógica de bucle manual del modelo antiguo fue purgada correctamente.",
-                    fontSize = 14.sp,
-                    color = textSecondary,
-                    textAlign = TextAlign.Center,
-                    lineHeight = 20.sp
-                )
-                Spacer(modifier = Modifier.height(32.dp))
-                Button(
-                    onClick = onBack,
-                    colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = if (isDark) BeeBlack else Color.White)
-                ) {
-                    Text("Regresar al Dashboard")
+            }
+
+            // V8: Auto-emergency alert from assessor
+            if (assessment.action == VisionAssessor.Action.SEND_ALERT) {
+                if (emergencyProtocol.shouldAutoTrigger()) {
+                    coroutineScope.launch {
+                        val msg = emergencyProtocol.triggerEmergency(
+                            currentGpsData.latitude, currentGpsData.longitude,
+                            currentGpsData.address, result
+                        )
+                        if (msg != null) {
+                            liveResult = "🚨 Alerta de emergencia enviada"
+                        }
+                    }
+                }
+            }
+
+            // V5: Two-pass web enrichment (async, non-blocking)
+            coroutineScope.launch {
+                contextProvider.extractAndSearch(result, selectedMode)
+            }
+        }
+        captureLoop.onError = { error ->
+            liveResult = "⚠️ $error"
+        }
+        captureLoop.onFrameProcessed = { count ->
+            frameCount = count
+        }
+        // V5: Save frames for timelapse if recording
+        captureLoop.onFrameCaptured = { bitmap ->
+            // V9+V10: Face detection (throttled to every 3rd frame)
+            if (frameCount % 3 == 0) {
+                val faceBitmap = bitmap.copy(bitmap.config ?: android.graphics.Bitmap.Config.ARGB_8888, false)
+                coroutineScope.launch {
+                    val hint = faceDetector.analyze(faceBitmap)
+                    currentFaceHint = hint?.promptHint ?: ""
+                    faceBitmap.recycle()
+                }
+            }
+            if (isRecording) {
+                visionRecorder.saveFrame(bitmap, liveResult, currentGpsData.address)
+                bitmap.recycle()
+            } else {
+                bitmap.recycle()
+            }
+        }
+
+        // Capture loop
+        while (isLiveActive && captureLoop.sessionId.get() == mySessionId) {
+            // V10: Adaptive interval based on battery
+            val batteryPct = getBatteryLevel(context)
+            val adaptiveDelay = captureLoop.getAdaptiveInterval(intervalSeconds, batteryPct)
+            kotlinx.coroutines.delay(adaptiveDelay)
+            if (!isLiveActive || captureLoop.sessionId.get() != mySessionId) break
+
+            val capture = imageCapture ?: continue
+
+            // V4: Fetch web context (cached, won't hit network every frame)
+            if (currentGpsData.address.isNotBlank()) {
+                try {
+                    webContext = contextProvider.fetchContext(
+                        address = currentGpsData.address,
+                        mode = selectedMode,
+                        coords = currentGpsData.coordsShort
+                    )
+                } catch (_: Exception) {}
+                // V5: Auto-detect mode suggestion by speed
+                suggestedMode = suggestModeBySpeed(currentGpsData.speedKmh)
+            }
+
+            // V5: Build context-aware prompt with mode + GPS + web + two-pass
+            val userQ = conversation.consumeQuestion()
+            val twoPassCtx = contextProvider.getTwoPassContext()
+            val combinedWebCtx = if (twoPassCtx.isNotBlank() && webContext.isNotBlank()) {
+                "$webContext\n\n🔍 INFO ADICIONAL:\n$twoPassCtx"
+            } else webContext.ifBlank { twoPassCtx }
+
+            // V7: Query memory and temporal patterns
+            val memoryCtx = memoryManager.queryMemories(
+                currentGpsData.latitude, currentGpsData.longitude, selectedMode
+            )
+            val temporalPatterns = temporalDetector.detectPatterns(
+                conversation.getPreviousResults(), selectedMode, intervalSeconds
+            )
+            val temporalAlerts = temporalPatterns.joinToString("\n") { it.alert }
+
+            val systemPrompt = conversation.buildSystemPrompt(
+                mode = selectedMode,
+                personality = if (selectedPersonality.id == "default") null else selectedPersonality,
+                userQuestion = userQ,
+                gpsData = currentGpsData,
+                weatherInfo = weatherInfo,
+                webContext = combinedWebCtx,
+                navUpdate = navUpdate,
+                targetLanguage = targetLanguage,
+                memoryContext = memoryCtx,
+                temporalAlerts = temporalAlerts,
+                faceHint = currentFaceHint
+            )
+
+            captureLoop.captureAndAnalyze(
+                imageCapture = capture,
+                executor = cameraExecutor,
+                provider = provider,
+                systemPrompt = systemPrompt,
+                userPrompt = if (userQ != null) userQ else customPrompt,
+                mySessionId = mySessionId
+            )
+        }
+    }
+
+    // ── V3: Sync voice controller state ──
+    LaunchedEffect(isMuted, isNarrationEnabled) {
+        voiceController.setMuted(isMuted)
+        voiceController.isNarrationEnabled = isNarrationEnabled
+    }
+    LaunchedEffect(Unit) {
+        voiceController.onStateChange = { state -> voiceState = state }
+        voiceController.onSpeechResult = { spokenText ->
+            isListening = false
+            // V4: Intent detection
+            val intent = intentDetector.detect(spokenText)
+            when (intent.type) {
+                VisionIntentDetector.IntentType.STOP_NAV -> {
+                    gpsNavigator.stopNavigation()
+                    navUpdate = null
+                    isNavigating = false
+                    voiceController.narrate("Navegación cancelada.")
+                }
+                VisionIntentDetector.IntentType.NAVIGATION -> {
+                    voiceController.narrate("Buscando ${intent.destination}...")
+                    coroutineScope.launch {
+                        val dest = intentDetector.resolveDestination(
+                            intent.destination,
+                            currentGpsData.latitude,
+                            currentGpsData.longitude
+                        )
+                        if (dest != null) {
+                            gpsNavigator.startNavigation(dest)
+                            val firstUpdate = gpsNavigator.update(currentGpsData)
+                            navUpdate = firstUpdate
+                            isNavigating = true
+                            voiceController.narrate("Navegando a ${dest.name}. ${firstUpdate.instruction}")
+                        } else {
+                            voiceController.narrate("No pude encontrar ${intent.destination}. Intenta con otro nombre.")
+                        }
+                    }
+                }
+                VisionIntentDetector.IntentType.POI_SEARCH -> {
+                    conversation.addUserQuestion(spokenText)
+                }
+                // V7: Action intents → VisionBridge
+                VisionIntentDetector.IntentType.ACTION -> {
+                    val action = visionBridge.parseVoiceAction(spokenText)
+                    if (action != null) {
+                        coroutineScope.launch {
+                            voiceController.narrate("Ejecutando...")
+                            val bridgeResult = visionBridge.execute(
+                                actionType = action.first,
+                                params = action.second,
+                                sessionLog = conversation.getSessionLog(),
+                                lastResult = conversation.lastResult
+                            )
+                            voiceController.narrate(bridgeResult.take(150))
+                            liveResult = bridgeResult
+                        }
+                    } else {
+                        conversation.addUserQuestion(spokenText)
+                    }
+                }
+                VisionIntentDetector.IntentType.QUESTION -> {
+                    conversation.addUserQuestion(spokenText)
                 }
             }
         }
     }
+
+    // ── Cleanup + V8: Session summary on dispose ──
+    DisposableEffect(Unit) {
+        onDispose {
+            isLiveActive = false
+            captureLoop.stop()
+            voiceController.stop()
+            voiceManager.destroy()
+            gpsModule.stop()
+            gpsNavigator.stopNavigation()
+            if (visionRecorder.isRecording) visionRecorder.stopRecording()
+            faceDetector.close() // V9
+            cameraExecutor.shutdown()
+
+            // V8: Generate session summary in background
+            if (conversation.frameNumber > 2) {
+                coroutineScope.launch {
+                    try {
+                        val modelEntry = ModelRegistry.findModel(selectedModel)
+                        val providerType = modelEntry?.provider ?: "openrouter"
+                        val apiKey = getApiKeyForProvider(context, providerType)
+                        val modelId = modelEntry?.id ?: selectedModel
+
+                        val summary = summaryGenerator.generate(
+                            sessionLog = conversation.getSessionLog(),
+                            frameCount = conversation.frameNumber,
+                            durationMs = conversation.getSessionDurationMs(),
+                            mode = selectedMode,
+                            mainAddress = currentGpsData.address,
+                            providerType = providerType,
+                            apiKey = apiKey,
+                            modelId = modelId
+                        )
+                        summaryGenerator.persist(
+                            summary, currentGpsData.latitude, currentGpsData.longitude
+                        )
+
+                        // V8: Update place profile with session duration
+                        if (currentGpsData.address.isNotBlank()) {
+                            val profile = memoryManager.placeProfileManager.getOrCreate(
+                                currentGpsData.latitude, currentGpsData.longitude,
+                                currentGpsData.address
+                            )
+                            memoryManager.placeProfileManager.updateSessionEnd(
+                                profile, summary.durationMinutes
+                            )
+                        }
+                    } catch (_: Exception) { /* best effort */ }
+                }
+            }
+        }
+    }
+
+    // ── Permission gate ──
+    if (!hasPermissions) {
+        PermissionGateUI(colorScheme, onBack) { permLauncher.launch(Manifest.permission.CAMERA) }
+        return
+    }
+
+    // ═══ MAIN UI ═══
+    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+        // Camera preview (full screen)
+        AndroidView(
+            factory = { ctx ->
+                val previewView = PreviewView(ctx)
+                val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
+                cameraProviderFuture.addListener({
+                    val cameraProvider = cameraProviderFuture.get()
+                    val preview = Preview.Builder().build().also {
+                        it.setSurfaceProvider(previewView.surfaceProvider)
+                    }
+                    val imgCapture = ImageCapture.Builder()
+                        .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                        .build()
+                    imageCapture = imgCapture
+
+                    try {
+                        cameraProvider.unbindAll()
+                        cameraProvider.bindToLifecycle(
+                            lifecycleOwner,
+                            CameraSelector.DEFAULT_BACK_CAMERA,
+                            preview, imgCapture
+                        )
+                    } catch (_: Exception) {}
+                }, ContextCompat.getMainExecutor(ctx))
+                previewView
+            },
+            onRelease = {
+                try { ProcessCameraProvider.getInstance(it.context).get().unbindAll() } catch (_: Exception) {}
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+
+        // ── Top bar overlay ──
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.6f), Color.Transparent)))
+                .statusBarsPadding()
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { isLiveActive = false; onBack() }) {
+                    Icon(Icons.Filled.ArrowBack, "Back", tint = Color.White)
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Live Vision", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 16.sp)
+                    val modelName = ModelRegistry.findModel(selectedModel)?.name ?: selectedModel
+                    Text(modelName, fontSize = 11.sp, color = Color.White.copy(alpha = 0.7f),
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                // Status badge
+                Surface(
+                    color = if (isLiveActive) Color(0xFF00E676).copy(alpha = 0.2f) else Color.White.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier.size(8.dp)
+                                .clip(CircleShape)
+                                .background(if (isLiveActive) Color(0xFF00E676) else Color.Gray)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            when {
+                                isLiveActive && captureLoop.isProcessing.get() -> "Analizando..."
+                                isLiveActive -> "Activo · $frameCount frames"
+                                else -> "Pausado"
+                            },
+                            fontSize = 11.sp, color = Color.White
+                        )
+                    }
+                }
+                // V9: Dashboard badge
+                Spacer(modifier = Modifier.width(6.dp))
+                Surface(
+                    onClick = { showDashboard = !showDashboard },
+                    color = Color(0xFF9b59b6).copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Row(modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Text("📊", fontSize = 11.sp)
+                        if (currentFaceHint.isNotBlank()) {
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Text("👤", fontSize = 10.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── V4: Navigation HUD (below top bar) ──
+        val nav = navUpdate
+        if (isNavigating && nav != null && nav.phase != NavPhase.IDLE) {
+            Surface(
+                color = if (nav.phase == NavPhase.ARRIVED) Color(0xFF00E676).copy(alpha = 0.85f)
+                       else Color(0xFF1565C0).copy(alpha = 0.85f),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 60.dp, start = 16.dp, end = 16.dp)
+                    .fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(nav.arrow, fontSize = 28.sp)
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            if (nav.phase == NavPhase.ARRIVED) "🎉 ¡Llegaste!" else "🎯 ${gpsNavigator.destination?.name ?: ""}",
+                            fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White
+                        )
+                        Text(
+                            "${nav.distance} · ${nav.eta}",
+                            fontSize = 12.sp, color = Color.White.copy(alpha = 0.8f)
+                        )
+                    }
+                    if (nav.phase != NavPhase.ARRIVED) {
+                        IconButton(onClick = {
+                            gpsNavigator.stopNavigation()
+                            navUpdate = null
+                            isNavigating = false
+                        }) {
+                            Icon(Icons.Filled.Close, "Stop", tint = Color.White)
+                        }
+                    }
+                }
+            }
+        } else if (currentGpsData.address.isNotBlank()) {
+            // GPS address badge (when not navigating)
+            Surface(
+                color = Color.Black.copy(alpha = 0.4f),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 60.dp, start = 48.dp, end = 48.dp)
+            ) {
+                Text(
+                    "📍 ${currentGpsData.address}",
+                    fontSize = 10.sp, color = Color.White.copy(alpha = 0.7f),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                )
+            }
+        }
+
+        // ── Result overlay (glassmorphism, bottom) ──
+        if (liveResult.isNotBlank()) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, bottom = 100.dp)
+            ) {
+                Surface(
+                    color = Color.Black.copy(alpha = 0.65f),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.AutoAwesome, "AI", tint = Color(0xFFF5A623), modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("E.M.M.A.", fontSize = 11.sp, color = Color(0xFFF5A623), fontWeight = FontWeight.Bold)
+                            if (selectedPersonality.id != "default") {
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("${selectedPersonality.emoji} ${selectedPersonality.name}", fontSize = 10.sp, color = Color.White.copy(alpha = 0.5f))
+                            }
+                            Spacer(modifier = Modifier.weight(1f))
+                            if (isMuted) {
+                                Icon(Icons.Filled.VolumeOff, "Muted", tint = Color.Gray, modifier = Modifier.size(14.dp))
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            liveResult,
+                            fontSize = 13.sp,
+                            color = Color.White,
+                            lineHeight = 19.sp,
+                            maxLines = 8,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+
+        // ── V5: Mode selector (above controls) ──
+        VisionModeSelector(
+            selectedMode = selectedMode,
+            suggestedMode = suggestedMode,
+            onModeChange = { newMode ->
+                // V6: Start/stop Pocket Service
+                if (newMode == VisionMode.POCKET && selectedMode != VisionMode.POCKET) {
+                    val intent = Intent(context, PocketVisionService::class.java).apply {
+                        action = PocketVisionService.ACTION_START
+                        putExtra(PocketVisionService.EXTRA_INTERVAL, intervalSeconds)
+                        putExtra(PocketVisionService.EXTRA_MODE, newMode.name)
+                    }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        context.startForegroundService(intent)
+                    } else {
+                        context.startService(intent)
+                    }
+                } else if (selectedMode == VisionMode.POCKET && newMode != VisionMode.POCKET) {
+                    val stopIntent = Intent(context, PocketVisionService::class.java).apply {
+                        action = PocketVisionService.ACTION_STOP
+                    }
+                    context.startService(stopIntent)
+                }
+                selectedMode = newMode
+            },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 100.dp)
+        )
+
+        // ── Controls bar (bottom) ──
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))))
+                .navigationBarsPadding()
+                .padding(horizontal = 24.dp, vertical = 16.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Settings
+            ControlButton(
+                icon = Icons.Filled.Settings,
+                label = "Config",
+                isActive = showSettings,
+                onClick = { showSettings = !showSettings }
+            )
+            // Mic (V3)
+            ControlButton(
+                icon = if (isListening) Icons.Filled.MicOff else Icons.Filled.Mic,
+                label = if (isListening) "Escucha..." else "Mic",
+                isActive = isListening,
+                onClick = {
+                    if (isListening) {
+                        voiceController.stopListening()
+                        isListening = false
+                    } else {
+                        isListening = true
+                        voiceController.startListening()
+                    }
+                }
+            )
+            // Mute
+            ControlButton(
+                icon = if (isMuted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
+                label = if (isMuted) "Muted" else "Audio",
+                isActive = !isMuted,
+                onClick = {
+                    isMuted = voiceController.toggleMute()
+                }
+            )
+            // Play/Pause (main button)
+            FloatingActionButton(
+                onClick = {
+                    if (isLiveActive) {
+                        isLiveActive = false
+                        captureLoop.stop()
+                    } else {
+                        isLiveActive = true
+                    }
+                },
+                containerColor = if (isLiveActive) Color(0xFFFF5252) else Color(0xFF00E676),
+                contentColor = Color.White,
+                modifier = Modifier.size(64.dp)
+            ) {
+                Icon(
+                    if (isLiveActive) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    "Play/Pause",
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+            // REC (V5: timelapse recording)
+            ControlButton(
+                icon = if (isRecording) Icons.Filled.Stop else Icons.Filled.FiberManualRecord,
+                label = if (isRecording) "${visionRecorder.getFrameCount()}" else "REC",
+                isActive = isRecording,
+                activeColor = Color(0xFFFF1744),
+                onClick = {
+                    if (isRecording) {
+                        isRecording = false
+                        val result = visionRecorder.stopRecording()
+                        coroutineScope.launch {
+                            val mp4 = visionRecorder.encodeToMp4(withOverlay = false)
+                            if (mp4 != null) {
+                                liveResult = "🎥 Video guardado: ${result.frameCount} frames, ${result.durationSeconds}s"
+                            }
+                            visionRecorder.cleanup()
+                        }
+                    } else {
+                        visionRecorder.startRecording(selectedMode.name.lowercase())
+                        isRecording = true
+                    }
+                }
+            )
+            // Interval display
+            ControlButton(
+                icon = Icons.Filled.Timer,
+                label = "${intervalSeconds}s",
+                isActive = true,
+                onClick = {
+                    // Cycle through intervals: 3 → 5 → 8 → 10 → 3
+                    intervalSeconds = when (intervalSeconds) {
+                        3 -> 5; 5 -> 8; 8 -> 10; else -> 3
+                    }
+                }
+            )
+            // V8: Emergency panic button
+            ControlButton(
+                icon = Icons.Filled.Warning,
+                label = "SOS",
+                isActive = false,
+                activeColor = Color(0xFFFF1744),
+                onClick = {
+                    val config = emergencyProtocol.loadConfig()
+                    if (!config.enabled || config.contactNumber.isBlank()) {
+                        liveResult = "⚠️ Configura contacto de emergencia en Settings"
+                    } else {
+                        coroutineScope.launch {
+                            val msg = emergencyProtocol.triggerEmergency(
+                                currentGpsData.latitude, currentGpsData.longitude,
+                                currentGpsData.address, conversation.lastResult
+                            )
+                            if (msg != null) {
+                                liveResult = "🚨 Alerta enviada a ${config.contactName}"
+                                voiceController.narrate("Alerta de emergencia enviada")
+                            }
+                        }
+                    }
+                }
+            )
+            // V9: Chat share button
+            ControlButton(
+                icon = Icons.Filled.Share,
+                label = "Chat",
+                isActive = false,
+                onClick = {
+                    if (conversation.lastResult.isNotBlank()) {
+                        val visionNote = buildString {
+                            appendLine("📷 Desde E.M.M.A. Vision (${selectedMode.name})")
+                            appendLine(conversation.lastResult.take(200))
+                            if (currentGpsData.address.isNotBlank()) appendLine("📍 ${currentGpsData.address}")
+                        }
+                        memoryManager.saveVisionNote(visionNote)
+                        liveResult = "💬 Compartido al chat de E.M.M.A."
+                    } else {
+                        liveResult = "⚠️ Nada que compartir aún"
+                    }
+                }
+            )
+        }
+
+        // ── Settings panel (slide up) ──
+        AnimatedVisibility(
+            visible = showSettings,
+            enter = slideInVertically(initialOffsetY = { it }),
+            exit = slideOutVertically(targetOffsetY = { it }),
+            modifier = Modifier.align(Alignment.BottomCenter)
+        ) {
+            SettingsPanel(
+                selectedModel = selectedModel,
+                customPrompt = customPrompt,
+                intervalSeconds = intervalSeconds,
+                isNarrationEnabled = isNarrationEnabled,
+                selectedPersonality = selectedPersonality,
+                onModelChange = { id ->
+                    selectedModel = id
+                    prefs.edit().putString("vision_model", id).apply()
+                },
+                onPromptChange = { customPrompt = it },
+                onIntervalChange = { intervalSeconds = it },
+                onNarrationToggle = { isNarrationEnabled = it },
+                onPersonalityChange = { selectedPersonality = it },
+                onDismiss = { showSettings = false },
+                emergencyProtocol = emergencyProtocol
+            )
+        }
+
+        // V9: Dashboard overlay
+        AnimatedVisibility(
+            visible = showDashboard,
+            enter = androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.fadeOut(),
+            modifier = Modifier.align(Alignment.TopEnd)
+                .statusBarsPadding().padding(top = 60.dp, end = 12.dp)
+        ) {
+            Surface(
+                color = Color.Black.copy(alpha = 0.85f),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(12.dp).width(180.dp)) {
+                    Text("📊 Dashboard", fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp, color = Color.White)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    val durationMin = (conversation.getSessionDurationMs() / 60_000).toInt()
+                    val stats = memoryManager.getStatsMap()
+                    DashRow("⏱️ Duración", "${durationMin} min")
+                    DashRow("📸 Frames", "$frameCount")
+                    DashRow("🧠 Memorias", "${stats["memories"] ?: 0}")
+                    DashRow("💾 Cache", "${stats["cached"] ?: 0}")
+                    if (currentFaceHint.isNotBlank()) {
+                        DashRow("👤 Caras", currentFaceHint.substringAfter("Hay ").substringBefore(" persona").trim())
+                    }
+                    DashRow("🎯 Modo", selectedMode.name.lowercase())
+                }
+            }
+        }
+
+        // ── Processing indicator ──
+        if (isLiveActive && captureLoop.isProcessing.get()) {
+            LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter).statusBarsPadding().padding(top = 56.dp),
+                color = Color(0xFFF5A623),
+                trackColor = Color.Transparent
+            )
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════
+// SUB-COMPONENTS
+// ═══════════════════════════════════════════════════════
+
+@Composable
+private fun DashRow(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp)) {
+        Text(label, fontSize = 11.sp, color = Color.White.copy(alpha = 0.7f),
+            modifier = Modifier.weight(1f))
+        Text(value, fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun ControlButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    isActive: Boolean,
+    activeColor: Color = Color.White,
+    onClick: () -> Unit
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        IconButton(
+            onClick = onClick,
+            modifier = Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .background(if (isActive) activeColor.copy(alpha = 0.2f) else Color.Transparent)
+        ) {
+            Icon(icon, label, tint = if (isActive) activeColor else Color.Gray, modifier = Modifier.size(22.dp))
+        }
+        Text(label, fontSize = 9.sp, color = Color.White.copy(alpha = 0.7f))
+    }
+}
+
+@Composable
+private fun PermissionGateUI(
+    colorScheme: ColorScheme,
+    onBack: () -> Unit,
+    onRequest: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().background(colorScheme.background),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(Icons.Filled.CameraAlt, "Camera", tint = colorScheme.onSurfaceVariant, modifier = Modifier.size(64.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("Permiso de cámara necesario", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = colorScheme.onSurface)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text("Live Vision necesita acceso a la cámara", fontSize = 13.sp, color = colorScheme.onSurfaceVariant)
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(onClick = onRequest, colors = ButtonDefaults.buttonColors(
+            containerColor = colorScheme.primary, contentColor = colorScheme.onPrimary
+        )) { Text("Otorgar permiso", fontWeight = FontWeight.Bold) }
+        Spacer(modifier = Modifier.height(8.dp))
+        TextButton(onClick = onBack) { Text("Volver", color = colorScheme.onSurfaceVariant) }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SettingsPanel(
+    selectedModel: String,
+    customPrompt: String,
+    intervalSeconds: Int,
+    isNarrationEnabled: Boolean,
+    selectedPersonality: NarratorPersonality,
+    onModelChange: (String) -> Unit,
+    onPromptChange: (String) -> Unit,
+    onIntervalChange: (Int) -> Unit,
+    onNarrationToggle: (Boolean) -> Unit,
+    onPersonalityChange: (NarratorPersonality) -> Unit,
+    onDismiss: () -> Unit,
+    emergencyProtocol: EmergencyProtocol? = null
+) {
+    val colorScheme = MaterialTheme.colorScheme
+    val visionModels = remember { ModelRegistry.getVisionModels() }
+
+    Surface(
+        color = colorScheme.surface.copy(alpha = 0.95f),
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        modifier = Modifier.fillMaxWidth().fillMaxHeight(0.65f)
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp).verticalScroll(rememberScrollState())
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Configuración", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = colorScheme.onSurface)
+                Spacer(modifier = Modifier.weight(1f))
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Filled.Close, "Close", tint = colorScheme.onSurfaceVariant)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // ── V3: Narration toggle ──
+            Text("VOZ Y NARRACIÓN", fontSize = 10.sp, color = colorScheme.primary,
+                fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Filled.RecordVoiceOver, "Narration", tint = colorScheme.primary, modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Narración automática", fontSize = 14.sp, color = colorScheme.onSurface)
+                    Text("E.M.M.A. lee en voz alta lo que ve", fontSize = 11.sp, color = colorScheme.onSurfaceVariant)
+                }
+                Switch(
+                    checked = isNarrationEnabled,
+                    onCheckedChange = onNarrationToggle,
+                    colors = SwitchDefaults.colors(checkedTrackColor = colorScheme.primary)
+                )
+            }
+
+            // ── V3: Personality selector ──
+            if (isNarrationEnabled) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("PERSONALIDAD DEL NARRADOR", fontSize = 10.sp, color = colorScheme.primary,
+                    fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                Spacer(modifier = Modifier.height(6.dp))
+
+                NARRATOR_PERSONALITIES.forEach { p ->
+                    val isSelected = selectedPersonality.id == p.id
+                    Surface(
+                        onClick = { onPersonalityChange(p) },
+                        color = if (isSelected) colorScheme.primaryContainer else colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                    ) {
+                        Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(p.emoji, fontSize = 18.sp)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(p.name, fontSize = 13.sp,
+                                color = if (isSelected) colorScheme.onPrimaryContainer else colorScheme.onSurface,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                modifier = Modifier.weight(1f))
+                            if (isSelected) Icon(Icons.Filled.CheckCircle, "Selected", tint = colorScheme.primary, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("INTERVALO DE CAPTURA", fontSize = 10.sp, color = colorScheme.primary,
+                fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("${intervalSeconds}s", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = colorScheme.onSurface)
+                Spacer(modifier = Modifier.width(12.dp))
+                Slider(
+                    value = intervalSeconds.toFloat(),
+                    onValueChange = { onIntervalChange(it.toInt()) },
+                    valueRange = 2f..15f,
+                    steps = 12,
+                    modifier = Modifier.weight(1f),
+                    colors = SliderDefaults.colors(
+                        thumbColor = colorScheme.primary,
+                        activeTrackColor = colorScheme.primary
+                    )
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Custom prompt
+            Text("PROMPT PERSONALIZADO", fontSize = 10.sp, color = colorScheme.primary,
+                fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+            Spacer(modifier = Modifier.height(4.dp))
+            OutlinedTextField(
+                value = customPrompt,
+                onValueChange = onPromptChange,
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 2,
+                maxLines = 4,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = colorScheme.primary,
+                    unfocusedBorderColor = colorScheme.outline,
+                    focusedTextColor = colorScheme.onSurface,
+                    unfocusedTextColor = colorScheme.onSurface,
+                    cursorColor = colorScheme.primary
+                )
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Vision model selector
+            Text("MODELO DE VISIÓN", fontSize = 10.sp, color = colorScheme.primary,
+                fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+            Spacer(modifier = Modifier.height(6.dp))
+
+            visionModels.forEach { model ->
+                val isSelected = selectedModel == model.id
+                Surface(
+                    onClick = { onModelChange(model.id) },
+                    color = if (isSelected) colorScheme.primaryContainer else colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                ) {
+                    Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.Visibility, "Vision", tint = colorScheme.primary, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(model.name, fontSize = 13.sp,
+                                color = if (isSelected) colorScheme.onPrimaryContainer else colorScheme.onSurface,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
+                            Text("${model.provider} · ${model.sizeLabel}", fontSize = 10.sp, color = colorScheme.onSurfaceVariant)
+                        }
+                        if (isSelected) Icon(Icons.Filled.CheckCircle, "Selected", tint = colorScheme.primary, modifier = Modifier.size(16.dp))
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // V9: Emergency config section
+            if (emergencyProtocol != null) {
+                Text("🚨 CONTACTO DE EMERGENCIA", fontSize = 10.sp, color = Color(0xFFFF1744),
+                    fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                Spacer(modifier = Modifier.height(6.dp))
+
+                var emergencyConfig by remember {
+                    mutableStateOf(emergencyProtocol.loadConfig())
+                }
+
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Warning, "SOS", tint = Color(0xFFFF1744), modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Activar emergencia", fontSize = 14.sp, color = colorScheme.onSurface)
+                        Text("Botón SOS + auto-detección", fontSize = 11.sp, color = colorScheme.onSurfaceVariant)
+                    }
+                    Switch(
+                        checked = emergencyConfig.enabled,
+                        onCheckedChange = {
+                            emergencyConfig = emergencyConfig.copy(enabled = it)
+                            emergencyProtocol.saveConfig(emergencyConfig)
+                        },
+                        colors = SwitchDefaults.colors(checkedTrackColor = Color(0xFFFF1744))
+                    )
+                }
+
+                if (emergencyConfig.enabled) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = emergencyConfig.contactName,
+                        onValueChange = {
+                            emergencyConfig = emergencyConfig.copy(contactName = it)
+                            emergencyProtocol.saveConfig(emergencyConfig)
+                        },
+                        label = { Text("Nombre del contacto") },
+                        placeholder = { Text("Ej: Mamá, Esposa") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFFFF1744),
+                            unfocusedBorderColor = colorScheme.outline,
+                            focusedTextColor = colorScheme.onSurface,
+                            unfocusedTextColor = colorScheme.onSurface
+                        )
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = emergencyConfig.contactNumber,
+                        onValueChange = {
+                            emergencyConfig = emergencyConfig.copy(contactNumber = it)
+                            emergencyProtocol.saveConfig(emergencyConfig)
+                        },
+                        label = { Text("Teléfono (con código país)") },
+                        placeholder = { Text("+507XXXXXXXX") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFFFF1744),
+                            unfocusedBorderColor = colorScheme.outline,
+                            focusedTextColor = colorScheme.onSurface,
+                            unfocusedTextColor = colorScheme.onSurface
+                        )
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Método: ", fontSize = 13.sp, color = colorScheme.onSurface)
+                        EmergencyProtocol.SendMethod.entries.forEach { method ->
+                            val isSelected = emergencyConfig.sendMethod == method
+                            Surface(
+                                onClick = {
+                                    emergencyConfig = emergencyConfig.copy(sendMethod = method)
+                                    emergencyProtocol.saveConfig(emergencyConfig)
+                                },
+                                color = if (isSelected) Color(0xFFFF1744).copy(alpha = 0.2f) else colorScheme.surfaceVariant,
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.padding(horizontal = 2.dp)
+                            ) {
+                                Text(method.name, fontSize = 11.sp,
+                                    color = if (isSelected) Color(0xFFFF1744) else colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+}
+
+/** V10: Get current battery level (0-100) */
+private fun getBatteryLevel(context: android.content.Context): Int {
+    val batteryStatus = context.registerReceiver(null,
+        android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
+    val level = batteryStatus?.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) ?: -1
+    val scale = batteryStatus?.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1) ?: -1
+    return if (level >= 0 && scale > 0) (level * 100 / scale) else 100
 }

@@ -39,6 +39,13 @@ class VisionConversation {
     // Previous frame analysis results (for repetition detection)
     private val previousResults = mutableListOf<String>()
 
+    /** V7: Expose previous results for VisionAssessor and TemporalPatternDetector */
+    fun getPreviousResults(): List<String> = previousResults.toList()
+
+    /** V7: Expose last result for VisionBridge */
+    var lastResult: String = ""
+        private set
+
     // Frame counter
     var frameNumber = 0
         private set
@@ -52,6 +59,7 @@ class VisionConversation {
     fun addFrame(result: String) {
         if (result.isBlank() || result.startsWith("[")) return
         frameNumber++
+        lastResult = result
 
         // Add to conversation history
         history.add(ConversationEntry(
@@ -136,13 +144,25 @@ class VisionConversation {
     }
 
     /**
-     * Build a rich system prompt based on the current mode and personality.
+     * Build a rich system prompt based on the current mode, personality, and V4 context.
      */
     fun buildSystemPrompt(
         mode: VisionMode,
         personality: NarratorPersonality? = null,
         gpsContext: String = "",
-        userQuestion: String? = null
+        userQuestion: String? = null,
+        // V4: Enriched context
+        gpsData: GpsData? = null,
+        weatherInfo: String = "",
+        webContext: String = "",
+        navUpdate: NavigationUpdate? = null,
+        // V6: Translator
+        targetLanguage: String = "",
+        // V7: Intelligence
+        memoryContext: String = "",
+        temporalAlerts: String = "",
+        // V9: Face detection hint
+        faceHint: String = ""
     ): String = buildString {
         // Personality first (if set)
         if (personality != null) {
@@ -177,12 +197,88 @@ class VisionConversation {
                 Si detectas algo inusual, peligroso o relevante, repórtalo con ALERTA.
                 Si todo está normal, describe brevemente el entorno actual.
             """.trimIndent()
+
+            VisionMode.MEETING -> """
+                Eres un asistente de reuniones inteligente.
+                REGLA: Identifica texto visible (pizarras, slides, documentos).
+                1. Lee y transcribe el contenido visible con precisión
+                2. Si es una presentación, resume los puntos clave
+                3. Si es un pizarrón, organiza las ideas en bullet points
+                Sé preciso con el texto. No inventes contenido que no ves.
+            """.trimIndent()
+
+            VisionMode.SHOPPING -> """
+                Eres un asistente de compras inteligente.
+                1. Identifica productos visibles: nombre exacto, marca, presentación
+                2. Si ves precios, repórtalos con precisión
+                3. Si ves etiquetas nutricionales, resume calorías y macros
+                4. FORMATO: "[PRODUCTO: nombre] [PRECIO: si visible]"
+                Si tienes CONTEXTO WEB con precios de referencia:
+                - Compara: "En tienda vs Online" e indica si es buen precio
+                - Menciona rating/reviews si están disponibles
+                Máximo 2 oraciones.
+            """.trimIndent()
+
+            VisionMode.POCKET -> """
+                Eres E.M.M.A. en modo bolsillo. La cámara está apagada.
+                Basándote SOLO en la ubicación GPS y el contexto web:
+                1. Describe dónde está el usuario
+                2. Narra el entorno basándote en datos del GPS
+                3. Si el usuario camina, comenta sobre la ruta
+                Habla como su acompañante conversando naturalmente.
+                No menciones que no puedes ver. Narra el entorno.
+            """.trimIndent()
+
+            VisionMode.TRANSLATOR -> {
+                val lang = targetLanguage.ifBlank { "inglés" }
+                """
+                Eres un traductor en tiempo real. IDIOMA DESTINO: $lang
+                REGLAS:
+                1. Si ves texto en la imagen, tradúcelo TODO al español
+                2. Si el usuario dice algo, tradúcelo a $lang
+                3. Incluye la pronunciación fonética entre paréntesis
+                4. Si ves un menú, formatea como lista: "Plato - Precio"
+                5. No expliques — solo traduce
+                FORMATO: [Original] → [Traducción] ([pronunciación])
+                """.trimIndent()
+            }
         })
 
-        // GPS context
-        if (gpsContext.isNotBlank()) {
+        // V4: Semantic GPS block (no raw coordinates)
+        if (gpsData != null && gpsData.address.isNotBlank()) {
+            appendLine()
+            appendLine("📍 UBICACIÓN: ${gpsData.address}")
+            val movement = when {
+                gpsData.speedKmh > 60 -> "🚗 En vehículo a ${gpsData.speedKmh.toInt()} km/h, dirección ${gpsData.bearingCardinal}"
+                gpsData.speedKmh > 8 -> "🚴 Moviéndose a ${gpsData.speedKmh.toInt()} km/h, dirección ${gpsData.bearingCardinal}"
+                gpsData.speedKmh > 1 -> "🚶 Caminando al ${gpsData.bearingCardinal}"
+                else -> "📌 Estacionario"
+            }
+            appendLine(movement)
+            if (weatherInfo.isNotBlank()) appendLine("🌤️ $weatherInfo")
+        } else if (gpsContext.isNotBlank()) {
+            // Fallback to legacy gpsContext string
             appendLine()
             appendLine(gpsContext)
+        }
+
+        // V4: Active navigation block
+        if (navUpdate != null && navUpdate.phase != NavPhase.IDLE) {
+            appendLine()
+            appendLine("🎯 NAVEGACIÓN ACTIVA → ${navUpdate.instruction}")
+            appendLine("${navUpdate.arrow} ${navUpdate.distance} · ETA: ${navUpdate.eta} · ${navUpdate.speedKmh.toInt()} km/h")
+            if (navUpdate.phase == NavPhase.ARRIVED) {
+                appendLine("🎉 ¡DESTINO ALCANZADO!")
+            } else {
+                appendLine("⚡ PRIORIDAD: Guía al usuario usando PUNTOS DE REFERENCIA VISIBLES en la imagen. No recites distancias ni coordenadas, describe lo que el usuario VE para orientarse.")
+            }
+        }
+
+        // V4: Web enrichment context
+        if (webContext.isNotBlank() && !webContext.startsWith("Error") && !webContext.startsWith("No se encontraron")) {
+            appendLine()
+            appendLine("📰 CONTEXTO LOCAL:")
+            appendLine(webContext.take(400)) // Cap to avoid blowing context window
         }
 
         // Conversation context (avoid repetition)
@@ -197,6 +293,29 @@ class VisionConversation {
         val hint = getNoveltyHint()
         if (hint.isNotBlank()) {
             append(hint)
+        }
+
+        // V7: Memory context (RAG from past sessions)
+        if (memoryContext.isNotBlank()) {
+            appendLine()
+            appendLine("🧠 MEMORIAS RELEVANTES:")
+            appendLine(memoryContext.take(300))
+            appendLine("Usa esta información para enriquecer tu respuesta sin repetirla textualmente.")
+        }
+
+        // V7: Temporal pattern alerts
+        if (temporalAlerts.isNotBlank()) {
+            appendLine()
+            appendLine("⏱️ PATRONES TEMPORALES DETECTADOS:")
+            appendLine(temporalAlerts)
+            appendLine("Incorpora estas observaciones temporales de forma natural.")
+        }
+
+        // V9: Face detection hint
+        if (faceHint.isNotBlank()) {
+            appendLine()
+            appendLine("👤 DETECCIÓN FACIAL: $faceHint")
+            appendLine("Usa esta información para describir las personas con precisión.")
         }
 
         // User question takes priority
@@ -244,6 +363,17 @@ class VisionConversation {
         val common = wordsA.intersect(wordsB).size
         return common.toFloat() / maxOf(wordsA.size, wordsB.size)
     }
+
+    // V8: Session timing
+    var sessionStartTime: Long = System.currentTimeMillis()
+        private set
+
+    fun markSessionStart() {
+        sessionStartTime = System.currentTimeMillis()
+    }
+
+    /** V8: Get session duration in ms */
+    fun getSessionDurationMs(): Long = System.currentTimeMillis() - sessionStartTime
 }
 
 data class ConversationEntry(
@@ -254,7 +384,7 @@ data class ConversationEntry(
 )
 
 enum class VisionMode {
-    GENERAL, DASHCAM, TOURIST, AGENT
+    GENERAL, DASHCAM, TOURIST, AGENT, MEETING, SHOPPING, POCKET, TRANSLATOR
 }
 
 /**

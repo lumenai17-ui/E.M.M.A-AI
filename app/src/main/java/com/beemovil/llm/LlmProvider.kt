@@ -49,7 +49,30 @@ data class ChatMessage(
                     json.put("tool_calls", calls)
                 }
             }
-            else -> json.put("content", content ?: "")
+            else -> {
+                // Vision: if images are present, send as multimodal content array
+                // (OpenAI format: [{type:"text",text:...}, {type:"image_url",image_url:{url:"data:image/jpeg;base64,..."}}])
+                if (!images.isNullOrEmpty()) {
+                    val contentArray = JSONArray()
+                    // Text part
+                    contentArray.put(JSONObject().apply {
+                        put("type", "text")
+                        put("text", content ?: "")
+                    })
+                    // Image parts
+                    images.forEach { b64 ->
+                        contentArray.put(JSONObject().apply {
+                            put("type", "image_url")
+                            put("image_url", JSONObject().apply {
+                                put("url", "data:image/jpeg;base64,$b64")
+                            })
+                        })
+                    }
+                    json.put("content", contentArray)
+                } else {
+                    json.put("content", content ?: "")
+                }
+            }
         }
         return json
     }
