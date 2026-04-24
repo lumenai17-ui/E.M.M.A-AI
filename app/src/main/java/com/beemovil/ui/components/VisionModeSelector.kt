@@ -5,11 +5,14 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -18,25 +21,24 @@ import com.beemovil.vision.VisionMode
 /**
  * VisionModeSelector — Phase V5: Los Modos
  *
- * Horizontal scrollable chip strip for selecting vision mode.
- * Active chip = primaryContainer, suggested chip = animated border.
+ * DESIGN: No emojis — uses Material Icons per E.M.M.A. brand guidelines.
  */
 
 data class ModeInfo(
     val mode: VisionMode,
-    val emoji: String,
+    val icon: ImageVector,
     val label: String
 )
 
 val VISION_MODES = listOf(
-    ModeInfo(VisionMode.GENERAL, "🤖", "General"),
-    ModeInfo(VisionMode.DASHCAM, "🚗", "Dash"),
-    ModeInfo(VisionMode.TOURIST, "🧳", "Tour"),
-    ModeInfo(VisionMode.AGENT, "🛡️", "Agent"),
-    ModeInfo(VisionMode.MEETING, "📋", "Meet"),
-    ModeInfo(VisionMode.SHOPPING, "🛒", "Shop"),
-    ModeInfo(VisionMode.POCKET, "👖", "Pocket"),
-    ModeInfo(VisionMode.TRANSLATOR, "🌐", "Translate")
+    ModeInfo(VisionMode.GENERAL, Icons.Filled.Visibility, "General"),
+    ModeInfo(VisionMode.DASHCAM, Icons.Filled.DirectionsCar, "Dash"),
+    ModeInfo(VisionMode.TOURIST, Icons.Filled.Explore, "Tour"),
+    ModeInfo(VisionMode.AGENT, Icons.Filled.Security, "Agent"),
+    ModeInfo(VisionMode.MEETING, Icons.Filled.Groups, "Meet"),
+    ModeInfo(VisionMode.SHOPPING, Icons.Filled.ShoppingCart, "Shop"),
+    ModeInfo(VisionMode.POCKET, Icons.Filled.PhonelinkLock, "Pocket"),
+    ModeInfo(VisionMode.TRANSLATOR, Icons.Filled.Translate, "Translate")
 )
 
 @Composable
@@ -79,7 +81,11 @@ fun VisionModeSelector(
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(info.emoji, fontSize = 14.sp)
+                    Icon(
+                        info.icon, info.label,
+                        tint = if (isSelected) Color.White else Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.size(16.dp)
+                    )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         info.label,

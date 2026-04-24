@@ -45,6 +45,10 @@ class VisionCaptureLoop(private val context: Context) {
     var onError: ((String) -> Unit)? = null
     var onFrameProcessed: ((Int) -> Unit)? = null
     var onFrameCaptured: ((Bitmap) -> Unit)? = null  // V5: for VisionRecorder
+    var onBarcodeDetected: ((BarcodeScanner.ScanResult) -> Unit)? = null  // FR-1: Shopping mode barcode scan
+
+    // FR-1: Track whether barcode scanning is active
+    var barcodeScanEnabled: Boolean = false
 
     // ── Cached provider ──
     private var cachedProvider: LlmProvider? = null
@@ -149,13 +153,38 @@ class VisionCaptureLoop(private val context: Context) {
                             }
 
                             // V5: Notify recorder BEFORE resize (full-res copy)
-                            onFrameCaptured?.invoke(bitmap.copy(bitmap.config ?: android.graphics.Bitmap.Config.ARGB_8888, false))
+                            val bitmapCopy = bitmap.copy(bitmap.config ?: android.graphics.Bitmap.Config.ARGB_8888, false)
+                            onFrameCaptured?.invoke(bitmapCopy)
+
+                            // FR-1: Barcode scan in parallel for Shopping mode
+                            var barcodeContext = ""
+                            if (barcodeScanEnabled) {
+                                try {
+                                    val scanCopy = bitmap.copy(bitmap.config ?: android.graphics.Bitmap.Config.ARGB_8888, false)
+                                    val results = kotlinx.coroutines.runBlocking {
+                                        BarcodeScanner.scan(scanCopy)
+                                    }
+                                    scanCopy.recycle()
+                                    results.firstOrNull()?.let { scan ->
+                                        barcodeContext = BarcodeScanner.buildProductContext(scan)
+                                        onBarcodeDetected?.invoke(scan)
+                                        Log.d(TAG, "Barcode detected: ${scan.rawValue}")
+                                    }
+                                } catch (e: Exception) {
+                                    Log.w(TAG, "Barcode scan error: ${e.message}")
+                                }
+                            }
 
                             val b64 = resizeAndEncode(bitmap)
 
+                            // FR-1: Inject barcode product info into prompt
+                            val enrichedPrompt = if (barcodeContext.isNotBlank()) {
+                                "$userPrompt\n\n$barcodeContext"
+                            } else userPrompt
+
                             val messages = listOf(
                                 ChatMessage(role = "system", content = systemPrompt),
-                                ChatMessage(role = "user", content = userPrompt, images = listOf(b64))
+                                ChatMessage(role = "user", content = enrichedPrompt, images = listOf(b64))
                             )
                             val response = provider.complete(messages, emptyList())
                             val result = response.text ?: ""

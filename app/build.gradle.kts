@@ -172,9 +172,10 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
     implementation("androidx.camera:camera-view:$cameraxVersion")
 
-    // ML Kit Face Detection & OCR
+    // ML Kit Face Detection, OCR & Barcode Scanning
     implementation("com.google.mlkit:face-detection:16.1.6")
     implementation("com.google.mlkit:text-recognition:16.0.0")
+    implementation("com.google.mlkit:barcode-scanning:17.3.0")
 
     // Document Reader (PDF text extraction + DOCX/XLSX parsing)
     implementation("org.apache.poi:poi-ooxml:5.2.5") {

@@ -71,6 +71,15 @@ fun LiveVisionScreen(
     val permLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted -> hasPermissions = granted }
+    // R2-9 FIX: Audio permission for STT
+    var hasAudioPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val audioPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> hasAudioPermission = granted }
 
     // ── Vision state ──
     var isLiveActive by remember { mutableStateOf(false) }
@@ -241,7 +250,7 @@ fun LiveVisionScreen(
                             currentGpsData.address, result
                         )
                         if (msg != null) {
-                            liveResult = "🚨 Alerta de emergencia enviada"
+                            liveResult = "ALERTA: Alerta de emergencia enviada"
                         }
                     }
                 }
@@ -276,6 +285,15 @@ fun LiveVisionScreen(
                 bitmap.recycle()
             }
         }
+        // FR-1: Enable barcode scanning in Shopping mode
+        captureLoop.barcodeScanEnabled = (selectedMode == VisionMode.SHOPPING)
+        captureLoop.onBarcodeDetected = { scan ->
+            val info = scan.product
+            if (info != null) {
+                val productLine = "${info.name}${if (info.brand.isNotBlank()) " (${info.brand})" else ""}"
+                liveResult = "PRODUCTO: $productLine\n$liveResult"
+            }
+        }
 
         // Capture loop
         while (isLiveActive && captureLoop.sessionId.get() == mySessionId) {
@@ -304,7 +322,7 @@ fun LiveVisionScreen(
             val userQ = conversation.consumeQuestion()
             val twoPassCtx = contextProvider.getTwoPassContext()
             val combinedWebCtx = if (twoPassCtx.isNotBlank() && webContext.isNotBlank()) {
-                "$webContext\n\n🔍 INFO ADICIONAL:\n$twoPassCtx"
+                "$webContext\n\nINFO ADICIONAL:\n$twoPassCtx"
             } else webContext.ifBlank { twoPassCtx }
 
             // V7: Query memory and temporal patterns
@@ -348,6 +366,11 @@ fun LiveVisionScreen(
     }
     LaunchedEffect(Unit) {
         voiceController.onStateChange = { state -> voiceState = state }
+        // R2-9 FIX: Reset isListening on error to prevent stuck state
+        voiceController.onError = { error ->
+            isListening = false
+            liveResult = error
+        }
         voiceController.onSpeechResult = { spokenText ->
             isListening = false
             // V4: Intent detection
@@ -475,94 +498,104 @@ fun LiveVisionScreen(
 
     // ═══ MAIN UI ═══
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        // Camera preview (full screen)
-        AndroidView(
-            factory = { ctx ->
-                val previewView = PreviewView(ctx)
-                val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
-                cameraProviderFuture.addListener({
-                    val cameraProvider = cameraProviderFuture.get()
-                    val preview = Preview.Builder().build().also {
-                        it.setSurfaceProvider(previewView.surfaceProvider)
-                    }
-                    val imgCapture = ImageCapture.Builder()
-                        .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-                        .build()
-                    imageCapture = imgCapture
+        // R2-4 FIX: Camera preview OR Pocket placeholder
+        if (selectedMode != VisionMode.POCKET) {
+            AndroidView(
+                factory = { ctx ->
+                    val previewView = PreviewView(ctx)
+                    val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
+                    cameraProviderFuture.addListener({
+                        val cameraProvider = cameraProviderFuture.get()
+                        val preview = Preview.Builder().build().also {
+                            it.setSurfaceProvider(previewView.surfaceProvider)
+                        }
+                        val imgCapture = ImageCapture.Builder()
+                            .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                            .build()
+                        imageCapture = imgCapture
 
-                    try {
-                        cameraProvider.unbindAll()
-                        cameraProvider.bindToLifecycle(
-                            lifecycleOwner,
-                            CameraSelector.DEFAULT_BACK_CAMERA,
-                            preview, imgCapture
-                        )
-                    } catch (_: Exception) {}
-                }, ContextCompat.getMainExecutor(ctx))
-                previewView
-            },
-            onRelease = {
-                try { ProcessCameraProvider.getInstance(it.context).get().unbindAll() } catch (_: Exception) {}
-            },
-            modifier = Modifier.fillMaxSize()
-        )
+                        try {
+                            cameraProvider.unbindAll()
+                            cameraProvider.bindToLifecycle(
+                                lifecycleOwner,
+                                CameraSelector.DEFAULT_BACK_CAMERA,
+                                preview, imgCapture
+                            )
+                        } catch (_: Exception) {}
+                    }, ContextCompat.getMainExecutor(ctx))
+                    previewView
+                },
+                onRelease = {
+                    try { ProcessCameraProvider.getInstance(it.context).get().unbindAll() } catch (_: Exception) {}
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            // Pocket mode: dark placeholder, camera off
+            Box(
+                modifier = Modifier.fillMaxSize().background(Color(0xFF0D0D1A)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Filled.PhonelinkLock, "Pocket", tint = Color.White.copy(alpha = 0.3f), modifier = Modifier.size(64.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("Modo Bolsillo Activo", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("El servicio analiza en segundo plano", color = Color.White.copy(alpha = 0.4f), fontSize = 12.sp)
+                    Text("Cámara apagada para ahorrar batería", color = Color.White.copy(alpha = 0.3f), fontSize = 11.sp)
+                }
+            }
+        }
 
-        // ── Top bar overlay ──
+        // ── Top bar overlay ── R2-3 FIX: All elements inside one Row, no absolute positioning
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.6f), Color.Transparent)))
                 .statusBarsPadding()
-                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .padding(horizontal = 8.dp, vertical = 6.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { isLiveActive = false; onBack() }) {
-                    Icon(Icons.Filled.ArrowBack, "Back", tint = Color.White)
+                IconButton(onClick = { isLiveActive = false; onBack() }, modifier = Modifier.size(40.dp)) {
+                    Icon(Icons.Filled.ArrowBack, "Back", tint = Color.White, modifier = Modifier.size(22.dp))
                 }
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Live Vision", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 16.sp)
+                    Text("Live Vision", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 15.sp)
                     val modelName = ModelRegistry.findModel(selectedModel)?.name ?: selectedModel
-                    Text(modelName, fontSize = 11.sp, color = Color.White.copy(alpha = 0.7f),
+                    Text(modelName, fontSize = 10.sp, color = Color.White.copy(alpha = 0.7f),
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                // Status badge
+                // Status badge (compact)
                 Surface(
                     color = if (isLiveActive) Color(0xFF00E676).copy(alpha = 0.2f) else Color.White.copy(alpha = 0.1f),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    Row(modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically) {
                         Box(
-                            modifier = Modifier.size(8.dp)
+                            modifier = Modifier.size(6.dp)
                                 .clip(CircleShape)
                                 .background(if (isLiveActive) Color(0xFF00E676) else Color.Gray)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             when {
-                                isLiveActive && captureLoop.isProcessing.get() -> "Analizando..."
-                                isLiveActive -> "Activo · $frameCount frames"
+                                isLiveActive && captureLoop.isProcessing.get() -> "Analizando"
+                                isLiveActive -> "$frameCount"
                                 else -> "Pausado"
                             },
-                            fontSize = 11.sp, color = Color.White
+                            fontSize = 10.sp, color = Color.White
                         )
                     }
                 }
-                // V9: Dashboard badge
-                Spacer(modifier = Modifier.width(6.dp))
-                Surface(
-                    onClick = { showDashboard = !showDashboard },
-                    color = Color(0xFF9b59b6).copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Row(modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically) {
-                        Text("📊", fontSize = 11.sp)
-                        if (currentFaceHint.isNotBlank()) {
-                            Spacer(modifier = Modifier.width(2.dp))
-                            Text("👤", fontSize = 10.sp)
-                        }
-                    }
+                // Dashboard badge
+                Spacer(modifier = Modifier.width(4.dp))
+                IconButton(onClick = { showDashboard = !showDashboard }, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Filled.Analytics, "Dashboard", tint = Color(0xFF9b59b6), modifier = Modifier.size(18.dp))
+                }
+                // R2-3 FIX: Settings gear inside top bar (not absolute positioned)
+                IconButton(onClick = { showSettings = !showSettings }, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Filled.Settings, "Settings", tint = Color.White.copy(alpha = 0.8f), modifier = Modifier.size(18.dp))
                 }
             }
         }
@@ -588,7 +621,7 @@ fun LiveVisionScreen(
                     Spacer(modifier = Modifier.width(10.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            if (nav.phase == NavPhase.ARRIVED) "🎉 ¡Llegaste!" else "🎯 ${gpsNavigator.destination?.name ?: ""}",
+                            if (nav.phase == NavPhase.ARRIVED) "Llegaste!" else "${gpsNavigator.destination?.name ?: ""}",
                             fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White
                         )
                         Text(
@@ -607,8 +640,8 @@ fun LiveVisionScreen(
                     }
                 }
             }
-        } else if (currentGpsData.address.isNotBlank()) {
-            // GPS address badge (when not navigating)
+        } else if (currentGpsData.address.isNotBlank() && selectedMode != VisionMode.DASHCAM) {
+            // R2-7 FIX: GPS address badge — hidden in DASHCAM (MiniMap shows location)
             Surface(
                 color = Color.Black.copy(alpha = 0.4f),
                 shape = RoundedCornerShape(8.dp),
@@ -617,12 +650,18 @@ fun LiveVisionScreen(
                     .statusBarsPadding()
                     .padding(top = 60.dp, start = 48.dp, end = 48.dp)
             ) {
-                Text(
-                    "📍 ${currentGpsData.address}",
-                    fontSize = 10.sp, color = Color.White.copy(alpha = 0.7f),
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                )
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.LocationOn, "Location", tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(12.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        currentGpsData.address,
+                        fontSize = 10.sp, color = Color.White.copy(alpha = 0.7f),
+                        maxLines = 1, overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
 
@@ -722,23 +761,24 @@ fun LiveVisionScreen(
         var showModeSheet by remember { mutableStateOf(false) }
         val currentModeInfo = remember(selectedMode) {
             com.beemovil.ui.components.VISION_MODES.find { it.mode == selectedMode }
-                ?: com.beemovil.ui.components.ModeInfo(VisionMode.GENERAL, "🤖", "General")
+                ?: com.beemovil.ui.components.ModeInfo(VisionMode.GENERAL, Icons.Filled.Visibility, "General")
         }
 
-        // Single compact mode chip above controls
+        // R2-1 FIX: Single compact mode chip — properly cleared above controls
         Surface(
             onClick = { showModeSheet = true },
             color = Color.White.copy(alpha = 0.2f),
             shape = RoundedCornerShape(20.dp),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 100.dp)  // Just above the controls bar
+                .navigationBarsPadding()
+                .padding(bottom = 96.dp)  // R2-1 FIX: Clear above 64dp FAB + 12dp padding + 20dp margin
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(currentModeInfo.emoji, fontSize = 16.sp)
+                Icon(currentModeInfo.icon, currentModeInfo.label, tint = Color.White, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(currentModeInfo.label, fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.width(4.dp))
@@ -765,15 +805,15 @@ fun LiveVisionScreen(
                             onClick = {
                                 // V6: Start/stop Pocket Service
                                 if (info.mode == VisionMode.POCKET && selectedMode != VisionMode.POCKET) {
-                                    val intent = Intent(context, PocketVisionService::class.java).apply {
+                                    val pocketIntent = Intent(context, PocketVisionService::class.java).apply {
                                         action = PocketVisionService.ACTION_START
                                         putExtra(PocketVisionService.EXTRA_INTERVAL, intervalSeconds)
                                         putExtra(PocketVisionService.EXTRA_MODE, info.mode.name)
                                     }
                                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                        context.startForegroundService(intent)
+                                        context.startForegroundService(pocketIntent)
                                     } else {
-                                        context.startService(intent)
+                                        context.startService(pocketIntent)
                                     }
                                 } else if (selectedMode == VisionMode.POCKET && info.mode != VisionMode.POCKET) {
                                     val stopIntent = Intent(context, PocketVisionService::class.java).apply {
@@ -796,7 +836,7 @@ fun LiveVisionScreen(
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(info.emoji, fontSize = 20.sp)
+                                Icon(info.icon, info.label, tint = if (isSelected) Color.White else Color.White.copy(alpha = 0.6f), modifier = Modifier.size(22.dp))
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Text(
                                     info.label,
@@ -830,7 +870,7 @@ fun LiveVisionScreen(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Mic (V3)
+            // Mic (V3) — R2-9 FIX: Check RECORD_AUDIO permission
             ControlButton(
                 icon = if (isListening) Icons.Filled.MicOff else Icons.Filled.Mic,
                 label = if (isListening) "Escucha..." else "Mic",
@@ -840,8 +880,13 @@ fun LiveVisionScreen(
                         voiceController.stopListening()
                         isListening = false
                     } else {
-                        isListening = true
-                        voiceController.startListening()
+                        if (!hasAudioPermission) {
+                            audioPermLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                            liveResult = "Permiso de micrófono requerido"
+                        } else {
+                            isListening = true
+                            voiceController.startListening()
+                        }
                     }
                 }
             )
@@ -887,7 +932,7 @@ fun LiveVisionScreen(
                         coroutineScope.launch {
                             val mp4 = visionRecorder.encodeToMp4(withOverlay = false)
                             if (mp4 != null) {
-                                liveResult = "🎥 Video guardado: ${result.frameCount} frames, ${result.durationSeconds}s"
+                                liveResult = "Video guardado: ${result.frameCount} frames, ${result.durationSeconds}s"
                             }
                             visionRecorder.cleanup()
                         }
@@ -897,39 +942,16 @@ fun LiveVisionScreen(
                     }
                 }
             )
-            // Chat share + Settings (combined)
+            // R2-6 FIX: Image analysis button (replaces unused Chat/Share)
             ControlButton(
-                icon = Icons.Filled.Share,
-                label = "Chat",
+                icon = Icons.Filled.PhotoCamera,
+                label = "Imagen",
                 isActive = false,
-                onClick = {
-                    if (conversation.lastResult.isNotBlank()) {
-                        val visionNote = buildString {
-                            appendLine("📷 Desde E.M.M.A. Vision (${selectedMode.name})")
-                            appendLine(conversation.lastResult.take(200))
-                            if (currentGpsData.address.isNotBlank()) appendLine("📍 ${currentGpsData.address}")
-                        }
-                        memoryManager.saveVisionNote(visionNote)
-                        liveResult = "💬 Compartido al chat de E.M.M.A."
-                    } else {
-                        liveResult = "⚠️ Nada que compartir aún"
-                    }
-                }
+                onClick = { viewModel.currentScreen.value = "camera" }
             )
         }
 
-        // Settings gear (top-right corner, small)
-        IconButton(
-            onClick = { showSettings = !showSettings },
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .statusBarsPadding()
-                .padding(top = 4.dp, end = 4.dp)
-                .size(40.dp)
-                .background(Color.Black.copy(alpha = 0.3f), CircleShape)
-        ) {
-            Icon(Icons.Filled.Settings, "Settings", tint = Color.White.copy(alpha = 0.8f), modifier = Modifier.size(20.dp))
-        }
+        // R2-3 FIX: Gear icon moved inside top bar Row — this absolute one removed
 
         // ── Settings panel (slide up) ──
         AnimatedVisibility(
@@ -970,19 +992,19 @@ fun LiveVisionScreen(
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Column(modifier = Modifier.padding(12.dp).width(180.dp)) {
-                    Text("📊 Dashboard", fontWeight = FontWeight.Bold,
+                    Text("Dashboard", fontWeight = FontWeight.Bold,
                         fontSize = 13.sp, color = Color.White)
                     Spacer(modifier = Modifier.height(6.dp))
                     val durationMin = (conversation.getSessionDurationMs() / 60_000).toInt()
                     val stats = memoryManager.getStatsMap()
-                    DashRow("⏱️ Duración", "${durationMin} min")
-                    DashRow("📸 Frames", "$frameCount")
-                    DashRow("🧠 Memorias", "${stats["memories"] ?: 0}")
-                    DashRow("💾 Cache", "${stats["cached"] ?: 0}")
+                    DashRow("Duraci\u00f3n", "${durationMin} min")
+                    DashRow("Frames", "$frameCount")
+                    DashRow("Memorias", "${stats["memories"] ?: 0}")
+                    DashRow("Cache", "${stats["cached"] ?: 0}")
                     if (currentFaceHint.isNotBlank()) {
-                        DashRow("👤 Caras", currentFaceHint.substringAfter("Hay ").substringBefore(" persona").trim())
+                        DashRow("Caras", currentFaceHint.substringAfter("Hay ").substringBefore(" persona").trim())
                     }
-                    DashRow("🎯 Modo", selectedMode.name.lowercase())
+                    DashRow("Modo", selectedMode.name.lowercase())
                 }
             }
         }
@@ -1075,7 +1097,21 @@ private fun SettingsPanel(
     emergencyProtocol: EmergencyProtocol? = null
 ) {
     val colorScheme = MaterialTheme.colorScheme
-    val visionModels = remember { ModelRegistry.getVisionModels() }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val currentProvider = remember {
+        context.getSharedPreferences("beemovil", 0).getString("selected_provider", "openrouter") ?: "openrouter"
+    }
+    // R2-8 FIX: Dynamic vision model picker with refresh
+    var visionModels by remember {
+        mutableStateOf(DynamicModelFetcher.getCachedVisionModels(context, currentProvider))
+    }
+    var isRefreshing by remember { mutableStateOf(false) }
+    val displayModels = if (visionModels.isEmpty()) {
+        remember { ModelRegistry.getVisionModels() }
+    } else {
+        visionModels
+    }
 
     Surface(
         color = colorScheme.surface.copy(alpha = 0.95f),
@@ -1187,12 +1223,39 @@ private fun SettingsPanel(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Vision model selector
-            Text("MODELO DE VISIÓN", fontSize = 10.sp, color = colorScheme.primary,
-                fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+            // Vision model selector — R2-8 FIX: Dynamic + Refresh
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text("MODELO DE VISIÓN", fontSize = 10.sp, color = colorScheme.primary,
+                        fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                    Text("${displayModels.size} modelos ($currentProvider)",
+                        fontSize = 9.sp, color = colorScheme.onSurfaceVariant)
+                }
+                IconButton(
+                    onClick = {
+                        isRefreshing = true
+                        scope.launch {
+                            val fresh = DynamicModelFetcher.getVisionModels(context, currentProvider)
+                            if (fresh.isNotEmpty()) visionModels = fresh
+                            isRefreshing = false
+                        }
+                    },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    if (isRefreshing) {
+                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = colorScheme.primary)
+                    } else {
+                        Icon(Icons.Filled.Refresh, "Refresh", tint = colorScheme.primary, modifier = Modifier.size(16.dp))
+                    }
+                }
+            }
             Spacer(modifier = Modifier.height(6.dp))
 
-            visionModels.forEach { model ->
+            displayModels.forEach { model ->
                 val isSelected = selectedModel == model.id
                 Surface(
                     onClick = { onModelChange(model.id) },
@@ -1218,7 +1281,7 @@ private fun SettingsPanel(
 
             // V9: Emergency config section
             if (emergencyProtocol != null) {
-                Text("🚨 CONTACTO DE EMERGENCIA", fontSize = 10.sp, color = Color(0xFFFF1744),
+                Text("CONTACTO DE EMERGENCIA", fontSize = 10.sp, color = Color(0xFFFF1744),
                     fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                 Spacer(modifier = Modifier.height(6.dp))
 
