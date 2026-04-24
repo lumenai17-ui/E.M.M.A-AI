@@ -665,32 +665,48 @@ fun LiveVisionScreen(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .statusBarsPadding()
-                    .padding(top = 60.dp, start = 16.dp, end = 16.dp)
+                    .padding(
+                        top = 60.dp,
+                        // In DASHCAM: narrow to fit between speed badge (left) and minimap (right)
+                        start = if (selectedMode == VisionMode.DASHCAM) 80.dp else 16.dp,
+                        end = if (selectedMode == VisionMode.DASHCAM) 140.dp else 16.dp
+                    )
                     .fillMaxWidth()
             ) {
+                val isDashcam = selectedMode == VisionMode.DASHCAM
                 Row(
-                    modifier = Modifier.padding(12.dp),
+                    modifier = Modifier.padding(if (isDashcam) 8.dp else 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(nav.arrow, fontSize = 28.sp)
-                    Spacer(modifier = Modifier.width(10.dp))
+                    if (!isDashcam) {
+                        Text(nav.arrow, fontSize = 28.sp)
+                        Spacer(modifier = Modifier.width(10.dp))
+                    }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             if (nav.phase == NavPhase.ARRIVED) "Llegaste!" else "${gpsNavigator.destination?.name ?: ""}",
-                            fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White
+                            fontWeight = FontWeight.Bold,
+                            fontSize = if (isDashcam) 11.sp else 14.sp,
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             "${nav.distance} · ${nav.eta}",
-                            fontSize = 12.sp, color = Color.White.copy(alpha = 0.8f)
+                            fontSize = if (isDashcam) 10.sp else 12.sp,
+                            color = Color.White.copy(alpha = 0.8f)
                         )
                     }
                     if (nav.phase != NavPhase.ARRIVED) {
-                        IconButton(onClick = {
-                            gpsNavigator.stopNavigation()
-                            navUpdate = null
-                            isNavigating = false
-                        }) {
-                            Icon(Icons.Filled.Close, "Stop", tint = Color.White)
+                        IconButton(
+                            onClick = {
+                                gpsNavigator.stopNavigation()
+                                navUpdate = null
+                                isNavigating = false
+                            },
+                            modifier = Modifier.size(if (isDashcam) 28.dp else 48.dp)
+                        ) {
+                            Icon(Icons.Filled.Close, "Stop", tint = Color.White, modifier = Modifier.size(if (isDashcam) 16.dp else 24.dp))
                         }
                     }
                 }
