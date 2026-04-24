@@ -148,6 +148,11 @@ fun LiveVisionScreen(
     var navDestinationText by remember { mutableStateOf("") }
     // R3-6: DashcamLogger
     val dashcamLogger = remember { DashcamLogger(context) }
+    // R3-4: Places sheet
+    var showPlacesSheet by remember { mutableStateOf(false) }
+    // R3-8: Session exit summary
+    var showExitSummary by remember { mutableStateOf(false) }
+    var exitSummaryText by remember { mutableStateOf("") }
 
     // V6: Wire offline cache to context provider
     LaunchedEffect(Unit) {
@@ -577,7 +582,36 @@ fun LiveVisionScreen(
                 .padding(horizontal = 8.dp, vertical = 6.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { isLiveActive = false; onBack() }, modifier = Modifier.size(40.dp)) {
+                // R3-8: Back button triggers summary dialog if session had frames
+                IconButton(onClick = {
+                    isLiveActive = false
+                    if (conversation.frameNumber > 3) {
+                        coroutineScope.launch {
+                            try {
+                                val modelEntry = ModelRegistry.findModel(selectedModel)
+                                val providerType = modelEntry?.provider ?: "openrouter"
+                                val apiKey = getApiKeyForProvider(context, providerType)
+                                val modelId = modelEntry?.id ?: selectedModel
+                                val summary = summaryGenerator.generate(
+                                    sessionLog = conversation.getSessionLog(),
+                                    frameCount = conversation.frameNumber,
+                                    durationMs = conversation.getSessionDurationMs(),
+                                    mode = selectedMode,
+                                    mainAddress = currentGpsData.address,
+                                    providerType = providerType,
+                                    apiKey = apiKey,
+                                    modelId = modelId
+                                )
+                                exitSummaryText = summary.text
+                                showExitSummary = true
+                            } catch (_: Exception) {
+                                onBack()
+                            }
+                        }
+                    } else {
+                        onBack()
+                    }
+                }, modifier = Modifier.size(40.dp)) {
                     Icon(Icons.Filled.ArrowBack, "Back", tint = Color.White, modifier = Modifier.size(22.dp))
                 }
                 Column(modifier = Modifier.weight(1f)) {
@@ -737,6 +771,110 @@ fun LiveVisionScreen(
                 }
             )
         }
+
+        // R3-8: Session exit summary dialog
+        if (showExitSummary) {
+            AlertDialog(
+                onDismissRequest = {
+                    showExitSummary = false
+                    onBack()
+                },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.Summarize, "Summary", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Resumen de Sesion", fontWeight = FontWeight.Bold)
+                    }
+                },
+                text = {
+                    Column {
+                        Text(
+                            "${conversation.frameNumber} frames | ${selectedMode.name} | ${currentGpsData.address.take(40)}",
+                            fontSize = 11.sp, color = Color.Gray
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(exitSummaryText, fontSize = 14.sp, lineHeight = 20.sp)
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showExitSummary = false
+                        onBack()
+                    }) { Text("Cerrar") }
+                }
+            )
+        }
+
+        // R3-4: Places bottom sheet
+        if (showPlacesSheet) {
+            val allPlaces = remember { memoryManager.placeProfileManager.getAllProfiles() }
+            AlertDialog(
+                onDismissRequest = { showPlacesSheet = false },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.Place, "Places", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Mis Lugares (${allPlaces.size})", fontWeight = FontWeight.Bold)
+                    }
+                },
+                text = {
+                    if (allPlaces.isEmpty()) {
+                        Text("Aun no hay lugares guardados. Se guardan automaticamente al visitar con Vision activo.",
+                            fontSize = 13.sp, color = Color.Gray)
+                    } else {
+                        Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                            allPlaces.forEach { place ->
+                                val daysAgo = ((System.currentTimeMillis() - place.lastVisit) / 86_400_000).toInt()
+                                Surface(
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                place.address.ifBlank { "${place.latitude.toInt()}, ${place.longitude.toInt()}" },
+                                                fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
+                                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Text(
+                                                "${place.visitCount} visitas | hace ${daysAgo}d | ~${place.avgDurationMinutes}min",
+                                                fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            if (place.frequentMode != null) {
+                                                Text("Modo: ${place.frequentMode}", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary)
+                                            }
+                                        }
+                                        IconButton(
+                                            onClick = {
+                                                // Navigate to this place
+                                                gpsNavigator.startNavigation(
+                                                    NavigationDestination(place.address, place.latitude, place.longitude, "profile")
+                                                )
+                                                isNavigating = true
+                                                showPlacesSheet = false
+                                                liveResult = "Navegando a ${place.address}"
+                                            },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(Icons.Filled.Navigation, "Ir", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showPlacesSheet = false }) { Text("Cerrar") }
+                }
+            )
+        }
+
         // ── BUG-3 FIX: Dashcam HUD — MiniMap + Speed badge (only in DASHCAM mode) ──
         if (selectedMode == VisionMode.DASHCAM) {
             // MiniMapPIP — already built, just needs to be rendered
@@ -1073,7 +1211,12 @@ fun LiveVisionScreen(
                 onNarrationToggle = { isNarrationEnabled = it },
                 onPersonalityChange = { selectedPersonality = it },
                 onDismiss = { showSettings = false },
-                emergencyProtocol = emergencyProtocol
+                emergencyProtocol = emergencyProtocol,
+                onPlacesClick = {
+                    showSettings = false
+                    showPlacesSheet = true
+                },
+                offlineCache = offlineCache
             )
         }
 
@@ -1192,7 +1335,9 @@ private fun SettingsPanel(
     onNarrationToggle: (Boolean) -> Unit,
     onPersonalityChange: (NarratorPersonality) -> Unit,
     onDismiss: () -> Unit,
-    emergencyProtocol: EmergencyProtocol? = null
+    emergencyProtocol: EmergencyProtocol? = null,
+    onPlacesClick: (() -> Unit)? = null,
+    offlineCache: OfflineContextCache? = null
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val context = LocalContext.current
@@ -1372,6 +1517,74 @@ private fun SettingsPanel(
                         }
                         if (isSelected) Icon(Icons.Filled.CheckCircle, "Selected", tint = colorScheme.primary, modifier = Modifier.size(16.dp))
                     }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // R3-4: Mis Lugares button
+            if (onPlacesClick != null) {
+                Text("DATOS Y LUGARES", fontSize = 10.sp, color = colorScheme.primary,
+                    fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                Spacer(modifier = Modifier.height(6.dp))
+                Surface(
+                    onClick = { onPlacesClick() },
+                    color = colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.Place, "Places", tint = colorScheme.primary, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Mis Lugares", fontSize = 14.sp, color = colorScheme.onSurface)
+                            Text("Ver lugares visitados y navegar", fontSize = 11.sp, color = colorScheme.onSurfaceVariant)
+                        }
+                        Icon(Icons.Filled.ChevronRight, "Open", tint = colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                    }
+                }
+            }
+
+            // R3-7: Cache management
+            if (offlineCache != null) {
+                Spacer(modifier = Modifier.height(12.dp))
+                val cacheEntries = remember { offlineCache.entryCount() }
+                val cacheSizeKb = remember { offlineCache.dbSizeBytes() / 1024 }
+                var showPurgeConfirm by remember { mutableStateOf(false) }
+
+                Surface(
+                    color = colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.Storage, "Cache", tint = colorScheme.primary, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Cache Offline", fontSize = 14.sp, color = colorScheme.onSurface)
+                            Text("$cacheEntries entradas | ${cacheSizeKb}KB", fontSize = 11.sp, color = colorScheme.onSurfaceVariant)
+                        }
+                        TextButton(onClick = { showPurgeConfirm = true }) {
+                            Text("Limpiar", fontSize = 12.sp, color = Color(0xFFFF6B6B))
+                        }
+                    }
+                }
+
+                if (showPurgeConfirm) {
+                    AlertDialog(
+                        onDismissRequest = { showPurgeConfirm = false },
+                        title = { Text("Limpiar cache?") },
+                        text = { Text("Esto borrara $cacheEntries entradas de cache offline. Los datos de memoria (BeeMemory) se mantienen.") },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                offlineCache.purgeAll()
+                                showPurgeConfirm = false
+                            }) { Text("Limpiar", color = Color(0xFFFF6B6B)) }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showPurgeConfirm = false }) { Text("Cancelar") }
+                        }
+                    )
                 }
             }
 

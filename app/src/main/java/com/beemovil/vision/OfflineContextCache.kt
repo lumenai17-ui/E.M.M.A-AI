@@ -211,4 +211,68 @@ class OfflineContextCache private constructor(private val appContext: Context) :
             cursor.use { if (it.moveToFirst()) it.getInt(0) else 0 }
         } catch (_: Exception) { 0 }
     }
+
+    /** R3-4: Get all entries of a specific type */
+    fun getAllByType(type: String): List<CacheEntry> {
+        val entries = mutableListOf<CacheEntry>()
+        try {
+            val cursor = readableDatabase.query(
+                TABLE, null,
+                "context_type = ?", arrayOf(type),
+                null, null, "created_at DESC", "100"
+            )
+            cursor.use {
+                while (it.moveToNext()) {
+                    entries.add(CacheEntry(
+                        id = it.getInt(it.getColumnIndexOrThrow("id")),
+                        latitude = it.getDouble(it.getColumnIndexOrThrow("latitude")),
+                        longitude = it.getDouble(it.getColumnIndexOrThrow("longitude")),
+                        address = it.getString(it.getColumnIndexOrThrow("address")) ?: "",
+                        type = type,
+                        content = it.getString(it.getColumnIndexOrThrow("content")),
+                        createdAt = it.getLong(it.getColumnIndexOrThrow("created_at"))
+                    ))
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "getAllByType failed: ${e.message}")
+        }
+        return entries
+    }
+
+    /** R3-7: Get database file size in bytes */
+    fun dbSizeBytes(): Long {
+        return try {
+            readableDatabase.path?.let { java.io.File(it).length() } ?: 0
+        } catch (_: Exception) { 0 }
+    }
+
+    /** R3-7: Purge all entries */
+    fun purgeAll() {
+        try {
+            writableDatabase.delete(TABLE, null, null)
+            Log.i(TAG, "Cache purged")
+        } catch (e: Exception) {
+            Log.w(TAG, "Purge failed: ${e.message}")
+        }
+    }
+
+    /** R3-4: Delete entry by ID */
+    fun deleteById(id: Int) {
+        try {
+            writableDatabase.delete(TABLE, "id = ?", arrayOf(id.toString()))
+        } catch (e: Exception) {
+            Log.w(TAG, "Delete failed: ${e.message}")
+        }
+    }
+
+    data class CacheEntry(
+        val id: Int,
+        val latitude: Double,
+        val longitude: Double,
+        val address: String,
+        val type: String,
+        val content: String,
+        val createdAt: Long
+    )
 }

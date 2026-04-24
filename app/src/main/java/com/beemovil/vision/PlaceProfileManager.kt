@@ -125,6 +125,30 @@ class PlaceProfileManager(private val context: Context) {
         } catch (_: Exception) { "" }
     }
 
+    /**
+     * R3-4: Get all saved place profiles (for UI listing).
+     */
+    fun getAllProfiles(): List<PlaceProfile> {
+        val entries = cache.getAllByType(TYPE)
+        return entries.mapNotNull { entry ->
+            try {
+                deserialize(entry.content)
+            } catch (_: Exception) { null }
+        }.sortedByDescending { it.lastVisit }
+    }
+
+    /**
+     * R3-4: Delete a place profile by coordinates.
+     */
+    fun deleteProfile(profile: PlaceProfile) {
+        val entries = cache.getAllByType(TYPE)
+        entries.filter {
+            Math.abs(it.latitude - profile.latitude) < 0.001 &&
+            Math.abs(it.longitude - profile.longitude) < 0.001
+        }.forEach { cache.deleteById(it.id) }
+        Log.d(TAG, "Deleted profile: ${profile.address}")
+    }
+
     private fun save(profile: PlaceProfile) {
         cache.save(
             profile.latitude, profile.longitude,
