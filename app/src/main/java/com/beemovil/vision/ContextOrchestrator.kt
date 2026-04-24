@@ -29,6 +29,7 @@ class ContextOrchestrator(private val context: Context) {
     // Sub-systems
     val structuredSearch = StructuredWebSearch()
     private val offlineCache = OfflineContextCache.getInstance(context)
+    val geoIntel = GeoIntelligenceProvider(offlineCache)
 
     // Zone tracking
     private var lastZoneAddress = ""
@@ -36,6 +37,7 @@ class ContextOrchestrator(private val context: Context) {
     private var lastZoneLng = 0.0
     private var lastZoneSearchTime = 0L
     private var cachedIntel = LocationIntel.EMPTY
+    private var cachedGeoContext = "" // R5P3: Cached Overpass + Wikipedia + Nominatim
     private val ZONE_SEARCH_COOLDOWN = 45_000L // Don't search same zone more than every 45s
 
     // Speed transition tracking
@@ -111,6 +113,24 @@ class ContextOrchestrator(private val context: Context) {
                 if (cached.isNotBlank()) {
                     block.locationContext = cached.take(350)
                 }
+            }
+
+            // R5P3: Geo Intelligence APIs (Overpass + Wikipedia + Nominatim)
+            if (zoneChanged || cachedGeoContext.isBlank()) {
+                try {
+                    val geoCtx = fetchGeoIntelligence(gpsData, mode)
+                    if (geoCtx.isNotBlank()) {
+                        cachedGeoContext = geoCtx
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "GeoIntel failed: ${e.message}")
+                }
+            }
+            // Append geo context to location context
+            if (cachedGeoContext.isNotBlank()) {
+                block.locationContext = if (block.locationContext.isNotBlank()) {
+                    block.locationContext + "\n" + cachedGeoContext
+                } else cachedGeoContext
             }
         }
 
@@ -247,8 +267,53 @@ class ContextOrchestrator(private val context: Context) {
         lastZoneLng = 0.0
         lastZoneSearchTime = 0L
         cachedIntel = LocationIntel.EMPTY
+        cachedGeoContext = ""
         lastSpeedBracket = SpeedBracket.STOPPED
         speedTransition = null
+    }
+
+    /**
+     * R5P3: Fetch rich geo data from free APIs.
+     * Called on zone changes. Results are cached.
+     */
+    private suspend fun fetchGeoIntelligence(gpsData: GpsData, mode: VisionMode): String {
+        val parts = mutableListOf<String>()
+
+        // 1. Nominatim: Road details (name, type, speed limit)
+        try {
+            val roadInfo = geoIntel.fetchRoadInfo(gpsData.latitude, gpsData.longitude)
+            if (roadInfo != null) {
+                val roadText = roadInfo.toPromptText()
+                if (roadText.isNotBlank()) parts.add(roadText)
+            }
+        } catch (_: Exception) {}
+
+        // 2. Overpass: Nearby POIs
+        try {
+            val pois = geoIntel.fetchNearbyPOIs(gpsData.latitude, gpsData.longitude, mode = mode)
+            if (pois.isNotBlank()) parts.add("Cerca: $pois")
+        } catch (_: Exception) {}
+
+        // 3. Wikipedia: Historical/cultural data for the locality
+        try {
+            val zone = extractPlaceName(gpsData.address)
+            if (zone.isNotBlank()) {
+                val wikiData = geoIntel.fetchWikipediaData(zone)
+                if (wikiData.isNotBlank()) parts.add(wikiData.take(200))
+            }
+        } catch (_: Exception) {}
+
+        return parts.joinToString("\n").take(400)
+    }
+
+    /**
+     * Extract a place name suitable for Wikipedia search.
+     * "Calle 5, Asamajana, Herrera, Panama" -> "Asamajana"
+     */
+    private fun extractPlaceName(address: String): String {
+        val parts = address.split(",").map { it.trim() }.filter { it.length > 2 }
+        // Try town (2nd part), then city (3rd)
+        return parts.getOrNull(1) ?: parts.getOrNull(0) ?: ""
     }
 
     private enum class SpeedBracket { STOPPED, URBAN, ROAD, HIGHWAY }
