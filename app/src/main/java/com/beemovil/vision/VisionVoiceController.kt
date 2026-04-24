@@ -32,6 +32,21 @@ class VisionVoiceController(
         private set
 
     var isNarrationEnabled: Boolean = false
+        private set
+
+    /**
+     * BUG-5 FIX: Toggle narration AND reset state machine.
+     * When disabling narration while speaking, forces state back to IDLE
+     * to prevent the deadlock where narrate() skips because state == SPEAKING.
+     */
+    fun setNarrationEnabled(enabled: Boolean) {
+        isNarrationEnabled = enabled
+        if (!enabled && state == VoiceState.SPEAKING) {
+            voiceManager.stopSpeaking()
+            setState(VoiceState.IDLE)
+            Log.d(TAG, "Narration disabled → TTS stopped, state reset to IDLE")
+        }
+    }
 
     // Currently selected personality
     var personality: NarratorPersonality = NARRATOR_PERSONALITIES.first()

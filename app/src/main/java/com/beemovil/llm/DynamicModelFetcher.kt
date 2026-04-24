@@ -225,8 +225,17 @@ object DynamicModelFetcher {
                 val displayName = fullName.split(":").first().replaceFirstChar { it.uppercase() } +
                         if (paramSize.isNotBlank()) " ($paramSize)" else ""
 
+                // BUG-4 FIX: Detect vision via 'clip' in families array (Ollama reports this for multimodal models)
+                val familiesArr = details?.optJSONArray("families")
+                val familyList = if (familiesArr != null) {
+                    (0 until familiesArr.length()).map { familiesArr.getString(it) }
+                } else emptyList()
+                val hasVision = familyList.any { it.contains("clip", true) }
+                    || fullName.contains("vision", true)
+                    || family.contains("llava", true)
+
                 val category = when {
-                    family.contains("llava", true) || fullName.contains("vision") -> ModelRegistry.Category.VISION
+                    hasVision -> ModelRegistry.Category.VISION
                     family.contains("code", true) || fullName.contains("code") -> ModelRegistry.Category.CODE
                     else -> ModelRegistry.Category.CHAT
                 }
@@ -236,7 +245,7 @@ object DynamicModelFetcher {
                     name = displayName,
                     provider = "ollama",
                     category = category,
-                    hasVision = category == ModelRegistry.Category.VISION,
+                    hasVision = hasVision,
                     hasTools = true,
                     sizeLabel = if (paramSize.isNotBlank()) paramSize else sizeGB,
                     description = "Family: $family"
@@ -298,5 +307,33 @@ object DynamicModelFetcher {
     /** Get on-device models with download status */
     fun getLocalModels(): List<ModelRegistry.ModelEntry> {
         return ModelRegistry.LOCAL
+    }
+
+    // ═══════════════════════════════════════
+    // BUG-4 FIX: DYNAMIC VISION MODEL HELPERS
+    // ═══════════════════════════════════════
+
+    /**
+     * Get vision models from cache (instant, no network).
+     * Filters the cached model list by hasVision == true for the given provider.
+     */
+    fun getCachedVisionModels(context: Context, provider: String): List<ModelRegistry.ModelEntry> {
+        val cached = when (provider) {
+            "openrouter" -> getCachedOpenRouterModels(context)
+            "ollama" -> getCachedOllamaModels(context)
+            "local" -> getLocalModels()
+            else -> emptyList()
+        }
+        return cached.filter { it.hasVision }
+    }
+
+    /**
+     * Fetch fresh vision models from API, filtered by hasVision.
+     * Falls back to cached vision models if network fails.
+     */
+    suspend fun getVisionModels(context: Context, provider: String, apiKey: String = "", ollamaUrl: String = ""): List<ModelRegistry.ModelEntry> {
+        val all = fetchForProvider(context, provider, apiKey, ollamaUrl)
+        val vision = all.filter { it.hasVision }
+        return vision.ifEmpty { getCachedVisionModels(context, provider) }
     }
 }

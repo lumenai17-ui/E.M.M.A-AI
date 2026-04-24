@@ -169,6 +169,13 @@ fun DashboardScreen(
                 icon = Icons.Filled.Videocam,
                 onClick = { viewModel.currentScreen.value = "live_vision" }
             )
+            // BUG-2 FIX: Image Analysis entry point (was orphaned)
+            MainModuleCard(
+                title = "Análisis de Imagen",
+                subtitle = "Captura o selecciona una imagen para analizar",
+                icon = Icons.Filled.PhotoCamera,
+                onClick = { viewModel.currentScreen.value = "camera" }
+            )
             MainModuleCard(
                 title = stringResource(R.string.dash_card_voice_title),
                 subtitle = stringResource(R.string.dash_card_voice_subtitle),

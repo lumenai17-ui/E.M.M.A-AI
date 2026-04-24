@@ -88,7 +88,7 @@ fun LiveVisionScreen(
     var isListening by remember { mutableStateOf(false) }
     var voiceState by remember { mutableStateOf(VisionVoiceController.VoiceState.IDLE) }
     var selectedPersonality by remember { mutableStateOf(NARRATOR_PERSONALITIES.first()) }
-    var isNarrationEnabled by remember { mutableStateOf(true) }
+    var isNarrationEnabled by remember { mutableStateOf(false) }  // BUG-7 FIX: Don't auto-narrate
 
     // ── V4: GPS state ──
     var currentGpsData by remember { mutableStateOf(GpsData()) }
@@ -344,7 +344,7 @@ fun LiveVisionScreen(
     // ── V3: Sync voice controller state ──
     LaunchedEffect(isMuted, isNarrationEnabled) {
         voiceController.setMuted(isMuted)
-        voiceController.isNarrationEnabled = isNarrationEnabled
+        voiceController.setNarrationEnabled(isNarrationEnabled)  // BUG-5 FIX: Use method that resets state machine
     }
     LaunchedEffect(Unit) {
         voiceController.onStateChange = { state -> voiceState = state }
@@ -419,6 +419,14 @@ fun LiveVisionScreen(
             if (visionRecorder.isRecording) visionRecorder.stopRecording()
             faceDetector.close() // V9
             cameraExecutor.shutdown()
+
+            // BUG-7 FIX: Stop PocketVisionService if running
+            if (PocketVisionService.isRunning) {
+                val stopIntent = Intent(context, PocketVisionService::class.java).apply {
+                    action = PocketVisionService.ACTION_STOP
+                }
+                context.startService(stopIntent)
+            }
 
             // V8: Generate session summary in background
             if (conversation.frameNumber > 2) {
@@ -618,20 +626,73 @@ fun LiveVisionScreen(
             }
         }
 
-        // ── Result overlay (glassmorphism, bottom) ──
+        // ── BUG-3 FIX: Dashcam HUD — MiniMap + Speed badge (only in DASHCAM mode) ──
+        if (selectedMode == VisionMode.DASHCAM) {
+            // MiniMapPIP — already built, just needs to be rendered
+            if (currentGpsData.latitude != 0.0) {
+                MiniMapPIP(
+                    gpsData = currentGpsData,
+                    navigator = gpsNavigator,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .statusBarsPadding()
+                        .padding(top = 60.dp, end = 8.dp)
+                )
+            }
+
+            // Speed badge
+            if (currentGpsData.speedKmh > 1f) {
+                Surface(
+                    color = Color.Black.copy(alpha = 0.6f),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .statusBarsPadding()
+                        .padding(top = 60.dp, start = 12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            "${currentGpsData.speedKmh.toInt()}",
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (currentGpsData.speedKmh > 100) Color(0xFFFF5252) else Color.White
+                        )
+                        Text("km/h", fontSize = 10.sp, color = Color.White.copy(alpha = 0.6f))
+                        if (currentGpsData.bearingCardinal.isNotBlank()) {
+                            Text(
+                                currentGpsData.bearingCardinal,
+                                fontSize = 11.sp,
+                                color = Color(0xFFF5A623),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Result overlay (glassmorphism, above controls) ── BUG-1 FIX: maxHeight + proper padding
         if (liveResult.isNotBlank()) {
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, bottom = 100.dp)
+                    .padding(start = 16.dp, end = 16.dp, bottom = 160.dp)  // BUG-1 FIX: Raised above controls + mode chip
             ) {
                 Surface(
                     color = Color.Black.copy(alpha = 0.65f),
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.fillMaxWidth()
+                        .heightIn(max = 140.dp)  // BUG-1 FIX: Constrain height
                 ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
+                    Column(
+                        modifier = Modifier
+                            .padding(14.dp)
+                            .verticalScroll(rememberScrollState())  // BUG-1 FIX: Scroll if content overflows
+                    ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.AutoAwesome, "AI", tint = Color(0xFFF5A623), modifier = Modifier.size(14.dp))
                             Spacer(modifier = Modifier.width(6.dp))
@@ -650,63 +711,125 @@ fun LiveVisionScreen(
                             liveResult,
                             fontSize = 13.sp,
                             color = Color.White,
-                            lineHeight = 19.sp,
-                            maxLines = 8,
-                            overflow = TextOverflow.Ellipsis
+                            lineHeight = 19.sp
                         )
                     }
                 }
             }
         }
 
-        // ── V5: Mode selector (above controls) ──
-        VisionModeSelector(
-            selectedMode = selectedMode,
-            suggestedMode = suggestedMode,
-            onModeChange = { newMode ->
-                // V6: Start/stop Pocket Service
-                if (newMode == VisionMode.POCKET && selectedMode != VisionMode.POCKET) {
-                    val intent = Intent(context, PocketVisionService::class.java).apply {
-                        action = PocketVisionService.ACTION_START
-                        putExtra(PocketVisionService.EXTRA_INTERVAL, intervalSeconds)
-                        putExtra(PocketVisionService.EXTRA_MODE, newMode.name)
-                    }
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        context.startForegroundService(intent)
-                    } else {
-                        context.startService(intent)
-                    }
-                } else if (selectedMode == VisionMode.POCKET && newMode != VisionMode.POCKET) {
-                    val stopIntent = Intent(context, PocketVisionService::class.java).apply {
-                        action = PocketVisionService.ACTION_STOP
-                    }
-                    context.startService(stopIntent)
-                }
-                selectedMode = newMode
-            },
+        // ── BUG-1 FIX: Mode chip + bottom sheet (replaces inline VisionModeSelector) ──
+        var showModeSheet by remember { mutableStateOf(false) }
+        val currentModeInfo = remember(selectedMode) {
+            com.beemovil.ui.components.VISION_MODES.find { it.mode == selectedMode }
+                ?: com.beemovil.ui.components.ModeInfo(VisionMode.GENERAL, "🤖", "General")
+        }
+
+        // Single compact mode chip above controls
+        Surface(
+            onClick = { showModeSheet = true },
+            color = Color.White.copy(alpha = 0.2f),
+            shape = RoundedCornerShape(20.dp),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 100.dp)
-        )
+                .padding(bottom = 100.dp)  // Just above the controls bar
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(currentModeInfo.emoji, fontSize = 16.sp)
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(currentModeInfo.label, fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.width(4.dp))
+                Icon(Icons.Filled.ExpandMore, "Change mode", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(16.dp))
+            }
+        }
 
-        // ── Controls bar (bottom) ──
+        // Mode bottom sheet
+        if (showModeSheet) {
+            ModalBottomSheet(
+                onDismissRequest = { showModeSheet = false },
+                containerColor = Color(0xFF1A1A2E)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("MODO DE VISIÓN", fontSize = 12.sp, color = Color(0xFFF5A623),
+                        fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    com.beemovil.ui.components.VISION_MODES.forEach { info ->
+                        val isSelected = selectedMode == info.mode
+                        val isSuggested = suggestedMode == info.mode && !isSelected
+
+                        Surface(
+                            onClick = {
+                                // V6: Start/stop Pocket Service
+                                if (info.mode == VisionMode.POCKET && selectedMode != VisionMode.POCKET) {
+                                    val intent = Intent(context, PocketVisionService::class.java).apply {
+                                        action = PocketVisionService.ACTION_START
+                                        putExtra(PocketVisionService.EXTRA_INTERVAL, intervalSeconds)
+                                        putExtra(PocketVisionService.EXTRA_MODE, info.mode.name)
+                                    }
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                        context.startForegroundService(intent)
+                                    } else {
+                                        context.startService(intent)
+                                    }
+                                } else if (selectedMode == VisionMode.POCKET && info.mode != VisionMode.POCKET) {
+                                    val stopIntent = Intent(context, PocketVisionService::class.java).apply {
+                                        action = PocketVisionService.ACTION_STOP
+                                    }
+                                    context.startService(stopIntent)
+                                }
+                                selectedMode = info.mode
+                                showModeSheet = false
+                            },
+                            color = when {
+                                isSelected -> Color.White.copy(alpha = 0.15f)
+                                isSuggested -> Color(0xFFF5A623).copy(alpha = 0.1f)
+                                else -> Color.Transparent
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(info.emoji, fontSize = 20.sp)
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    info.label,
+                                    fontSize = 15.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) Color.White else Color.White.copy(alpha = 0.8f)
+                                )
+                                Spacer(modifier = Modifier.weight(1f))
+                                if (isSuggested) {
+                                    Text("Sugerido", fontSize = 10.sp, color = Color(0xFFF5A623))
+                                }
+                                if (isSelected) {
+                                    Icon(Icons.Filled.CheckCircle, "Selected", tint = Color(0xFF00E676), modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(24.dp))
+                }
+            }
+        }
+
+        // ── Controls bar (bottom) ── BUG-1 FIX: Reduced to 5 essential buttons
         Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))))
                 .navigationBarsPadding()
-                .padding(horizontal = 24.dp, vertical = 16.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Settings
-            ControlButton(
-                icon = Icons.Filled.Settings,
-                label = "Config",
-                isActive = showSettings,
-                onClick = { showSettings = !showSettings }
-            )
             // Mic (V3)
             ControlButton(
                 icon = if (isListening) Icons.Filled.MicOff else Icons.Filled.Mic,
@@ -774,43 +897,7 @@ fun LiveVisionScreen(
                     }
                 }
             )
-            // Interval display
-            ControlButton(
-                icon = Icons.Filled.Timer,
-                label = "${intervalSeconds}s",
-                isActive = true,
-                onClick = {
-                    // Cycle through intervals: 3 → 5 → 8 → 10 → 3
-                    intervalSeconds = when (intervalSeconds) {
-                        3 -> 5; 5 -> 8; 8 -> 10; else -> 3
-                    }
-                }
-            )
-            // V8: Emergency panic button
-            ControlButton(
-                icon = Icons.Filled.Warning,
-                label = "SOS",
-                isActive = false,
-                activeColor = Color(0xFFFF1744),
-                onClick = {
-                    val config = emergencyProtocol.loadConfig()
-                    if (!config.enabled || config.contactNumber.isBlank()) {
-                        liveResult = "⚠️ Configura contacto de emergencia en Settings"
-                    } else {
-                        coroutineScope.launch {
-                            val msg = emergencyProtocol.triggerEmergency(
-                                currentGpsData.latitude, currentGpsData.longitude,
-                                currentGpsData.address, conversation.lastResult
-                            )
-                            if (msg != null) {
-                                liveResult = "🚨 Alerta enviada a ${config.contactName}"
-                                voiceController.narrate("Alerta de emergencia enviada")
-                            }
-                        }
-                    }
-                }
-            )
-            // V9: Chat share button
+            // Chat share + Settings (combined)
             ControlButton(
                 icon = Icons.Filled.Share,
                 label = "Chat",
@@ -829,6 +916,19 @@ fun LiveVisionScreen(
                     }
                 }
             )
+        }
+
+        // Settings gear (top-right corner, small)
+        IconButton(
+            onClick = { showSettings = !showSettings },
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .statusBarsPadding()
+                .padding(top = 4.dp, end = 4.dp)
+                .size(40.dp)
+                .background(Color.Black.copy(alpha = 0.3f), CircleShape)
+        ) {
+            Icon(Icons.Filled.Settings, "Settings", tint = Color.White.copy(alpha = 0.8f), modifier = Modifier.size(20.dp))
         }
 
         // ── Settings panel (slide up) ──

@@ -32,6 +32,7 @@ import androidx.core.content.FileProvider
 import com.beemovil.llm.*
 import com.beemovil.ui.ChatViewModel
 import com.beemovil.vision.GpsModule
+import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
 import java.io.File
 
@@ -441,37 +442,32 @@ fun CameraScreen(
 // HELPER FUNCTIONS
 // ═══════════════════════════════════════════════════
 
-/** Auto-select the best available vision model */
+/** Auto-select the best available vision model — BUG-4 FIX: Uses dynamic cache */
 internal fun autoSelectVisionModel(context: android.content.Context, viewModel: ChatViewModel): String {
-    val secPrefs = com.beemovil.security.SecurePrefs.get(context)
-
-    // 1. Current provider has vision model?
     val currentProvider = viewModel.currentProvider.value
     val currentModel = viewModel.currentModel.value
-    val currentEntry = ModelRegistry.findModel(currentModel)
-    if (currentEntry?.hasVision == true) return currentModel
 
-    // 2. Provider's best vision model
-    val providerVision = ModelRegistry.getModelsForProvider(currentProvider)
+    // 1. If current model has vision capability, use it directly
+    val cachedVision = DynamicModelFetcher.getCachedVisionModels(context, currentProvider)
+    if (cachedVision.any { it.id == currentModel }) return currentModel
+
+    // 2. First vision model from the user's active provider (from dynamic cache)
+    val bestDynamic = cachedVision.firstOrNull()
+    if (bestDynamic != null) return bestDynamic.id
+
+    // 3. Fallback to static registry for the provider
+    val staticVision = ModelRegistry.getModelsForProvider(currentProvider)
         .firstOrNull { it.hasVision }
-    if (providerVision != null) return providerVision.id
+    if (staticVision != null) return staticVision.id
 
-    // 3. Ollama Cloud with key?
-    val ollamaKey = secPrefs.getString("ollama_api_key", "") ?: ""
-    if (ollamaKey.isNotBlank()) return "gemma4:cloud"
-
-    // 4. OpenRouter with key?
-    val orKey = secPrefs.getString("openrouter_api_key", "") ?: ""
-    if (orKey.isNotBlank()) return "openai/gpt-4o"
-
-    // 5. Local model with vision?
+    // 4. Local model with vision (downloaded)?
     val localVision = ModelRegistry.LOCAL.firstOrNull {
         it.hasVision && com.beemovil.llm.local.LocalModelManager.isModelDownloaded(it.id)
     }
     if (localVision != null) return localVision.id
 
-    // Fallback
-    return "gemma4:cloud"
+    // 5. Last resort: use current model as-is
+    return currentModel
 }
 
 /** Get API key for a provider */
@@ -546,8 +542,25 @@ private fun resizeAndEncode(bitmap: Bitmap): Pair<Bitmap, String> {
 
 @Composable
 private fun VisionModelPicker(selected: String, onSelect: (String) -> Unit) {
+    val context = LocalContext.current
     val colorScheme = MaterialTheme.colorScheme
-    val visionModels = remember { ModelRegistry.getVisionModels() }
+    val currentProvider = remember {
+        context.getSharedPreferences("beemovil", 0).getString("selected_provider", "openrouter") ?: "openrouter"
+    }
+
+    // BUG-4 FIX: Load from dynamic cache first, then refresh from API
+    var visionModels by remember {
+        mutableStateOf(DynamicModelFetcher.getCachedVisionModels(context, currentProvider))
+    }
+    var isRefreshing by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    // Also include static fallback if dynamic cache is empty
+    val displayModels = if (visionModels.isEmpty()) {
+        remember { ModelRegistry.getVisionModels() }
+    } else {
+        visionModels
+    }
 
     Card(
         colors = CardDefaults.cardColors(containerColor = colorScheme.surfaceVariant),
@@ -555,11 +568,38 @@ private fun VisionModelPicker(selected: String, onSelect: (String) -> Unit) {
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Text("MODELO DE VISIÓN", fontSize = 10.sp, color = colorScheme.primary,
-                fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text("MODELO DE VISIÓN", fontSize = 10.sp, color = colorScheme.primary,
+                        fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                    Text("${displayModels.size} modelos con visión ($currentProvider)",
+                        fontSize = 9.sp, color = colorScheme.onSurfaceVariant)
+                }
+                IconButton(
+                    onClick = {
+                        isRefreshing = true
+                        scope.launch {
+                            val fresh = DynamicModelFetcher.getVisionModels(context, currentProvider)
+                            if (fresh.isNotEmpty()) visionModels = fresh
+                            isRefreshing = false
+                        }
+                    },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    if (isRefreshing) {
+                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = colorScheme.primary)
+                    } else {
+                        Icon(Icons.Filled.Refresh, "Refresh", tint = colorScheme.primary, modifier = Modifier.size(16.dp))
+                    }
+                }
+            }
             Spacer(modifier = Modifier.height(8.dp))
 
-            visionModels.forEach { model ->
+            displayModels.forEach { model ->
                 val isSelected = selected == model.id
                 Surface(
                     onClick = { onSelect(model.id) },

@@ -91,7 +91,14 @@ class PocketVisionService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
+        // BUG-7 FIX: If Android re-created the service without intent (after kill), stop immediately
+        if (intent == null) {
+            Log.w(TAG, "Service restarted by OS without intent — stopping self")
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
+        when (intent.action) {
             ACTION_START -> {
                 intervalSeconds = intent.getIntExtra(EXTRA_INTERVAL, 15)
                 val modeName = intent.getStringExtra(EXTRA_MODE) ?: "POCKET"
@@ -114,7 +121,7 @@ class PocketVisionService : Service() {
                 voiceController.startListening()
             }
         }
-        return START_STICKY
+        return START_NOT_STICKY  // BUG-7 FIX: Don't auto-restart after kill
     }
 
     override fun onDestroy() {
@@ -178,7 +185,7 @@ class PocketVisionService : Service() {
                 }
             }
         }
-        voiceController.isNarrationEnabled = true
+        voiceController.setNarrationEnabled(true)
 
         // Resolve LLM provider
         scope.launch {
