@@ -138,6 +138,8 @@ fun LiveVisionScreen(
     // V8: Profile engines
     val emergencyProtocol = remember { EmergencyProtocol(context) }
     val summaryGenerator = remember { SessionSummaryGenerator(context) }
+    // R5: Session intelligence
+    val sessionState = remember { SessionState() }
     // V9: Experience engines
     val faceDetector = remember { FaceDetectionModule() }
     var currentFaceHint by remember { mutableStateOf("") }
@@ -198,6 +200,7 @@ fun LiveVisionScreen(
 
         val mySessionId = captureLoop.newSession()
         conversation.markSessionStart() // V8: track session timing
+        sessionState.reset() // R5: fresh session state
 
         // V8: Record place visit
         if (currentGpsData.address.isNotBlank()) {
@@ -227,6 +230,8 @@ fun LiveVisionScreen(
         captureLoop.onResult = { result ->
             liveResult = result
             conversation.addFrame(result)
+            // R5: Feed SessionState for topic tracking
+            sessionState.addFrame(result, currentGpsData.address, selectedMode)
 
             // V7: Assessor — decide IF to narrate
             val assessment = visionAssessor.assess(
@@ -359,6 +364,9 @@ fun LiveVisionScreen(
                 liveResult = "ALERTA: $temporalAlerts\n$liveResult"
             }
 
+            // R5: Session context replaces truncated conversation history
+            val sessionCtx = sessionState.buildPromptContext()
+
             val systemPrompt = conversation.buildSystemPrompt(
                 mode = selectedMode,
                 personality = if (selectedPersonality.id == "default") null else selectedPersonality,
@@ -370,7 +378,8 @@ fun LiveVisionScreen(
                 targetLanguage = targetLanguage,
                 memoryContext = memoryCtx,
                 temporalAlerts = temporalAlerts,
-                faceHint = currentFaceHint
+                faceHint = currentFaceHint,
+                sessionContext = sessionCtx
             )
 
             captureLoop.captureAndAnalyze(
@@ -381,6 +390,21 @@ fun LiveVisionScreen(
                 userPrompt = if (userQ != null) userQ else customPrompt,
                 mySessionId = mySessionId
             )
+        }
+    }
+
+    // R5: Progressive session compression every 15 min
+    LaunchedEffect(isLiveActive) {
+        if (!isLiveActive) return@LaunchedEffect
+        while (isLiveActive) {
+            kotlinx.coroutines.delay(15 * 60 * 1000L)
+            if (!isLiveActive) break
+            if (sessionState.needsCompression()) {
+                val provider = captureLoop.cachedProvider
+                if (provider != null) {
+                    try { sessionState.compress(provider) } catch (_: Exception) {}
+                }
+            }
         }
     }
 
@@ -428,6 +452,7 @@ fun LiveVisionScreen(
                 }
                 VisionIntentDetector.IntentType.POI_SEARCH -> {
                     conversation.addUserQuestion(spokenText)
+                    sessionState.addUserQuestion(spokenText)
                 }
                 // V7: Action intents → VisionBridge
                 VisionIntentDetector.IntentType.ACTION -> {
@@ -446,10 +471,12 @@ fun LiveVisionScreen(
                         }
                     } else {
                         conversation.addUserQuestion(spokenText)
+                        sessionState.addUserQuestion(spokenText)
                     }
                 }
                 VisionIntentDetector.IntentType.QUESTION -> {
                     conversation.addUserQuestion(spokenText)
+                    sessionState.addUserQuestion(spokenText)
                 }
             }
         }

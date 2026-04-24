@@ -51,7 +51,7 @@ class VisionCaptureLoop(private val context: Context) {
     var barcodeScanEnabled: Boolean = false
 
     // ── Cached provider ──
-    private var cachedProvider: LlmProvider? = null
+    internal var cachedProvider: LlmProvider? = null
     private var cachedProviderKey: String = ""
 
     /**

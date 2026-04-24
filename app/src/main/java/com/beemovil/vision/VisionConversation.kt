@@ -144,190 +144,207 @@ class VisionConversation {
     }
 
     /**
-     * Build a rich system prompt based on the current mode, personality, and V4 context.
+     * R5: Build conversational system prompt.
+     * Shift from "describe image" to "converse with contextual intelligence".
      */
     fun buildSystemPrompt(
         mode: VisionMode,
         personality: NarratorPersonality? = null,
         gpsContext: String = "",
         userQuestion: String? = null,
-        // V4: Enriched context
         gpsData: GpsData? = null,
         weatherInfo: String = "",
         webContext: String = "",
         navUpdate: NavigationUpdate? = null,
-        // V6: Translator
         targetLanguage: String = "",
-        // V7: Intelligence
         memoryContext: String = "",
         temporalAlerts: String = "",
-        // V9: Face detection hint
-        faceHint: String = ""
+        faceHint: String = "",
+        sessionContext: String = ""
     ): String = buildString {
-        // Personality first (if set)
+        // Personality first — only affects TONE, not intelligence
         if (personality != null) {
             appendLine(personality.systemPrompt)
             appendLine()
         }
 
-        // Mode-specific prompt
+        // R5: Conversational mode prompts
         appendLine(when (mode) {
             VisionMode.GENERAL -> """
-                Eres un asistente visual inteligente. 
-                REGLA SUPREMA: Responde con MÁXIMO 2 ORACIONES muy cortas y directas. 
-                No des explicaciones largas. Ve al grano, mantén tu personalidad.
+                Eres E.M.M.A., asistente visual inteligente y conversacional.
+                COMO RESPONDER (en orden de prioridad):
+                1. Si el USUARIO PREGUNTO algo -> responde eso
+                2. Si tienes DATOS DE LA ZONA interesantes -> compartelos naturalmente
+                3. Si ves algo nuevo en la imagen -> mencionalo brevemente
+                REGLAS: Maximo 2 oraciones. No describas la imagen mecanicamente.
             """.trimIndent()
 
             VisionMode.DASHCAM -> """
-                Eres un copiloto inteligente de conducción. Analizas el camino.
-                Menciona: señales de tránsito, condiciones del camino, vehículos, peatones, peligros.
-                Sé breve y claro. Si hay algo urgente, empieza con ⚠️.
+                Eres el copiloto E.M.M.A. en un viaje real por carretera.
+                Tu rol: hacer el viaje INTERESANTE y SEGURO.
+                COMO RESPONDER (en orden de prioridad):
+                1. Si hay PELIGRO visible (peaton, obstaculo, vehiculo peligroso) -> alerta directa, 1 oracion
+                2. Si tienes DATOS DE LA ZONA en el contexto -> compartelos naturalmente
+                3. Si el USUARIO PREGUNTO algo -> responde eso
+                4. Si nada de lo anterior -> observacion breve o dato curioso de la zona
+                REGLAS:
+                - NO describas la imagen frame por frame como un robot
+                - SI conversa como un humano en el asiento del copiloto haria
+                - USA los DATOS DE LA ZONA para enriquecer (historia, comercios, datos interesantes)
+                - Si no hay nada nuevo visual, comparte info del contexto
+                - NUNCA repitas un tema ya discutido en esta sesion
+                - Maximo 2 oraciones
             """.trimIndent()
 
             VisionMode.TOURIST -> """
-                Eres un guía turístico local caminante.
-                REGLA SUPREMA: MÁXIMO 2 ORACIONES por cada respuesta.
-                1. Identifica qué lugar, comida o cosa ves.
-                2. Añade UN (1) dato cultural o recomendación rápida. 
-                No seas genérico. Busca algo NUEVO en la escena si ya hablaste de lo anterior.
+                Eres E.M.M.A., guia turistico local y companero de exploracion.
+                Tu rol: hacer la experiencia RICA e INFORMATIVA.
+                COMO RESPONDER (en orden de prioridad):
+                1. Si ves un LUGAR/MONUMENTO/COMIDA identificable -> nombre + 1 dato cultural real
+                2. Si tienes DATOS DEL CONTEXTO sobre la zona -> compartelos
+                3. Si el USUARIO PREGUNTO algo -> responde eso
+                4. Si nada de lo anterior -> recomienda algo cercano o comparte dato historico
+                REGLAS:
+                - No seas generico ("es un edificio bonito"). Se ESPECIFICO con datos reales.
+                - USA el contexto web si tiene datos historicos, horarios, recomendaciones
+                - No repitas temas ya discutidos en esta sesion
+                - Maximo 2 oraciones
             """.trimIndent()
 
             VisionMode.AGENT -> """
-                Eres un agente de vigilancia inteligente. Observas continuamente.
-                Si detectas algo inusual, peligroso o relevante, repórtalo con ALERTA.
-                Si todo está normal, describe brevemente el entorno actual.
+                Eres E.M.M.A. en modo vigilancia inteligente.
+                COMO RESPONDER:
+                1. Si detectas algo INUSUAL o PELIGROSO -> reporta con ALERTA:
+                2. Si tienes CONTEXTO de seguridad de la zona -> mencionalo
+                3. Si todo esta normal -> confirma brevemente el estado del entorno
+                No inventes peligros. Se objetivo.
             """.trimIndent()
 
             VisionMode.MEETING -> """
-                Eres un asistente de reuniones inteligente.
-                REGLA: Identifica texto visible (pizarras, slides, documentos).
-                1. Lee y transcribe el contenido visible con precisión
-                2. Si es una presentación, resume los puntos clave
-                3. Si es un pizarrón, organiza las ideas en bullet points
-                Sé preciso con el texto. No inventes contenido que no ves.
+                Eres E.M.M.A., asistente de reuniones inteligente.
+                1. Lee y transcribe el contenido visible con precision
+                2. Si es una presentacion, resume los puntos clave
+                3. Si es un pizarron, organiza las ideas en bullet points
+                Se preciso con el texto. No inventes contenido que no ves.
             """.trimIndent()
 
             VisionMode.SHOPPING -> """
-                Eres un asistente de compras inteligente.
-                1. Identifica productos visibles: nombre exacto, marca, presentación
-                2. Si ves precios, repórtalos con precisión
-                3. Si ves etiquetas nutricionales, resume calorías y macros
-                4. FORMATO: "[PRODUCTO: nombre] [PRECIO: si visible]"
-                Si tienes CONTEXTO WEB con precios de referencia:
-                - Compara: "En tienda vs Online" e indica si es buen precio
-                - Menciona rating/reviews si están disponibles
-                Máximo 2 oraciones.
+                Eres E.M.M.A., asistente de compras inteligente.
+                COMO RESPONDER:
+                1. Identifica productos: nombre exacto, marca, presentacion
+                2. Si ves precios, reportalos con precision
+                3. Si tienes CONTEXTO WEB con precios de referencia:
+                   - Compara precios y di si es buen deal
+                   - Menciona rating/reviews si disponibles
+                4. Formato: "[PRODUCTO: nombre] [PRECIO: si visible]"
+                Maximo 2 oraciones. No repitas productos ya mencionados.
             """.trimIndent()
 
             VisionMode.POCKET -> """
-                Eres E.M.M.A. en modo bolsillo. La cámara está apagada.
-                Basándote SOLO en la ubicación GPS y el contexto web:
-                1. Describe dónde está el usuario
-                2. Narra el entorno basándote en datos del GPS
-                3. Si el usuario camina, comenta sobre la ruta
-                Habla como su acompañante conversando naturalmente.
-                No menciones que no puedes ver. Narra el entorno.
+                Eres E.M.M.A. en modo bolsillo. La camara esta apagada.
+                Basandote SOLO en la ubicacion GPS y el contexto:
+                1. Describe donde esta el usuario con datos interesantes
+                2. Si hay datos historicos o culturales de la zona, compartelos
+                3. Si el usuario se mueve, comenta sobre la ruta
+                Habla como companero conversando naturalmente.
             """.trimIndent()
 
             VisionMode.TRANSLATOR -> {
-                val lang = targetLanguage.ifBlank { "inglés" }
+                val lang = targetLanguage.ifBlank { "ingles" }
                 """
                 Eres un traductor en tiempo real. IDIOMA DESTINO: $lang
                 REGLAS:
-                1. Si ves texto en la imagen, tradúcelo TODO al español
-                2. Si el usuario dice algo, tradúcelo a $lang
-                3. Incluye la pronunciación fonética entre paréntesis
-                4. Si ves un menú, formatea como lista: "Plato - Precio"
-                5. No expliques — solo traduce
-                FORMATO: [Original] → [Traducción] ([pronunciación])
+                1. Si ves texto en la imagen, traducelo TODO al espanol
+                2. Si el usuario dice algo, traducelo a $lang
+                3. Incluye la pronunciacion fonetica entre parentesis
+                4. Si ves un menu, formatea como lista: "Plato - Precio"
+                5. No expliques, solo traduce
+                FORMATO: [Original] > [Traduccion] ([pronunciacion])
                 """.trimIndent()
             }
         })
 
-        // V4: Semantic GPS block (no raw coordinates)
+        // GPS context
         if (gpsData != null && gpsData.address.isNotBlank()) {
             appendLine()
-            appendLine("📍 UBICACIÓN: ${gpsData.address}")
+            appendLine("UBICACION: ${gpsData.address}")
             val movement = when {
-                gpsData.speedKmh > 60 -> "🚗 En vehículo a ${gpsData.speedKmh.toInt()} km/h, dirección ${gpsData.bearingCardinal}"
-                gpsData.speedKmh > 8 -> "🚴 Moviéndose a ${gpsData.speedKmh.toInt()} km/h, dirección ${gpsData.bearingCardinal}"
-                gpsData.speedKmh > 1 -> "🚶 Caminando al ${gpsData.bearingCardinal}"
-                else -> "📌 Estacionario"
+                gpsData.speedKmh > 60 -> "En vehiculo a ${gpsData.speedKmh.toInt()} km/h, direccion ${gpsData.bearingCardinal}"
+                gpsData.speedKmh > 8 -> "Moviendose a ${gpsData.speedKmh.toInt()} km/h, direccion ${gpsData.bearingCardinal}"
+                gpsData.speedKmh > 1 -> "Caminando al ${gpsData.bearingCardinal}"
+                else -> "Estacionario"
             }
             appendLine(movement)
-            if (weatherInfo.isNotBlank()) appendLine("🌤️ $weatherInfo")
+            if (weatherInfo.isNotBlank()) appendLine("Clima: $weatherInfo")
         } else if (gpsContext.isNotBlank()) {
-            // Fallback to legacy gpsContext string
             appendLine()
             appendLine(gpsContext)
         }
 
-        // V4: Active navigation block
+        // Active navigation
         if (navUpdate != null && navUpdate.phase != NavPhase.IDLE) {
             appendLine()
-            appendLine("🎯 NAVEGACIÓN ACTIVA → ${navUpdate.instruction}")
-            appendLine("${navUpdate.arrow} ${navUpdate.distance} · ETA: ${navUpdate.eta} · ${navUpdate.speedKmh.toInt()} km/h")
+            appendLine("NAVEGACION ACTIVA: ${navUpdate.instruction}")
+            appendLine("${navUpdate.arrow} ${navUpdate.distance} | ETA: ${navUpdate.eta} | ${navUpdate.speedKmh.toInt()} km/h")
             if (navUpdate.phase == NavPhase.ARRIVED) {
-                appendLine("🎉 ¡DESTINO ALCANZADO!")
+                appendLine("DESTINO ALCANZADO")
             } else {
-                appendLine("⚡ PRIORIDAD: Guía al usuario usando PUNTOS DE REFERENCIA VISIBLES en la imagen. No recites distancias ni coordenadas, describe lo que el usuario VE para orientarse.")
+                appendLine("Guia al usuario usando PUNTOS DE REFERENCIA VISIBLES.")
             }
         }
 
-        // V4: Web enrichment context
+        // R5: Web context — labeled to guide the LLM to USE it
         if (webContext.isNotBlank() && !webContext.startsWith("Error") && !webContext.startsWith("No se encontraron")) {
             appendLine()
-            appendLine("📰 CONTEXTO LOCAL:")
-            appendLine(webContext.take(400)) // Cap to avoid blowing context window
+            appendLine("DATOS DE LA ZONA (usa estos para enriquecer tu respuesta):")
+            appendLine(webContext.take(400))
         }
 
-        // Conversation context (avoid repetition)
-        val ctx = getConversationContext()
-        if (ctx.isNotBlank()) {
+        // R5: Session context from SessionState (replaces old truncated history)
+        if (sessionContext.isNotBlank()) {
             appendLine()
-            appendLine("[CONTEXTO DE ESTA SESIÓN:]")
-            appendLine(ctx)
+            appendLine(sessionContext)
+        } else {
+            // Fallback to old system
+            val ctx = getConversationContext()
+            if (ctx.isNotBlank()) {
+                appendLine()
+                appendLine("[CONTEXTO DE ESTA SESION:]")
+                appendLine(ctx)
+            }
+            val hint = getNoveltyHint()
+            if (hint.isNotBlank()) append(hint)
         }
 
-        // Novelty hint
-        val hint = getNoveltyHint()
-        if (hint.isNotBlank()) {
-            append(hint)
-        }
-
-        // V7: Memory context (RAG from past sessions)
+        // Memory context
         if (memoryContext.isNotBlank()) {
             appendLine()
-            appendLine("🧠 MEMORIAS RELEVANTES:")
+            appendLine("MEMORIAS RELEVANTES:")
             appendLine(memoryContext.take(300))
-            appendLine("Usa esta información para enriquecer tu respuesta sin repetirla textualmente.")
         }
 
-        // V7: Temporal pattern alerts
+        // Temporal alerts
         if (temporalAlerts.isNotBlank()) {
             appendLine()
-            appendLine("⏱️ PATRONES TEMPORALES DETECTADOS:")
+            appendLine("PATRONES DETECTADOS:")
             appendLine(temporalAlerts)
-            appendLine("Incorpora estas observaciones temporales de forma natural.")
         }
 
-        // V9: Face detection hint
+        // Face detection
         if (faceHint.isNotBlank()) {
             appendLine()
-            appendLine("👤 DETECCIÓN FACIAL: $faceHint")
-            appendLine("Usa esta información para describir las personas con precisión.")
+            appendLine("DETECCION FACIAL: $faceHint")
         }
 
-        // User question takes priority
+        // User question priority
         if (userQuestion != null) {
             appendLine()
             appendLine("[EL USUARIO TE PREGUNTA: \"$userQuestion\"]")
-            appendLine("Responde específicamente a su pregunta basándote en lo que ves en la imagen.")
+            appendLine("Responde especificamente a su pregunta basandote en lo que ves y el contexto.")
         }
 
-        // Language
         appendLine()
-        append("Responde siempre en español.")
+        append("Responde siempre en espanol.")
     }
 
     /**
