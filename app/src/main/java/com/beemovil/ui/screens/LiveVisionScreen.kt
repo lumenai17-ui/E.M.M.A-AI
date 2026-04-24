@@ -140,6 +140,7 @@ fun LiveVisionScreen(
     val summaryGenerator = remember { SessionSummaryGenerator(context) }
     // R5: Session intelligence
     val sessionState = remember { SessionState() }
+    val contextOrchestrator = remember { ContextOrchestrator(context) }
     // V9: Experience engines
     val faceDetector = remember { FaceDetectionModule() }
     var currentFaceHint by remember { mutableStateOf("") }
@@ -201,6 +202,7 @@ fun LiveVisionScreen(
         val mySessionId = captureLoop.newSession()
         conversation.markSessionStart() // V8: track session timing
         sessionState.reset() // R5: fresh session state
+        contextOrchestrator.reset() // R5: fresh zone tracking
 
         // V8: Record place visit
         if (currentGpsData.address.isNotBlank()) {
@@ -344,42 +346,47 @@ fun LiveVisionScreen(
                 suggestedMode = suggestModeBySpeed(currentGpsData.speedKmh)
             }
 
-            // V5: Build context-aware prompt with mode + GPS + web + two-pass
+            // R5: ContextOrchestrator assembles all 6 layers with budget
             val userQ = conversation.consumeQuestion()
-            val twoPassCtx = contextProvider.getTwoPassContext()
-            val combinedWebCtx = if (twoPassCtx.isNotBlank() && webContext.isNotBlank()) {
-                "$webContext\n\nINFO ADICIONAL:\n$twoPassCtx"
-            } else webContext.ifBlank { twoPassCtx }
+            val ctxBlock = contextOrchestrator.buildContextBlock(
+                gpsData = currentGpsData,
+                mode = selectedMode,
+                sessionState = sessionState,
+                memoryManager = memoryManager,
+                temporalDetector = temporalDetector,
+                previousResults = conversation.getPreviousResults(),
+                intervalSeconds = intervalSeconds,
+                weatherInfo = weatherInfo
+            )
 
-            // V7: Query memory and temporal patterns
-            val memoryCtx = memoryManager.queryMemories(
-                currentGpsData.latitude, currentGpsData.longitude, selectedMode
-            )
-            val temporalPatterns = temporalDetector.detectPatterns(
-                conversation.getPreviousResults(), selectedMode, intervalSeconds
-            )
-            val temporalAlerts = temporalPatterns.joinToString("\n") { it.alert }
+            // Combine legacy web context with structured location intel
+            val twoPassCtx = contextProvider.getTwoPassContext()
+            val legacyWeb = if (twoPassCtx.isNotBlank() && webContext.isNotBlank()) {
+                "$webContext\n$twoPassCtx"
+            } else webContext.ifBlank { twoPassCtx }
+            val combinedWebCtx = if (ctxBlock.locationContext.isNotBlank()) {
+                ctxBlock.locationContext + if (legacyWeb.isNotBlank()) "\n$legacyWeb" else ""
+            } else legacyWeb
+
             // R3-9: Surface temporal alerts to the user
-            if (temporalAlerts.isNotBlank() && selectedMode in listOf(VisionMode.AGENT, VisionMode.DASHCAM, VisionMode.SHOPPING)) {
-                liveResult = "ALERTA: $temporalAlerts\n$liveResult"
+            if (ctxBlock.temporalContext.isNotBlank() && selectedMode in listOf(VisionMode.AGENT, VisionMode.DASHCAM, VisionMode.SHOPPING)) {
+                liveResult = "ALERTA: ${ctxBlock.temporalContext}\n$liveResult"
             }
 
-            // R5: Session context replaces truncated conversation history
-            val sessionCtx = sessionState.buildPromptContext()
-
+            // Build prompt with orchestrated context
             val systemPrompt = conversation.buildSystemPrompt(
                 mode = selectedMode,
                 personality = if (selectedPersonality.id == "default") null else selectedPersonality,
                 userQuestion = userQ,
                 gpsData = currentGpsData,
                 weatherInfo = weatherInfo,
-                webContext = combinedWebCtx,
+                webContext = combinedWebCtx.take(500),
                 navUpdate = navUpdate,
                 targetLanguage = targetLanguage,
-                memoryContext = memoryCtx,
-                temporalAlerts = temporalAlerts,
+                memoryContext = ctxBlock.memoryContext,
+                temporalAlerts = ctxBlock.temporalContext,
                 faceHint = currentFaceHint,
-                sessionContext = sessionCtx
+                sessionContext = ctxBlock.sessionContext
             )
 
             captureLoop.captureAndAnalyze(
