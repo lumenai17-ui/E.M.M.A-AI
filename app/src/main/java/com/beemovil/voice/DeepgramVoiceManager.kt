@@ -47,16 +47,21 @@ class DeepgramVoiceManager(private val context: Context) {
         nativeTTS = TextToSpeech(context) { status ->
             nativeTTSReady = status == TextToSpeech.SUCCESS
             if (nativeTTSReady) {
-                // Ahora respeta el idioma nativo del sistema operativo (Global fallback)
+                // Respeta el idioma nativo del sistema operativo
                 nativeTTS?.language = Locale.getDefault()
             }
         }
         android.os.Handler(android.os.Looper.getMainLooper()).post {
             if (android.speech.SpeechRecognizer.isRecognitionAvailable(context)) {
                 nativeSTT = android.speech.SpeechRecognizer.createSpeechRecognizer(context)
+                nativeSTTReady = true
             }
         }
     }
+
+    // R3-1: Expose native STT availability for VisionVoiceController check
+    private var nativeSTTReady = false
+    fun hasNativeSTT(): Boolean = nativeSTTReady || android.speech.SpeechRecognizer.isRecognitionAvailable(context)
 
     fun startListening(
         language: String = "es-MX",
@@ -65,19 +70,24 @@ class DeepgramVoiceManager(private val context: Context) {
         onError: ((String) -> Unit)? = null,
         onState: ((Boolean) -> Unit)? = null
     ) {
-        if (useDeepgramSTT) {
-            deepgramSTT?.startListening(
+        // R3-1c FIX: If Deepgram STT is enabled but null (init failed), fall back to native
+        if (useDeepgramSTT && deepgramSTT != null) {
+            deepgramSTT.startListening(
                 apiKey = apiKey,
                 language = language.substringBefore("-"),
                 onPartial = onPartial,
                 onResult = onResult,
                 onErrorCb = { error ->
-                    Log.w(TAG, "Deepgram STT failed: $error")
-                    onError?.invoke(error)
+                    Log.w(TAG, "Deepgram STT failed: $error, falling back to native")
+                    // R3-1: Auto-fallback to native on Deepgram error
+                    startNativeListening(language, onResult, onError)
                 },
                 onState = onState
             )
         } else {
+            if (useDeepgramSTT && deepgramSTT == null) {
+                Log.w(TAG, "Deepgram STT configured but unavailable, using native fallback")
+            }
             startNativeListening(language, onResult, onError)
         }
     }

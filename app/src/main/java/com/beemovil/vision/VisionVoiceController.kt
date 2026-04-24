@@ -11,8 +11,11 @@ import com.beemovil.voice.DeepgramVoiceManager
  * Prevents TTS and STT from colliding. Mute = instant silence (TTS.stop()),
  * generation continues in background.
  *
- * States: IDLE → LISTENING → PROCESSING → SPEAKING → IDLE
- *         SPEAKING + mute → IDLE (TTS.stop() instant)
+ * States: IDLE -> LISTENING -> PROCESSING -> SPEAKING -> IDLE
+ *         SPEAKING + mute -> IDLE (TTS.stop() instant)
+ *
+ * R3-1 FIX: startListening() returns Boolean to signal success/failure.
+ * onError callback always resets state to IDLE for reliable UI sync.
  */
 class VisionVoiceController(
     private val context: Context,
@@ -22,7 +25,7 @@ class VisionVoiceController(
         private const val TAG = "VisionVoiceCtrl"
     }
 
-    // ── State ──
+    // -- State --
     enum class VoiceState { IDLE, LISTENING, PROCESSING, SPEAKING }
 
     var state: VoiceState = VoiceState.IDLE
@@ -44,20 +47,20 @@ class VisionVoiceController(
         if (!enabled && state == VoiceState.SPEAKING) {
             voiceManager.stopSpeaking()
             setState(VoiceState.IDLE)
-            Log.d(TAG, "Narration disabled → TTS stopped, state reset to IDLE")
+            Log.d(TAG, "Narration disabled -> TTS stopped, state reset to IDLE")
         }
     }
 
     // Currently selected personality
     var personality: NarratorPersonality = NARRATOR_PERSONALITIES.first()
 
-    // ── Callbacks ──
+    // -- Callbacks --
     var onStateChange: ((VoiceState) -> Unit)? = null
     var onSpeechResult: ((String) -> Unit)? = null
     var onMuteChange: ((Boolean) -> Unit)? = null
     var onError: ((String) -> Unit)? = null
 
-    // ── TTS: Speak a result ──
+    // -- TTS: Speak a result --
     /**
      * Narrate the vision result via TTS.
      * If muted, skips TTS but still transitions state.
@@ -101,19 +104,19 @@ class VisionVoiceController(
         )
     }
 
-    // ── Mute: Instant silence ──
+    // -- Mute: Instant silence --
     /**
      * Toggle mute. If currently speaking, TTS.stop() is called IMMEDIATELY.
-     * The LLM generation continues — only audio output is silenced.
+     * The LLM generation continues - only audio output is silenced.
      */
     fun toggleMute(): Boolean {
         isMuted = !isMuted
 
         if (isMuted && state == VoiceState.SPEAKING) {
-            // INSTANT silence — the key feature
+            // INSTANT silence - the key feature
             voiceManager.stopSpeaking()
             setState(VoiceState.IDLE)
-            Log.d(TAG, "Mute ON → TTS stopped instantly")
+            Log.d(TAG, "Mute ON -> TTS stopped instantly")
         }
 
         onMuteChange?.invoke(isMuted)
@@ -130,15 +133,24 @@ class VisionVoiceController(
         onMuteChange?.invoke(isMuted)
     }
 
-    // ── STT: Listen for user question ──
+    // -- STT: Listen for user question --
     /**
-     * Start listening for a voice question.
-     * If TTS is speaking, stops it first.
+     * R3-1 FIX: Start listening for a voice question.
+     * Returns true if STT was successfully initiated, false if it failed
+     * (so UI can immediately reset visual state).
      */
-    fun startListening() {
+    fun startListening(): Boolean {
         // Stop any TTS first
         if (state == VoiceState.SPEAKING) {
             voiceManager.stopSpeaking()
+        }
+
+        // R3-1: Check if voice manager can actually listen
+        if (!voiceManager.hasApiKey && !voiceManager.hasNativeSTT()) {
+            Log.w(TAG, "No STT available (no Deepgram key, no native STT)")
+            onError?.invoke("Sin motor de voz disponible")
+            setState(VoiceState.IDLE)
+            return false
         }
 
         setState(VoiceState.LISTENING)
@@ -156,9 +168,10 @@ class VisionVoiceController(
             onError = { error ->
                 Log.w(TAG, "STT error: $error")
                 setState(VoiceState.IDLE)
-                onError?.invoke("Micrófono: $error")
+                onError?.invoke("Mic: $error")
             }
         )
+        return true
     }
 
     /**
@@ -171,7 +184,7 @@ class VisionVoiceController(
         }
     }
 
-    // ── Lifecycle ──
+    // -- Lifecycle --
     fun stop() {
         voiceManager.stopSpeaking()
         voiceManager.stopListening()

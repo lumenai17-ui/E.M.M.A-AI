@@ -110,7 +110,7 @@ class GpsNavigator {
         if (distanceMeters < ARRIVAL_THRESHOLD_M) {
             hasArrived = true
             return NavigationUpdate(
-                instruction = "🎉 ¡Llegaste a ${dest.name}!",
+                instruction = "Llegaste a ${dest.name}!",
                 distance = formatDistance(distanceMeters),
                 eta = "0m",
                 arrow = getArrowEmoji(relativeBearing),
@@ -145,20 +145,20 @@ class GpsNavigator {
 
         // Time-based suggestions
         when (hour) {
-            in 7..9 -> suggestions.add(PoiSuggestion("☕", "Desayuno", "Buscar cafeterías y panaderías cerca"))
-            in 12..14 -> suggestions.add(PoiSuggestion("🍽️", "Almuerzo", "Restaurantes cerca para comer"))
-            in 18..20 -> suggestions.add(PoiSuggestion("🍕", "Cena", "Opciones para cenar en la zona"))
-            in 21..23 -> suggestions.add(PoiSuggestion("🍺", "Noche", "Bares y vida nocturna"))
+            in 7..9 -> suggestions.add(PoiSuggestion("C", "Desayuno", "Buscar cafeterias y panaderias cerca"))
+            in 12..14 -> suggestions.add(PoiSuggestion("A", "Almuerzo", "Restaurantes cerca para comer"))
+            in 18..20 -> suggestions.add(PoiSuggestion("C", "Cena", "Opciones para cenar en la zona"))
+            in 21..23 -> suggestions.add(PoiSuggestion("N", "Noche", "Bares y vida nocturna"))
         }
 
         // Speed-based suggestions
         if (gpsData.speedKmh > 30) {
-            suggestions.add(PoiSuggestion("⛽", "Gasolina", "Gasolineras en el camino"))
+            suggestions.add(PoiSuggestion("G", "Gasolina", "Gasolineras en el camino"))
         }
 
         // General always-available
-        suggestions.add(PoiSuggestion("📍", "Interés", "Puntos de interés cercanos"))
-        suggestions.add(PoiSuggestion("🏥", "Urgencia", "Hospitales y farmacias"))
+        suggestions.add(PoiSuggestion("P", "Interes", "Puntos de interes cercanos"))
+        suggestions.add(PoiSuggestion("U", "Urgencia", "Hospitales y farmacias"))
 
         return suggestions.take(4) // Max 4 suggestions
     }
@@ -191,14 +191,14 @@ class GpsNavigator {
     }
 
     private fun getArrowEmoji(relBearing: Float): String = when {
-        relBearing > -22.5 && relBearing <= 22.5 -> "⬆️"
-        relBearing > 22.5 && relBearing <= 67.5 -> "↗️"
-        relBearing > 67.5 && relBearing <= 112.5 -> "➡️"
-        relBearing > 112.5 && relBearing <= 157.5 -> "↘️"
-        relBearing > 157.5 || relBearing <= -157.5 -> "⬇️"
-        relBearing > -157.5 && relBearing <= -112.5 -> "↙️"
-        relBearing > -112.5 && relBearing <= -67.5 -> "⬅️"
-        else -> "↖️"
+        relBearing > -22.5 && relBearing <= 22.5 -> "^"
+        relBearing > 22.5 && relBearing <= 67.5 -> "/"
+        relBearing > 67.5 && relBearing <= 112.5 -> ">"
+        relBearing > 112.5 && relBearing <= 157.5 -> "\\"
+        relBearing > 157.5 || relBearing <= -157.5 -> "v"
+        relBearing > -157.5 && relBearing <= -112.5 -> "/"
+        relBearing > -112.5 && relBearing <= -67.5 -> "<"
+        else -> "\\"
     }
 
     private fun formatDistance(meters: Float): String = when {

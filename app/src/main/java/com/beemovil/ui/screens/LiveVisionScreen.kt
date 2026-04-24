@@ -10,6 +10,7 @@ import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -93,9 +94,9 @@ fun LiveVisionScreen(
         mutableStateOf(prefs.getString("vision_model", "") ?: "")
     }
 
-    // ── V3: Voice state ──
-    var isListening by remember { mutableStateOf(false) }
+    // -- V3: Voice state -- R3-1 FIX: Single source of truth (no dual isListening)
     var voiceState by remember { mutableStateOf(VisionVoiceController.VoiceState.IDLE) }
+    val isListening = voiceState == VisionVoiceController.VoiceState.LISTENING
     var selectedPersonality by remember { mutableStateOf(NARRATOR_PERSONALITIES.first()) }
     var isNarrationEnabled by remember { mutableStateOf(false) }  // BUG-7 FIX: Don't auto-narrate
 
@@ -142,6 +143,11 @@ fun LiveVisionScreen(
     var currentFaceHint by remember { mutableStateOf("") }
     var showDashboard by remember { mutableStateOf(false) }
     var showHistory by remember { mutableStateOf(false) }
+    // R3-3: Navigation input dialog
+    var showNavDialog by remember { mutableStateOf(false) }
+    var navDestinationText by remember { mutableStateOf("") }
+    // R3-6: DashcamLogger
+    val dashcamLogger = remember { DashcamLogger(context) }
 
     // V6: Wire offline cache to context provider
     LaunchedEffect(Unit) {
@@ -241,6 +247,11 @@ fun LiveVisionScreen(
                 )
             }
 
+            // R3-6: Log frame to DashcamLogger when in DASHCAM mode
+            if (selectedMode == VisionMode.DASHCAM && dashcamLogger.isActive) {
+                dashcamLogger.logFrame(frameCount, currentGpsData, result)
+            }
+
             // V8: Auto-emergency alert from assessor
             if (assessment.action == VisionAssessor.Action.SEND_ALERT) {
                 if (emergencyProtocol.shouldAutoTrigger()) {
@@ -295,6 +306,11 @@ fun LiveVisionScreen(
             }
         }
 
+        // R3-6: Auto-start DashcamLogger when in DASHCAM mode
+        if (selectedMode == VisionMode.DASHCAM) {
+            dashcamLogger.startSession()
+        }
+
         // Capture loop
         while (isLiveActive && captureLoop.sessionId.get() == mySessionId) {
             // V10: Adaptive interval based on battery
@@ -333,6 +349,10 @@ fun LiveVisionScreen(
                 conversation.getPreviousResults(), selectedMode, intervalSeconds
             )
             val temporalAlerts = temporalPatterns.joinToString("\n") { it.alert }
+            // R3-9: Surface temporal alerts to the user
+            if (temporalAlerts.isNotBlank() && selectedMode in listOf(VisionMode.AGENT, VisionMode.DASHCAM, VisionMode.SHOPPING)) {
+                liveResult = "ALERTA: $temporalAlerts\n$liveResult"
+            }
 
             val systemPrompt = conversation.buildSystemPrompt(
                 mode = selectedMode,
@@ -366,13 +386,13 @@ fun LiveVisionScreen(
     }
     LaunchedEffect(Unit) {
         voiceController.onStateChange = { state -> voiceState = state }
-        // R2-9 FIX: Reset isListening on error to prevent stuck state
+        // R3-1 FIX: Error callback resets voiceState (which drives isListening)
         voiceController.onError = { error ->
-            isListening = false
+            // voiceState auto-resets via onStateChange -> IDLE
             liveResult = error
         }
         voiceController.onSpeechResult = { spokenText ->
-            isListening = false
+            // R3-1: voiceState auto-transitions via onStateChange -> PROCESSING
             // V4: Intent detection
             val intent = intentDetector.detect(spokenText)
             when (intent.type) {
@@ -440,6 +460,7 @@ fun LiveVisionScreen(
             gpsModule.stop()
             gpsNavigator.stopNavigation()
             if (visionRecorder.isRecording) visionRecorder.stopRecording()
+            if (dashcamLogger.isActive) dashcamLogger.stopSession() // R3-6
             faceDetector.close() // V9
             cameraExecutor.shutdown()
 
@@ -661,10 +682,61 @@ fun LiveVisionScreen(
                         fontSize = 10.sp, color = Color.White.copy(alpha = 0.7f),
                         maxLines = 1, overflow = TextOverflow.Ellipsis
                     )
+                    // R3-3: Quick-nav button on address bar
+                    IconButton(
+                        onClick = { showNavDialog = true },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(Icons.Filled.Navigation, "Navegar", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
+                    }
                 }
             }
         }
 
+        // R3-3: Navigation destination input dialog
+        if (showNavDialog) {
+            AlertDialog(
+                onDismissRequest = { showNavDialog = false },
+                title = { Text("Navegar a", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column {
+                        Text("Escribe una direccion o lugar:", fontSize = 13.sp, color = Color.Gray)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        androidx.compose.material3.OutlinedTextField(
+                            value = navDestinationText,
+                            onValueChange = { navDestinationText = it },
+                            placeholder = { Text("Ej: Starbucks, Parque Central...") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        if (navDestinationText.isNotBlank()) {
+                            coroutineScope.launch {
+                                val dest = intentDetector.resolveDestination(navDestinationText, currentGpsData.latitude, currentGpsData.longitude)
+                                if (dest != null) {
+                                    gpsNavigator.startNavigation(dest)
+                                    isNavigating = true
+                                    liveResult = "Navegando a ${dest.name}"
+                                } else {
+                                    liveResult = "No se pudo encontrar: $navDestinationText"
+                                }
+                            }
+                            showNavDialog = false
+                            navDestinationText = ""
+                        }
+                    }) { Text("Navegar") }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        showNavDialog = false
+                        navDestinationText = ""
+                    }) { Text("Cancelar") }
+                }
+            )
+        }
         // ── BUG-3 FIX: Dashcam HUD — MiniMap + Speed badge (only in DASHCAM mode) ──
         if (selectedMode == VisionMode.DASHCAM) {
             // MiniMapPIP — already built, just needs to be rendered
@@ -870,26 +942,49 @@ fun LiveVisionScreen(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Mic (V3) — R2-9 FIX: Check RECORD_AUDIO permission
-            ControlButton(
-                icon = if (isListening) Icons.Filled.MicOff else Icons.Filled.Mic,
-                label = if (isListening) "Escucha..." else "Mic",
-                isActive = isListening,
-                onClick = {
-                    if (isListening) {
-                        voiceController.stopListening()
-                        isListening = false
-                    } else {
-                        if (!hasAudioPermission) {
-                            audioPermLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                            liveResult = "Permiso de micrófono requerido"
+            // Mic (V3) -- R3-1 FIX: Derived state from voiceController, pulse animation
+            Box {
+                // Pulse ring behind button when listening
+                if (isListening) {
+                    val pulseAlpha by rememberInfiniteTransition(label = "micPulse").animateFloat(
+                        initialValue = 0.2f,
+                        targetValue = 0.6f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(800),
+                            repeatMode = RepeatMode.Reverse
+                        ),
+                        label = "micPulseAlpha"
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(52.dp)
+                            .align(Alignment.Center)
+                            .clip(CircleShape)
+                            .background(Color(0xFFFF1744).copy(alpha = pulseAlpha))
+                    )
+                }
+                ControlButton(
+                    icon = if (isListening) Icons.Filled.MicOff else Icons.Filled.Mic,
+                    label = if (isListening) "Escuchando" else "Mic",
+                    isActive = isListening,
+                    activeColor = Color(0xFFFF1744),
+                    onClick = {
+                        if (isListening) {
+                            voiceController.stopListening()
                         } else {
-                            isListening = true
-                            voiceController.startListening()
+                            if (!hasAudioPermission) {
+                                audioPermLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                liveResult = "Permiso de microfono requerido"
+                            } else {
+                                val started = voiceController.startListening()
+                                if (!started) {
+                                    liveResult = "No se pudo iniciar el microfono"
+                                }
+                            }
                         }
                     }
-                }
-            )
+                )
+            }
             // Mute
             ControlButton(
                 icon = if (isMuted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
@@ -919,7 +1014,7 @@ fun LiveVisionScreen(
                     modifier = Modifier.size(32.dp)
                 )
             }
-            // REC (V5: timelapse recording)
+            // REC (V5: timelapse recording) -- R3-5 FIX: Show path after save
             ControlButton(
                 icon = if (isRecording) Icons.Filled.Stop else Icons.Filled.FiberManualRecord,
                 label = if (isRecording) "${visionRecorder.getFrameCount()}" else "REC",
@@ -932,13 +1027,16 @@ fun LiveVisionScreen(
                         coroutineScope.launch {
                             val mp4 = visionRecorder.encodeToMp4(withOverlay = false)
                             if (mp4 != null) {
-                                liveResult = "Video guardado: ${result.frameCount} frames, ${result.durationSeconds}s"
+                                liveResult = "Video guardado en Downloads/EMMA/ (${result.frameCount} frames, ${result.durationSeconds}s)"
+                            } else {
+                                liveResult = "Grabacion finalizada: ${result.frameCount} frames (encoding fallo)"
                             }
                             visionRecorder.cleanup()
                         }
                     } else {
                         visionRecorder.startRecording(selectedMode.name.lowercase())
                         isRecording = true
+                        liveResult = "Grabando timelapse..."
                     }
                 }
             )

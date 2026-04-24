@@ -215,13 +215,13 @@ class VisionCaptureLoop(private val context: Context) {
                                 consecutiveErrors >= 5 -> {
                                     isThrottled = true
                                     lastError = "Conexión inestable. Reduciendo frecuencia..."
-                                    onError?.invoke("⚠️ ${lastError}")
+                                    onError?.invoke("ALERTA: ${lastError}")
                                     Log.w(TAG, "5+ consecutive errors, throttling")
                                 }
                                 consecutiveErrors >= 3 -> {
                                     isThrottled = true
                                     lastError = "Reintentando con menor frecuencia..."
-                                    onError?.invoke("🔄 ${lastError}")
+                                    onError?.invoke("RETRY: ${lastError}")
                                 }
                                 else -> {
                                     lastError = e.message?.take(100)

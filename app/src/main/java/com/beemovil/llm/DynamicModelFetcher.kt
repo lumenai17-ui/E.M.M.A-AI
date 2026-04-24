@@ -109,7 +109,38 @@ object DynamicModelFetcher {
                 // Determine capabilities from architecture/description
                 val arch = m.optJSONObject("architecture")
                 val modality = arch?.optString("modality", "") ?: ""
-                val hasVision = modality.contains("image") || modality.contains("multimodal")
+                
+                // R3-2a FIX: Expanded vision detection — many models report "text->text" 
+                // but actually accept images. Check multiple signals:
+                val idLower = id.lowercase()
+                val nameLower = name.lowercase()
+                val desc = m.optString("description", "").lowercase()
+                
+                // 1. Architecture modality (most reliable when present)
+                val modalityVision = modality.contains("image") || modality.contains("multimodal")
+                
+                // 2. Input modalities array (some models use this instead)
+                val inputModalities = arch?.optJSONArray("input_modalities")
+                val inputVision = if (inputModalities != null) {
+                    (0 until inputModalities.length()).any { 
+                        inputModalities.optString(it).contains("image", true) 
+                    }
+                } else false
+                
+                // 3. Model ID patterns (catches kimi-vl, glm-4v, pixtral, etc.)
+                val visionIdPatterns = listOf(
+                    "-vl", "vision", "pixtral", "llava", "internvl",
+                    "qwen2-vl", "qwen-vl", "gemini-pro-vision", "gemini-2",
+                    "gpt-4o", "gpt-4-turbo", "gpt-4-vision", "claude-3",
+                    "gemini-1.5", "gemini-2.0", "gemini-2.5"
+                )
+                val idVision = visionIdPatterns.any { idLower.contains(it) }
+                
+                // 4. Description mentions vision/image capabilities
+                val descVision = desc.contains("vision") || desc.contains("image input") 
+                    || desc.contains("multimodal") || desc.contains("visual")
+                
+                val hasVision = modalityVision || inputVision || idVision || descVision
                 
                 // Category inference
                 val category = when {

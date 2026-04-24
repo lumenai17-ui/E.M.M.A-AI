@@ -174,7 +174,7 @@ class VisionRecorder(private val context: Context) {
                     val meta = frameMetadata[i]
                     val canvas = Canvas(bitmap)
                     meta.gpsAddress?.let { addr ->
-                        canvas.drawText("📍 $addr", 20f, 50f, overlayPaint!!)
+                        canvas.drawText(addr, 20f, 50f, overlayPaint!!)
                     }
                     meta.aiText?.let { text ->
                         val lines = text.take(120).chunked(40)

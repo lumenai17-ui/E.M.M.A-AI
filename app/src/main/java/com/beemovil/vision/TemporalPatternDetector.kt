@@ -103,25 +103,25 @@ class TemporalPatternDetector {
         return when (mode) {
             VisionMode.AGENT -> {
                 if (entity.contains("persona") || entity.contains("vehículo") || entity.contains("carro")) {
-                    "⚠️ \"$entity\" ha estado presente por ${durationSec}s ($count frames)"
+                    "ATENCION: \"$entity\" ha estado presente por ${durationSec}s ($count frames)"
                 } else ""
             }
             VisionMode.DASHCAM -> {
                 if (entity.contains("semáforo rojo") && durationSec > 20) {
-                    "🚦 Llevas ${durationSec}s en semáforo rojo"
+                    "SEMAFORO: Llevas ${durationSec}s en semaforo rojo"
                 } else if (entity.contains("tráfico") && count > 3) {
-                    "🚗 Tráfico detectado por ${durationSec}s"
+                    "TRAFICO: Trafico detectado por ${durationSec}s"
                 } else ""
             }
             VisionMode.SHOPPING -> {
                 if (entity.startsWith("producto:")) {
                     val product = entity.removePrefix("producto:")
-                    "🛒 Has visto \"$product\" ${count} veces"
+                    "PRODUCTO: Has visto \"$product\" ${count} veces"
                 } else ""
             }
             else -> {
                 if (count > 4) {
-                    "📌 \"$entity\" presente por ${durationSec}s"
+                    "PATRON: \"$entity\" presente por ${durationSec}s"
                 } else ""
             }
         }
@@ -145,7 +145,7 @@ class TemporalPatternDetector {
                 occurrences = prices.size,
                 totalFrames = results.size,
                 durationSeconds = 0,
-                alert = "💰 El precio $direction de \$${String.format("%.2f", first)} a \$${String.format("%.2f", last)}"
+                alert = "PRECIO: El precio $direction de \$${String.format("%.2f", first)} a \$${String.format("%.2f", last)}"
             )
         } else null
     }

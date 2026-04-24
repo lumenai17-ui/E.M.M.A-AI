@@ -82,7 +82,7 @@ class SessionSummaryGenerator(private val context: Context) {
         try {
             // 1. BeeMemoryDB (cross-app, shown to main E.M.M.A. chat)
             val memoryDB = BeeMemoryDB(context)
-            memoryDB.saveMemory("📝 Vision (${summary.mode.name}): ${summary.text}")
+            memoryDB.saveMemory("Vision (${summary.mode.name}): ${summary.text}")
 
             // 2. OfflineContextCache (GPS-indexed, 90 days)
             val cache = OfflineContextCache.getInstance(context)

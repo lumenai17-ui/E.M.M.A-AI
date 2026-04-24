@@ -44,7 +44,7 @@ class VisionMemoryManager(private val context: Context) {
         // V8: Past session summaries for this location
         val sessionSummary = offlineCache.get(lat, lng, type = "session_summary")
         if (sessionSummary.isNotBlank()) {
-            parts.add("📝 Sesión anterior: ${sessionSummary.take(150)}")
+            parts.add("Sesion anterior: ${sessionSummary.take(150)}")
         }
 
         // 1. Offline cache: any mode's data for this location (cross-mode!)
@@ -110,7 +110,7 @@ class VisionMemoryManager(private val context: Context) {
         val notable = isNotable(result, mode)
         if (notable) {
             val memoryFragment = buildString {
-                if (address.isNotBlank()) append("📍 $address: ")
+                if (address.isNotBlank()) append("$address: ")
                 append(result.take(150))
                 append(" [${mode.name}]")
             }
@@ -154,7 +154,7 @@ class VisionMemoryManager(private val context: Context) {
     fun getStats(): String {
         val cacheCount = offlineCache.entryCount()
         val memCount = memoryDB.getMemoryCount()
-        return "📊 $cacheCount cached · $memCount memories"
+        return "$cacheCount cached | $memCount memories"
     }
 
     /** V9: Get stats as map for dashboard */

@@ -36,7 +36,7 @@ class PlaceProfileManager(private val context: Context) {
     ) {
         /** Generate natural language context for prompt injection */
         fun toPromptContext(): String = buildString {
-            append("📍 LUGAR CONOCIDO: $address\n")
+            append("LUGAR CONOCIDO: $address\n")
             append("• Visitas: $visitCount")
             val daysAgo = ((System.currentTimeMillis() - lastVisit) / 86_400_000).toInt()
             if (daysAgo > 0) append(" (última hace ${daysAgo}d)")
