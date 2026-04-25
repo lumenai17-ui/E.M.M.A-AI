@@ -29,8 +29,8 @@ android {
         applicationId = "com.beemovil.emma"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "6.0.0"  // Sprint 7: Production Release
+        versionCode = 5
+        versionName = "7.0.0"  // Voice Intelligence + LifeStream
 
         // Multidex for 65K+ method count
         multiDexEnabled = true

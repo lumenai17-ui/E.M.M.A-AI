@@ -212,45 +212,109 @@ Este documento traza las fases precisas para convertir la herencia de Bee en una
 
 ---
 
+## 🗣️ FASE 13.5: Voice Intelligence Suite — [COMPLETADO]
+*Meta: Convertir a E.M.M.A. en un asistente de voz conversacional con wake word, pipeline STT→LLM→TTS, y gestión de backends de conversación.*
+
+- **Sub-fase V3: ConversationEngine:** [COMPLETADO] Motor de conversación con loop STT→LLM→TTS, backends intercambiables (Pipeline/Offline), estado-máquina (IDLE/LISTENING/PROCESSING/SPEAKING).
+- **Sub-fase V4: Wake Word ("Hello Emma"):** [COMPLETADO] WakeWordService con SpeechRecognizer nativo, detección fuzzy ("hello emma", "hola emma"), activación headless con saludo aleatorio.
+- **Sub-fase V5: Nova TTS (Pollinations):** [COMPLETADO] TTS neural premium via Pollinations.ai con 6 voces (Alloy, Echo, Fable, Onyx, Nova, Shimmer), soporte multilingüe, fallback a Android TTS nativo.
+
+---
+
+## 🧹 FASE 13.7: Gemini Decommissioning & ConversationScreen UX — [COMPLETADO]
+*Meta: Eliminar la integración inestable de Google AI/Gemini para mejorar estabilidad, y mejorar la UX de la pantalla de conversación.*
+
+- **Gemini Removal (-479 líneas):** [COMPLETADO]
+  - Eliminado `GeminiLiveBackend.kt`
+  - Limpiado 7 archivos: EmmaEngine, SettingsScreen, SecurePrefs, DiagnosticsPlugin, ConversationEngine, ConversationBackend, OpenAiCompatibleProvider
+  - Validado APK sin Gemini: build exitoso, sin errores runtime
+- **ConversationScreen V8:** [COMPLETADO]
+  - Copy/Share buttons por turno de conversación
+  - Long-press para copiar mensajes individuales (combinedClickable)
+  - Backend indicator automático (Online/Offline) reemplaza dropdown
+- **FIX: SelectionContainer+LazyColumn Freeze:** [COMPLETADO]
+  - Bug de Compose: `SelectionContainer` wrapping `LazyColumn` causa ANR. Removido wrapper, mantenido long-press copy.
+
+---
+
+## 🌊 FASE 13.8: LifeStream Intelligence — [COMPLETADO]
+*Meta: Crear un sistema de doble log que captura el flujo de información del usuario (notificaciones, sensores, ubicación) para que Emma tenga conciencia contextual continua — separado del log de conversación.*
+
+- **Paso 1: Foundation + Notification Capture** [COMPLETADO]
+  - `LifeStreamEntry.kt`: Room Entity con 4 indices (category, source, timestamp, isRead)
+  - `LifeStreamDao.kt`: 15+ queries (recent, search, stats, purge)
+  - `LifeStreamDB.kt`: DB separada de ChatHistoryDB
+  - `LifeStreamManager.kt`: Singleton facade (log, query, stats, purge, enable/disable)
+  - `EmmaNotificationListener.kt`: NotificationListenerService con blacklist de seguridad (bancos, OTPs, autenticadores), source mapping para 16+ apps, OTP regex filtering
+  - Settings UI: Sección LifeStream con toggle, acceso a notificaciones, stats, borrar
+
+- **Paso 2: Life Signals** [COMPLETADO]
+  - `LifeSignalCollector.kt`: WorkManager cada 15 min
+  - GPS snapshots (FusedLocationProvider + Geocoder reverse lookup)
+  - Step counter (SensorManager TYPE_STEP_COUNTER con daily reset)
+  - Battery monitor (nivel, cargando, tipo de carga)
+  - Connectivity monitor (WiFi/Cellular, velocidad estimada)
+  - Auto-purge de entries expiradas en cada ciclo
+  - Auto-start en BeeMovilApp.onCreate() si LifeStream está habilitado
+
+- **Paso 3: Emma Integration** [COMPLETADO]
+  - `LifeStreamPlugin.kt`: 5 operaciones de consulta
+    - `get_notifications`: Por fuente (WhatsApp, Telegram, Gmail, etc.)
+    - `get_location`: Historial GPS con dirección
+    - `get_daily_stats`: Pasos, batería, conectividad, ubicación
+    - `search`: Full-text search en todo el LifeStream
+    - `overview`: Resumen general con stats
+  - Registrado en EmmaEngine como tool disponible para el LLM
+
+---
+
 ## 🔮 PRÓXIMAS FASES
 
-### FASE 14: Pollinations BYOP + Monetización
-*Meta: Implementar el modelo "Bring Your Own Pollen" para que cada usuario conecte su cuenta de Pollinations y pague sus propios créditos (video, música, TTS). Preparar la app para distribución comercial.*
+### FASE 14: Estabilización & Bug Hunting 🐛
+*Meta: Auditoría completa de la app para resolver todos los bugs conocidos y ocultos antes de continuar con nuevas features.*
+
+- [ ] **Conversación de voz**: Validar que la conversación no se freezee ni se corte
+- [ ] **Hello Emma**: Validar wake word con pantalla encendida, app cerrada, y app abierta
+- [ ] **LifeStream**: Validar capture de notificaciones reales + GPS + sensores
+- [ ] **Settings UI**: Validar todos los toggles y estados
+- [ ] **Chat principal**: Validar persistencia, adjuntos, copy/share
+- [ ] **Google Ecosystem**: Validar Gmail, Calendar, Tasks post-Gemini removal
+- [ ] **TTS**: Validar Nova/ElevenLabs fallback chain
+- [ ] **Background tasks**: Validar EmmaTaskService + WorkManager jobs
+- [ ] **Memory leaks**: Auditar ciclos de vida de services y engines
+
+### FASE 14.5: LifeStream Dashboard & CrossContext
+*Meta: Integrar LifeStream en el Dashboard principal y enriquecer el CrossContextEngine.*
+
+- [ ] **Dashboard Cards**: Cards inteligentes mostrando últimas notificaciones, ubicación, pasos
+- [ ] **CrossContext Enhancement**: Inyección light de top-3 señales LifeStream en contexto LLM
+- [ ] **LifeStream Viewer**: Pantalla completa con filtros, búsqueda, drill-down
+- [ ] **Smart Relevance Scoring**: Scoring de señales por behavioral patterns
+
+### FASE 15: Pollinations BYOP + Monetización
+*Meta: Implementar el modelo "Bring Your Own Pollen" para que cada usuario conecte su cuenta de Pollinations.*
 
 - [ ] **BYOP OAuth Flow:** Crear flujo de autorización con `pk_` app key → `enter.pollinations.ai/authorize` → redirect con `sk_` del usuario → guardar en SecurePrefs
-- [ ] **UI Settings BYOP:** Botón "Conectar cuenta Pollinations" en Settings con indicador de estado (conectado/desconectado/créditos)
+- [ ] **UI Settings BYOP:** Botón "Conectar cuenta Pollinations" en Settings
 - [ ] **Firma criptográfica** con keystore de producción
 - [ ] **Generación de AAB** para Play Store
 - [ ] **Vinculación con BEE Smart Portal** (suscripciones)
-- [ ] **Play Store listing** (screenshots, descripción, assets)
-
-### FASE 15: Refinamiento de Experiencia
-*Meta: Pulir la experiencia del usuario con features que marcan la diferencia entre un MVP y un producto premium.*
-
-- [ ] **Onboarding Wizard v2:** Flujo guiado que configura proveedor LLM + Pollinations + permisos en un solo wizard de 3 pasos
-- [ ] **Chat History Search & Export:** Búsqueda full-text en historial, exportar conversaciones completas como PDF premium
-- [ ] **Smart Retry on 402:** Si un plugin falla por créditos, ofrecer alternativa gratis automáticamente (ej: imagen en vez de video)
-- [ ] **Streaming Response UI:** Mostrar la respuesta del LLM token-by-token en la burbuja (efecto "typing" real)
-- [ ] **Widget de Home Screen** con insight del dashboard
 
 ### FASE 15.5: Agentic Loop — Workflows Multi-Paso
-*Meta: Convertir el motor de tools de E.M.M.A. de ejecución lineal (una ronda) a un ciclo agéntico que permita al LLM encadenar herramientas secuencialmente, donde el paso 2 depende del resultado del paso 1.*
+*Meta: Convertir el motor de tools de E.M.M.A. de ejecución lineal a un ciclo agéntico multi-herramienta.*
 
-- [ ] **Agentic Loop en EmmaEngine:** Cambiar `processUserMessage()` de ejecución lineal a `while` loop: ejecutar tools → devolver resultados al LLM → si pide más tools → ejecutarlos → repetir hasta que el LLM responda solo con texto. Máximo N iteraciones para evitar loops infinitos.
-- [ ] **Workflows habilitados:**
-  - Generar imagen → insertarla en PDF → adjuntarla a email
-  - Scraping web → analizar datos → exportar CSV
-  - Componer email → adjuntar archivo generado previamente
-  - Buscar contacto → enviar WhatsApp con documento adjunto
-- [ ] **Progress UI:** Mostrar al usuario cada paso del workflow en tiempo real: "Paso 1/3: Generando imagen... → Paso 2/3: Creando PDF... → Paso 3/3: Abriendo email..."
-- [ ] **Guard Rails:** Límite de rondas (ej: max 5), timeout global por workflow, detección de loops repetitivos
+- [ ] **Agentic Loop en EmmaEngine:** while loop de tool calling (max N iteraciones)
+- [ ] **Workflows habilitados:** Generar imagen → PDF → email, Scraping → análisis → CSV
+- [ ] **Progress UI:** Mostrar cada paso del workflow en tiempo real
+- [ ] **Guard Rails:** Límite de rondas, timeout global, detección de loops
 
 ### FASE 16: Expansión de Capacidades
-*Meta: Nuevas integraciones y modos de operación que amplían el alcance de E.M.M.A.*
+*Meta: Nuevas integraciones y modos de operación.*
 
-- [ ] **Integración Google Drive completa** (browse, upload, download desde chat)
-- [ ] **Modo offline mejorado** (caché de respuestas, queue de acciones)
-- [ ] **Notificaciones proactivas** (clima, recordatorios, emails)
-- [ ] **Multi-modal input:** Cámara en vivo → análisis visual continuo
-- [ ] **Agent Marketplace:** Compartir/importar configuraciones de agentes personalizados
-- [ ] **Explorador de Archivos EMMA:** Pestaña con acceso a Downloads/EMMA/ organizado por tipo (imágenes, videos, documentos, música)
+- [ ] **Streaming Response UI:** Token-by-token en burbuja ("typing" real)
+- [ ] **Smart Retry on 402:** Alternativa gratis automática si falla por créditos
+- [ ] **Widget de Home Screen** con insight del dashboard
+- [ ] **Integración Google Drive completa** (browse, upload, download)
+- [ ] **Modo offline mejorado** (caché de respuestas, queue)
+- [ ] **Agent Marketplace:** Compartir/importar agentes personalizados
+- [ ] **Explorador de Archivos EMMA** organizado por tipo

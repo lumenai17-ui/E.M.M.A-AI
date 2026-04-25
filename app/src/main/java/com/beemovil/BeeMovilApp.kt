@@ -47,7 +47,7 @@ class BeeMovilApp : Application() {
                     appendLine("Thread: \${thread.name}")
                     appendLine("Android: \${android.os.Build.VERSION.RELEASE} (SDK \${android.os.Build.VERSION.SDK_INT})")
                     appendLine("Device: \${android.os.Build.MANUFACTURER} \${android.os.Build.MODEL}")
-                    appendLine("App: v4.2.7")
+                    appendLine("App: v7.0.0")
                     appendLine("---")
                     appendLine(throwable.stackTraceToString())
                 })
