@@ -801,22 +801,42 @@ fun ConversationTurnCard(
                         val isImage = ext in listOf("png", "jpg", "jpeg", "webp", "gif")
                         
                         if (isImage) {
-                            coil.compose.AsyncImage(
-                                model = java.io.File(path),
-                                contentDescription = "Imagen generada",
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 200.dp)
-                                    .clip(RoundedCornerShape(8.dp)),
-                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "📁 Imagen guardada: ${java.io.File(path).name}",
-                                color = textPrimary.copy(alpha = 0.9f),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium
-                            )
+                            Surface(
+                                color = Color.Transparent,
+                                modifier = Modifier.clickable {
+                                    try {
+                                        val fileUri = androidx.core.content.FileProvider.getUriForFile(
+                                            context, "${context.packageName}.fileprovider", java.io.File(path)
+                                        )
+                                        val intent = Intent(Intent.ACTION_VIEW).apply {
+                                            setDataAndType(fileUri, "image/*")
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        }
+                                        context.startActivity(intent)
+                                    } catch (e: Exception) {
+                                        android.widget.Toast.makeText(context, "Error al abrir: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            ) {
+                                Column {
+                                    coil.compose.AsyncImage(
+                                        model = java.io.File(path),
+                                        contentDescription = "Imagen generada",
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(max = 200.dp)
+                                            .clip(RoundedCornerShape(8.dp)),
+                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "🖼️ Toca para ver completo",
+                                        color = textPrimary.copy(alpha = 0.9f),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
                         } else {
                             Surface(
                                 color = accent.copy(alpha = 0.15f),
