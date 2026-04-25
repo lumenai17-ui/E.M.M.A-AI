@@ -140,6 +140,27 @@ fun ConversationScreen(
         }
     }
 
+    // V4 Fix: Auto-start when triggered by wake word ("Hello Emma")
+    LaunchedEffect(Unit) {
+        if (viewModel.autoStartConversation.value) {
+            viewModel.autoStartConversation.value = false // Consume flag
+            // Brief delay to let UI compose
+            delay(500)
+            val backend = engine.backends.find { it.id == selectedBackendId }
+                ?: engine.getDefaultBackend()
+            val config = ConversationConfig(
+                autoListenAfterTTS = autoListen,
+                language = java.util.Locale.getDefault().toLanguageTag(),
+                speakResponses = !isMuted,
+                llmProvider = viewModel.currentProvider.value,
+                llmModel = viewModel.currentModel.value,
+                threadId = viewModel.activeThreadId.value,
+                agentId = viewModel.activeAgentId.value
+            )
+            engine.start(backend, config)
+        }
+    }
+
     // Cleanup on exit
     DisposableEffect(Unit) {
         onDispose {

@@ -214,10 +214,26 @@ class MainActivity : ComponentActivity() {
         handleWakeWordIntent(intent)
     }
 
-    /** V4: Handle wake word detection — auto-navigate to conversation */
+    /** V4: Handle wake word detection — auto-navigate to conversation + auto-start */
     private fun handleWakeWordIntent(incomingIntent: Intent?) {
         if (incomingIntent?.action == com.beemovil.service.WakeWordService.ACTION_WAKE_DETECTED) {
-            android.util.Log.i("MainActivity", "🎯 Wake word intent received — opening conversation")
+            android.util.Log.i("MainActivity", "🎯 Wake word intent received — opening conversation (auto-start)")
+
+            // Turn screen on and show over lock screen
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                setShowWhenLocked(true)
+                setTurnScreenOn(true)
+            } else {
+                @Suppress("DEPRECATION")
+                window.addFlags(
+                    android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                    android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                    android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                )
+            }
+
+            // Set flag for ConversationScreen to auto-start
+            viewModel.autoStartConversation.value = true
             viewModel.currentScreen.value = "conversation"
         }
     }

@@ -80,30 +80,7 @@ class WakeWordService : Service() {
         // Create and start engine
         wakeEngine = NativeWakeWordEngine(applicationContext).also { engine ->
             engine.start(
-                onWakeWordDetected = {
-                    Log.i(TAG, "🎯 WAKE WORD DETECTED — launching conversation")
-                    updateNotification("¡Hello Emma detectado! Abriendo...")
-
-                    // Send broadcast to open app
-                    val launchIntent = Intent(applicationContext, MainActivity::class.java).apply {
-                        action = ACTION_WAKE_DETECTED
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                                Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                                Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    }
-                    startActivity(launchIntent)
-
-                    // Re-start listening after a delay (conversation will claim mic via arbiter)
-                    android.os.Handler(mainLooper).postDelayed({
-                        if (isRunning) {
-                            updateNotification("Escuchando \"Hello Emma\"...")
-                            wakeEngine?.start(
-                                onWakeWordDetected = { /* recursive via service restart */ },
-                                onError = { err -> Log.w(TAG, "Wake re-start error: $err") }
-                            )
-                        }
-                    }, 10000) // 10s delay for conversation to finish
-                },
+                onWakeWordDetected = { onWakeDetected() },
                 onError = { error ->
                     Log.w(TAG, "Wake word error: $error")
                     updateNotification("⚠️ $error — Reintentando...")
@@ -112,6 +89,43 @@ class WakeWordService : Service() {
         }
 
         isRunning = true
+    }
+
+    /** Called when "Hello Emma" is detected — launch app and restart listening */
+    private fun onWakeDetected() {
+        Log.i(TAG, "🎯 WAKE WORD DETECTED — launching conversation")
+        updateNotification("¡Hello Emma detectado! Abriendo...")
+
+        // Launch app with lock screen flags + auto_start
+        val launchIntent = Intent(applicationContext, MainActivity::class.java).apply {
+            action = ACTION_WAKE_DETECTED
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP
+            // Signal ConversationScreen to auto-start listening
+            putExtra("auto_start", true)
+            // Lock screen support
+            addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+        }
+
+        // Turn screen on for lock screen wake
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            launchIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+
+        startActivity(launchIntent)
+
+        // Re-start listening after a delay (conversation will claim mic via arbiter)
+        android.os.Handler(mainLooper).postDelayed({
+            if (isRunning) {
+                updateNotification("Escuchando \"Hello Emma\"...")
+                // Fix: Use same callback — not empty!
+                wakeEngine?.start(
+                    onWakeWordDetected = { onWakeDetected() },
+                    onError = { err -> Log.w(TAG, "Wake re-start error: $err") }
+                )
+            }
+        }, 15000) // 15s delay for conversation to finish
     }
 
     private fun stopWakeWordDetection() {

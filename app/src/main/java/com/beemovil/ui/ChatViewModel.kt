@@ -318,6 +318,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     // Navigation and status
     // UI-08: Boot siempre en Dashboard. Share Intent lo sobreescribe en MainActivity.
     val currentScreen = mutableStateOf("dashboard")
+    /** V4: Flag set by wake word to auto-start conversation engine */
+    val autoStartConversation = mutableStateOf(false)
     val browserUrl = mutableStateOf("https://www.google.com")
     val showBrowser = mutableStateOf(false)
     val browserAgentStatusText = mutableStateOf("Desconectado")

@@ -172,7 +172,9 @@ class GeminiLiveBackend(
             // Build request body
             val requestBody = buildRequestBody()
 
-            Log.d(TAG, "Calling Gemini: $model (${conversationHistory.size} messages)")
+            val fullUrl = "$BASE_URL/$model:generateContent?key=${apiKey.take(8)}..."
+            Log.i(TAG, "Calling Gemini: $fullUrl (${conversationHistory.size} messages)")
+            Log.d(TAG, "Request body: ${requestBody.toString().take(500)}")
 
             connection.outputStream.use { os ->
                 os.write(requestBody.toString().toByteArray())
@@ -200,8 +202,15 @@ class GeminiLiveBackend(
                 BufferedReader(InputStreamReader(inputStream)).readText()
             }
 
+            Log.d(TAG, "Gemini response (${responseBody.length} chars): ${responseBody.take(300)}")
             return parseGeminiResponse(responseBody)
 
+        } catch (e: java.net.UnknownHostException) {
+            Log.e(TAG, "No internet: ${e.message}")
+            throw Exception("Sin conexión a internet")
+        } catch (e: java.net.SocketTimeoutException) {
+            Log.e(TAG, "Timeout: ${e.message}")
+            throw Exception("Tiempo de espera agotado con Gemini")
         } finally {
             connection.disconnect()
         }
