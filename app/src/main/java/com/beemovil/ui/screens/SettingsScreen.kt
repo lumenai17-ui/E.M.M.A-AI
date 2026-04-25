@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -1217,6 +1218,150 @@ fun SettingsScreen(
                 Text(
                     "⚡ Usa SpeechRecognizer nativo. Consume batería moderada.\n" +
                     "💡 Tip: Diga \"Hello Emma\" o \"Hola Emma\" para despertar el agente.",
+                    fontSize = 10.sp, color = textSecondary.copy(alpha = 0.7f)
+                )
+            }
+
+            // ═══════════════════════════════════════
+            // LIFESTREAM INTELLIGENCE
+            // ═══════════════════════════════════════
+            SectionCard {
+                SectionTitle("🌊 LIFESTREAM")
+                Text("Captura notificaciones, GPS y sensores para que Emma tenga contexto", fontSize = 12.sp, color = textSecondary)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Enable/Disable toggle
+                var lifeStreamEnabled by remember { mutableStateOf(com.beemovil.lifestream.LifeStreamManager.isEnabled(context)) }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("Capturar señales", fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = textPrimary)
+                        Text("Notificaciones, ubicación, sistema", fontSize = 11.sp, color = textSecondary)
+                    }
+                    Switch(
+                        checked = lifeStreamEnabled,
+                        onCheckedChange = { enabled ->
+                            lifeStreamEnabled = enabled
+                            com.beemovil.lifestream.LifeStreamManager.setEnabled(context, enabled)
+                            Toast.makeText(context, if (enabled) "🌊 LifeStream activado" else "LifeStream desactivado", Toast.LENGTH_SHORT).show()
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = if (isDark) BeeBlack else Color.White,
+                            checkedTrackColor = Color(0xFF0EA5E9),
+                            uncheckedTrackColor = textSecondary.copy(alpha = 0.3f)
+                        )
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Notification Access status
+                val hasNotifAccess = remember { com.beemovil.lifestream.LifeStreamManager.hasNotificationAccess(context) }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(if (hasNotifAccess) Color(0xFF4CAF50) else Color(0xFFF44336))
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        if (hasNotifAccess) "✅ Acceso a notificaciones activo"
+                        else "⚠️ Requiere permiso de notificaciones",
+                        fontSize = 11.sp,
+                        color = if (hasNotifAccess) Color(0xFF4CAF50) else Color(0xFFF44336)
+                    )
+                }
+
+                if (!hasNotifAccess) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Button(
+                        onClick = {
+                            try {
+                                val intent = android.content.Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "Abre: Settings → Apps → Special Access → Notification Access", Toast.LENGTH_LONG).show()
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF0EA5E9),
+                            contentColor = Color.White
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(Icons.Filled.Notifications, "Notifications", modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Activar Acceso a Notificaciones", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Stats
+                var lifeStreamCount by remember { mutableStateOf(0) }
+                var lifeStreamUnread by remember { mutableStateOf(0) }
+                LaunchedEffect(lifeStreamEnabled) {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        try {
+                            val dao = com.beemovil.lifestream.LifeStreamDB.getDatabase(context).lifeStreamDao()
+                            lifeStreamCount = dao.count()
+                            lifeStreamUnread = dao.countUnread()
+                        } catch (_: Exception) {}
+                    }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            if (isDark) Color(0xFF0D1520) else Color(0xFFF0F9FF),
+                            RoundedCornerShape(8.dp)
+                        )
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("$lifeStreamCount", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Color(0xFF0EA5E9))
+                        Text("Señales", fontSize = 10.sp, color = textSecondary)
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("$lifeStreamUnread", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Color(0xFFF59E0B))
+                        Text("Sin leer", fontSize = 10.sp, color = textSecondary)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Clear all data button
+                OutlinedButton(
+                    onClick = {
+                        scope.launch {
+                            com.beemovil.lifestream.LifeStreamManager.clearAll(context)
+                            lifeStreamCount = 0
+                            lifeStreamUnread = 0
+                            Toast.makeText(context, "🗑️ LifeStream limpiado", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, Color(0xFFF44336).copy(alpha = 0.5f))
+                ) {
+                    Icon(Icons.Filled.DeleteForever, "Clear", tint = Color(0xFFF44336), modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Borrar todo el log", color = Color(0xFFF44336), fontSize = 13.sp)
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "🔒 Nunca se captura: bancos, OTPs, autenticadores\n" +
+                    "📱 Se captura: WhatsApp, Telegram, Gmail, Calendar, etc.\n" +
+                    "⏳ Auto-limpieza: 72h notificaciones, 24h GPS, 7d sensores",
                     fontSize = 10.sp, color = textSecondary.copy(alpha = 0.7f)
                 )
             }

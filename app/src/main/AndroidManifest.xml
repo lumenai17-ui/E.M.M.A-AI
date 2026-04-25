@@ -67,6 +67,9 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
+    <!-- LifeStream: Background location for GPS snapshots -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+
     <application
         android:name=".BeeMovilApp"
         android:allowBackup="false"
@@ -133,6 +136,16 @@
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="microphone" />
+
+        <!-- LifeStream: Notification Listener (captures system notifications) -->
+        <service
+            android:name=".lifestream.EmmaNotificationListener"
+            android:exported="true"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
 
         <!-- FileProvider para compartir archivos exportables autogenerados seguros (Fase 10.3) -->
         <provider
