@@ -629,30 +629,70 @@ class EmmaEngine(private val context: Context) {
         val preset = forcedProvider ?: prefs.getString("selected_provider", "openrouter") ?: "openrouter"
         val model = forcedModel ?: prefs.getString("selected_model", "openai/gpt-4o-mini") ?: "openai/gpt-4o-mini"
         
-        val key = securePrefs.getString(when(preset) {
+        val keyName = when(preset) {
             "openrouter" -> "openrouter_api_key"
             "ollama" -> "ollama_api_key"
             "google_ai" -> "google_ai_key"
             else -> "openrouter_api_key"
-        }, "") ?: ""
+        }
+        val key = securePrefs.getString(keyName, "") ?: ""
+
+        // Smart fallback: if selected provider has no key, try others that do
+        val effectivePreset: String
+        val effectiveKey: String
+        val effectiveModel: String
+        
+        if (key.isBlank() && forcedProvider == null) {
+            Log.w(TAG, "Provider '$preset' has no API key ($keyName is empty). Trying fallback providers...")
+            
+            // Try providers in priority order: google_ai → openrouter → ollama
+            val fallbackOrder = listOf(
+                Triple("google_ai", "google_ai_key", "gemini-2.0-flash"),
+                Triple("openrouter", "openrouter_api_key", "openai/gpt-4o-mini"),
+                Triple("ollama", "ollama_api_key", "llama3.3")
+            )
+            
+            val fallback = fallbackOrder.firstOrNull { (_, fKeyName, _) ->
+                val fKey = securePrefs.getString(fKeyName, "") ?: ""
+                fKey.isNotBlank()
+            }
+            
+            if (fallback != null) {
+                effectivePreset = fallback.first
+                effectiveKey = securePrefs.getString(fallback.second, "") ?: ""
+                effectiveModel = fallback.third
+                Log.i(TAG, "✅ Auto-fallback to '$effectivePreset' (has key, ${effectiveKey.length} chars)")
+            } else {
+                effectivePreset = preset
+                effectiveKey = key
+                effectiveModel = model
+            }
+        } else {
+            effectivePreset = preset
+            effectiveKey = key
+            effectiveModel = if (forcedModel != null) model else model
+        }
 
         return try {
-            val provider = LlmFactory.createProvider(preset, key, model)
+            val provider = LlmFactory.createProvider(effectivePreset, effectiveKey, effectiveModel)
             val result = provider.complete(messages, tools)
             Pair(result.text ?: "", result.toolCalls)
         } catch (e: Exception) {
-            Log.e(TAG, "executeProvider falló: preset=$preset model=$model keyLen=${key.length}", e)
+            Log.e(TAG, "executeProvider falló: preset=$effectivePreset model=$effectiveModel keyLen=${effectiveKey.length}", e)
             
-            // Auto-retry con defaults si el modelo forzado falló
-            if (forcedProvider != null || forcedModel != null) {
-                try {
-                    Log.w(TAG, "Reintentando con provider por defecto...")
-                    val defaultKey = securePrefs.getString("openrouter_api_key", "") ?: ""
-                    val fallback = LlmFactory.createProvider("openrouter", defaultKey, "openai/gpt-4o-mini")
-                    val result = fallback.complete(messages, tools)
-                    return Pair(result.text ?: "", result.toolCalls)
-                } catch (retryEx: Exception) {
-                    Log.e(TAG, "Retry también falló", retryEx)
+            // Auto-retry with a different provider if the current one failed
+            if (effectiveKey.isNotBlank()) {
+                // Key exists but call failed — try OpenRouter as last resort
+                val orKey = securePrefs.getString("openrouter_api_key", "") ?: ""
+                if (orKey.isNotBlank() && effectivePreset != "openrouter") {
+                    try {
+                        Log.w(TAG, "Reintentando con OpenRouter fallback...")
+                        val fallback = LlmFactory.createProvider("openrouter", orKey, "openai/gpt-4o-mini")
+                        val result = fallback.complete(messages, tools)
+                        return Pair(result.text ?: "", result.toolCalls)
+                    } catch (retryEx: Exception) {
+                        Log.e(TAG, "Retry con OpenRouter también falló", retryEx)
+                    }
                 }
             }
 
@@ -662,13 +702,20 @@ class EmmaEngine(private val context: Context) {
                 throw CancellationException("Connection interrupted")
             }
             
+            val providerLabel = when(effectivePreset) {
+                "openrouter" -> "OpenRouter"
+                "ollama" -> "Ollama Cloud"
+                "google_ai" -> "Google AI"
+                else -> effectivePreset
+            }
+            
             val friendlyMsg = when {
-                key.isBlank() -> "⚠️ No hay API key configurada. Ve a Settings y agrega tu key."
-                e.message?.contains("timeout", true) == true -> "⚠️ El servidor tardó demasiado. Intenta de nuevo."
-                e.message?.contains("401", false) == true -> "⚠️ API key inválida o expirada. Revísala en Settings."
-                e.message?.contains("429", false) == true -> "⚠️ Límite de peticiones alcanzado. Espera un momento."
+                effectiveKey.isBlank() -> "⚠️ No hay API key para $providerLabel. Ve a Settings → Proveedor AI y configura tu key."
+                e.message?.contains("timeout", true) == true -> "⚠️ $providerLabel tardó demasiado. Intenta de nuevo."
+                e.message?.contains("401", false) == true -> "⚠️ API key de $providerLabel inválida o expirada. Revísala en Settings."
+                e.message?.contains("429", false) == true -> "⚠️ $providerLabel: límite de peticiones alcanzado. Espera un momento."
                 e.message?.contains("Unable to resolve host", true) == true -> "⚠️ Sin conexión a internet."
-                else -> "⚠️ Error de conexión con el modelo. Intenta de nuevo. (${e.message?.take(80)})"
+                else -> "⚠️ Error con $providerLabel: ${e.message?.take(80)}"
             }
             Pair(friendlyMsg, emptyList())
         }

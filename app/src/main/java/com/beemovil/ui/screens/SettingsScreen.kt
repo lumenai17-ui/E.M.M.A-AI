@@ -353,8 +353,12 @@ fun SettingsScreen(
                                 else -> "ollama_api_key"
                             }
                             securePrefs.edit().putString(prefKey, key).apply()
+                            // Verify the key was actually written
+                            val verify = securePrefs.getString(prefKey, "") ?: ""
+                            android.util.Log.i("SettingsScreen", "Key saved: $prefKey (${key.length} chars) → verify read: ${verify.length} chars, match=${verify == key}")
                             viewModel.updateApiKey(selectedProvider, key)
-                            Toast.makeText(context, "Key guardada", Toast.LENGTH_SHORT).show()
+                            val providerName = when(selectedProvider) { "openrouter" -> "OpenRouter"; "google_ai" -> "Google AI"; else -> "Ollama" }
+                            Toast.makeText(context, if (verify == key) "✅ Key $providerName guardada" else "⚠️ Error guardando key", Toast.LENGTH_SHORT).show()
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = textSecondary.copy(alpha = 0.5f)),
                         modifier = Modifier.fillMaxWidth(),
@@ -1223,10 +1227,18 @@ fun SettingsScreen(
 
                 Button(
                     onClick = {
-                        securePrefs.edit().putString("google_ai_key", googleKey.trim()).apply()
+                        val trimmedKey = googleKey.trim()
+                        securePrefs.edit().putString("google_ai_key", trimmedKey).apply()
+                        // Sync with the Provider Chip's state variable
+                        googleAiKey = trimmedKey
+                        // Verify write
+                        val verify = securePrefs.getString("google_ai_key", "") ?: ""
+                        android.util.Log.i("SettingsScreen", "Gemini key saved: ${trimmedKey.length} chars → verify: ${verify.length} chars, match=${verify == trimmedKey}")
                         Toast.makeText(
                             context,
-                            if (googleKey.isNotBlank()) "Gemini Live activado" else "Gemini Live desactivado",
+                            if (verify == trimmedKey && trimmedKey.isNotBlank()) "✅ Gemini Live activado" 
+                            else if (trimmedKey.isBlank()) "Gemini Live desactivado"
+                            else "⚠️ Error guardando key",
                             Toast.LENGTH_SHORT
                         ).show()
                     },
