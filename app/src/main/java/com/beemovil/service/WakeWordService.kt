@@ -100,6 +100,25 @@ class WakeWordService : Service() {
         Log.i(TAG, "🎯 WAKE WORD DETECTED — launching conversation")
         updateNotification("¡Hello Emma detectado! Respondiendo...")
 
+        // ★ CRITICAL: Fully destroy the wake engine to release the microphone.
+        // The wake engine's SpeechRecognizer holds the mic — we must destroy it
+        // BEFORE creating a new SpeechRecognizer for headless listening.
+        try {
+            wakeEngine?.destroy()
+            wakeEngine = null
+            Log.i(TAG, "Wake engine destroyed — mic released for headless listening")
+        } catch (e: Exception) {
+            Log.w(TAG, "Error destroying wake engine: ${e.message}")
+        }
+
+        // Small delay to let the mic fully release
+        android.os.Handler(mainLooper).postDelayed({
+            proceedAfterWakeDetected()
+        }, 300)
+    }
+
+    /** Continue after wake engine is destroyed and mic is released */
+    private fun proceedAfterWakeDetected() {
         // 1. Wake screen if locked/off
         try {
             val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
@@ -109,49 +128,57 @@ class WakeWordService : Service() {
                 android.os.PowerManager.ON_AFTER_RELEASE,
                 "emma:wakeword"
             )
-            wakeLock.acquire(15000) // 15 second wake — enough for greeting + listen + response
+            wakeLock.acquire(30000) // 30 seconds — enough for greeting + listen + LLM + response
         } catch (e: Exception) {
             Log.w(TAG, "Failed to acquire wake lock: ${e.message}")
         }
 
-        // 2. Dismiss keyguard (lock screen) so the Activity can show
-        try {
-            val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                // Request dismiss — won't work if device has secure lock (PIN/fingerprint)
-                // but will work for swipe-to-unlock
-                Log.d(TAG, "Requesting keyguard dismiss")
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "KeyguardManager failed: ${e.message}")
-        }
-
-        // 3. Immediately greet the user via TTS (works even with screen off!)
+        // 2. Greet the user via TTS — wait for TTS engine to fully initialize
         val greetings = listOf("Hola, te escucho", "Dime", "¿Sí? Te escucho", "Aquí estoy")
         val greeting = greetings.random()
         try {
+            var ttsReady = false
             val tts = android.speech.tts.TextToSpeech(applicationContext) { status ->
                 if (status == android.speech.tts.TextToSpeech.SUCCESS) {
-                    Log.i(TAG, "Headless greeting: '$greeting'")
+                    ttsReady = true
+                    Log.i(TAG, "TTS engine ready — speaking greeting")
+                } else {
+                    Log.e(TAG, "TTS init failed with status=$status")
+                    // Even if TTS fails, start headless listening
+                    startHeadlessListening(null)
                 }
             }
-            // Small delay to let TTS init, then speak
+
+            // Wait for TTS init, then speak
             android.os.Handler(mainLooper).postDelayed({
-                tts.speak(greeting, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "wake_greeting")
-                tts.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
-                    override fun onStart(utteranceId: String?) {}
-                    override fun onDone(utteranceId: String?) {
-                        // 4. After greeting → start headless listening
-                        startHeadlessListening(tts)
-                    }
-                    @Deprecated("Deprecated in Java")
-                    override fun onError(utteranceId: String?) {
-                        startHeadlessListening(tts)
-                    }
-                })
-            }, 600)
+                if (ttsReady) {
+                    tts.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
+                        override fun onStart(utteranceId: String?) {
+                            Log.d(TAG, "Greeting started speaking")
+                        }
+                        override fun onDone(utteranceId: String?) {
+                            Log.d(TAG, "Greeting finished — starting headless listening")
+                            // Small delay after TTS to let audio output flush
+                            android.os.Handler(mainLooper).postDelayed({
+                                startHeadlessListening(tts)
+                            }, 500)
+                        }
+                        @Deprecated("Deprecated in Java")
+                        override fun onError(utteranceId: String?) {
+                            Log.w(TAG, "Greeting TTS error — starting headless listening anyway")
+                            startHeadlessListening(tts)
+                        }
+                    })
+                    tts.speak(greeting, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "wake_greeting")
+                    Log.i(TAG, "Greeting queued: '$greeting'")
+                } else {
+                    Log.w(TAG, "TTS not ready after 800ms — starting listening without greeting")
+                    startHeadlessListening(tts)
+                }
+            }, 800) // Give TTS 800ms to initialize
         } catch (e: Exception) {
             Log.e(TAG, "Headless TTS failed: ${e.message}")
+            startHeadlessListening(null)
         }
 
         // 5. Also try to launch Activity (will work if screen is on)
@@ -216,7 +243,7 @@ class WakeWordService : Service() {
      * Headless conversation: Listen via native STT → process with EmmaEngine → speak response.
      * Works entirely in the service — no Activity needed. Perfect for screen-off scenarios.
      */
-    private fun startHeadlessListening(tts: android.speech.tts.TextToSpeech) {
+    private fun startHeadlessListening(tts: android.speech.tts.TextToSpeech?) {
         Log.i(TAG, "Starting headless listening (screen-off mode)")
         updateNotification("🎤 Escuchando tu pregunta...")
 
@@ -288,8 +315,8 @@ class WakeWordService : Service() {
                                     .replace(Regex("[\\p{So}\\p{Cn}]"), "")
                                     .replace(Regex("[*_#`]"), "")
                                     .take(500)
-                                tts.speak(cleanResponse, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "wake_response")
-                                tts.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
+                                tts?.speak(cleanResponse, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "wake_response")
+                                tts?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
                                     override fun onStart(utteranceId: String?) {}
                                     override fun onDone(utteranceId: String?) {
                                         restartWakeWordAfterDelay(tts)
