@@ -17,6 +17,11 @@ class BeeMovilApp : Application() {
     /** Scope that lives as long as the app process — survives Activity/ViewModel destruction */
     val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
+    /** Lazy engine available to background services (WakeWordService headless mode) */
+    val emmaEngine: com.beemovil.core.engine.EmmaEngine by lazy {
+        com.beemovil.core.engine.EmmaEngine(this)
+    }
+
     override fun onCreate() {
         super.onCreate()
 
