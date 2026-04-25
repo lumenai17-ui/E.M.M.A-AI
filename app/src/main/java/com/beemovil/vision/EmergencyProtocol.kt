@@ -160,12 +160,26 @@ class EmergencyProtocol(private val context: Context) {
 
     private fun sendSms(number: String, message: String) {
         try {
-            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
-                data = Uri.parse("sms:$number")
-                putExtra("sms_body", message)
-                flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+            if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.SEND_SMS) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                // Background silent send
+                val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    context.getSystemService(android.telephony.SmsManager::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    android.telephony.SmsManager.getDefault()
+                }
+                smsManager?.sendTextMessage(number, null, message.take(160), null, null)
+                Log.i(TAG, "SMS sent silently in background to $number")
+            } else {
+                // Fallback to explicit intent if no permission
+                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                    data = Uri.parse("sms:$number")
+                    putExtra("sms_body", message)
+                    flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(intent)
+                Log.i(TAG, "SMS intent launched (no SEND_SMS permission)")
             }
-            context.startActivity(intent)
         } catch (e: Exception) {
             Log.e(TAG, "SMS send failed: ${e.message}")
         }

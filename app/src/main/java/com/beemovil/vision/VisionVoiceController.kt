@@ -158,10 +158,14 @@ class VisionVoiceController(
         voiceManager.startListening(
             language = java.util.Locale.getDefault().toLanguageTag(),
             onPartial = { partial ->
-                Log.d(TAG, "Partial: $partial")
+                if (com.beemovil.BuildConfig.DEBUG) {
+                    Log.d(TAG, "Partial: $partial")
+                }
             },
             onResult = { result ->
-                Log.d(TAG, "Speech result: $result")
+                if (com.beemovil.BuildConfig.DEBUG) {
+                    Log.d(TAG, "Speech result: $result")
+                }
                 setState(VoiceState.PROCESSING)
                 onSpeechResult?.invoke(result)
                 // Caller should process and then call narrate() with the response

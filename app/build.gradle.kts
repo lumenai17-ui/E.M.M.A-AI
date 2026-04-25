@@ -148,10 +148,6 @@ dependencies {
     // On-device LLM inference (Gemma 4 via LiteRT-LM — replaces deprecated MediaPipe GenAI)
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.9.0")
 
-    // Koog Framework (AI Agents KMP)
-    implementation("ai.koog:koog-agents:0.5.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
-
     // JavaScript Engine (Coding Sandbox)
     implementation("org.mozilla:rhino:1.7.14")
 

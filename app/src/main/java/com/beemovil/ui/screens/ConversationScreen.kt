@@ -4,11 +4,13 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -793,11 +795,93 @@ fun ConversationTurnCard(
                     )
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
-                    Text(
-                        text = turn.emmaText,
-                        color = textPrimary.copy(alpha = 0.9f),
-                        fontSize = 13.sp
-                    )
+                    if (turn.emmaText.startsWith("TOOL_CALL::file_generated::")) {
+                        val path = turn.emmaText.removePrefix("TOOL_CALL::file_generated::")
+                        val ext = path.substringAfterLast('.', "").lowercase()
+                        val isImage = ext in listOf("png", "jpg", "jpeg", "webp", "gif")
+                        
+                        if (isImage) {
+                            coil.compose.AsyncImage(
+                                model = java.io.File(path),
+                                contentDescription = "Imagen generada",
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 200.dp)
+                                    .clip(RoundedCornerShape(8.dp)),
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "📁 Imagen guardada: ${java.io.File(path).name}",
+                                color = textPrimary.copy(alpha = 0.9f),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        } else {
+                            Surface(
+                                color = accent.copy(alpha = 0.15f),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        try {
+                                            val fileUri = androidx.core.content.FileProvider.getUriForFile(
+                                                context, "${context.packageName}.fileprovider", java.io.File(path)
+                                            )
+                                            val mimeType = when(ext) {
+                                                "pdf" -> "application/pdf"
+                                                "html" -> "text/html"
+                                                "csv" -> "text/csv"
+                                                "txt" -> "text/plain"
+                                                else -> "*/*"
+                                            }
+                                            val intent = Intent(Intent.ACTION_VIEW).apply {
+                                                setDataAndType(fileUri, mimeType)
+                                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                            }
+                                            context.startActivity(intent)
+                                        } catch (e: Exception) {
+                                            android.widget.Toast.makeText(context, "Error al abrir: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(12.dp)) {
+                                    Icon(
+                                        imageVector = when(ext) {
+                                            "pdf" -> Icons.Filled.PictureAsPdf
+                                            "html" -> Icons.Filled.Language
+                                            "csv" -> Icons.Filled.TableChart
+                                            else -> Icons.Filled.InsertDriveFile
+                                        },
+                                        contentDescription = "Archivo",
+                                        tint = accent,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Abrir ${java.io.File(path).name}",
+                                        color = accent,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    } else if (turn.emmaText.startsWith("TOOL_CALL::open_browser::")) {
+                        val url = turn.emmaText.removePrefix("TOOL_CALL::open_browser::")
+                        Text(
+                            text = "🌐 Navegando a: $url",
+                            color = textPrimary.copy(alpha = 0.9f),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    } else {
+                        Text(
+                            text = turn.emmaText,
+                            color = textPrimary.copy(alpha = 0.9f),
+                            fontSize = 13.sp
+                        )
+                    }
                 }
             }
 

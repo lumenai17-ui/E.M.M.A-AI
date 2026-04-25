@@ -58,7 +58,7 @@ class LifeSignalCollector(
             }
 
             val constraints = Constraints.Builder()
-                .setRequiresBatteryNotLow(false) // Collect even on low battery
+                .setRequiresBatteryNotLow(true) // Don't drain battery if low
                 .build()
 
             val request = PeriodicWorkRequestBuilder<LifeSignalCollector>(

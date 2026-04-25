@@ -178,7 +178,9 @@ class NativeWakeWordEngine(
             val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
             if (!matches.isNullOrEmpty()) {
                 val text = matches.joinToString(" ")
-                Log.d(TAG, "Partial: $text")
+                if (com.beemovil.BuildConfig.DEBUG) {
+                    Log.d(TAG, "Partial: $text")
+                }
                 if (checkForWakeWord(text)) {
                     Log.i(TAG, "🎯 WAKE WORD DETECTED (partial): '$text'")
                     handleWakeWordDetected()
@@ -190,7 +192,9 @@ class NativeWakeWordEngine(
             val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
             if (!matches.isNullOrEmpty()) {
                 val text = matches.joinToString(" ")
-                Log.d(TAG, "Final: $text")
+                if (com.beemovil.BuildConfig.DEBUG) {
+                    Log.d(TAG, "Final: $text")
+                }
                 if (checkForWakeWord(text)) {
                     Log.i(TAG, "🎯 WAKE WORD DETECTED (final): '$text'")
                     handleWakeWordDetected()

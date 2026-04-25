@@ -405,7 +405,29 @@ class EmmaEngine(private val context: Context) {
                     Log.w(TAG, "Conexión interrumpida (app en background), no es falta de internet")
                     return@withContext ""
                 }
-                
+                val isNetworkError = e.message?.contains("Unable to resolve host", true) == true ||
+                                     e.message?.contains("timeout", true) == true ||
+                                     e.message?.contains("500", false) == true ||
+                                     e.message?.contains("502", false) == true ||
+                                     e.message?.contains("503", false) == true
+
+                if (isNetworkError && !isLocalProvider(forcedProvider)) {
+                    Log.w(TAG, "Activando Fallback Inteligente hacia modelo local (litertlm:gemma)")
+                    onProgress?.invoke("Servidor no disponible. Activando Modo Supervivencia Offline...")
+                    
+                    try {
+                        val activeTools = plugins.values.map { it.getToolDefinition() }
+                        val historySnapshot = historyMutex.withLock { messagesHistory.toList() }
+                        val (fallbackResponse, _) = executeProvider(historySnapshot, activeTools, "litertlm", "gemma")
+                        
+                        historyMutex.withLock { messagesHistory.add(ChatMessage("assistant", fallbackResponse)) }
+                        return@withContext "⚠️ [Modo Offline]\n$fallbackResponse"
+                    } catch (fallbackEx: Exception) {
+                        Log.e(TAG, "Fallback local también falló", fallbackEx)
+                        return@withContext "⚠️ Sin conexión a internet y el modelo local falló."
+                    }
+                }
+
                 val friendlyError = when {
                     e.message?.contains("Unable to resolve host", true) == true -> 
                         "Sin conexión a internet. Verifica tu red e intenta de nuevo."
