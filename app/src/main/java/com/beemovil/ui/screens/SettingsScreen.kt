@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -47,8 +48,10 @@ fun SettingsScreen(
 
     var openRouterKey by remember { mutableStateOf(securePrefs.getString("openrouter_api_key", "") ?: "") }
     var ollamaKey by remember { mutableStateOf(securePrefs.getString("ollama_api_key", "") ?: "") }
+    var googleAiKey by remember { mutableStateOf(securePrefs.getString("google_ai_key", "") ?: "") }
     var showOrKey by remember { mutableStateOf(false) }
     var showOlKey by remember { mutableStateOf(false) }
+    var showGaKey by remember { mutableStateOf(false) }
     var hfToken by remember { mutableStateOf(securePrefs.getString("huggingface_token", "") ?: "") }
     var showHfToken by remember { mutableStateOf(false) }
     var selectedProvider by remember { mutableStateOf(viewModel.currentProvider.value) }
@@ -260,10 +263,14 @@ fun SettingsScreen(
                 SectionTitle("PROVEEDOR AI")
                 Spacer(modifier = Modifier.height(8.dp))
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
                     ProviderChip("OpenRouter", "openrouter", selectedProvider) {
                         selectedProvider = it
                         selectedModel = LlmFactory.OPENROUTER.models.first().id
+                    }
+                    ProviderChip("Google AI", "google_ai", selectedProvider) {
+                        selectedProvider = it
+                        selectedModel = LlmFactory.GOOGLE_AI.models.first().id
                     }
                     ProviderChip("Ollama Cloud", "ollama", selectedProvider) {
                         selectedProvider = it
@@ -278,60 +285,83 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // API Key
-                val currentKey = if (selectedProvider == "openrouter") openRouterKey else ollamaKey
-                val showKey = if (selectedProvider == "openrouter") showOrKey else showOlKey
-
-                OutlinedTextField(
-                    value = currentKey,
-                    onValueChange = {
-                        if (selectedProvider == "openrouter") openRouterKey = it else ollamaKey = it
-                    },
-                    label = { Text("API Key") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
-                    trailingIcon = {
-                        IconButton(onClick = {
-                            if (selectedProvider == "openrouter") showOrKey = !showOrKey else showOlKey = !showOlKey
-                        }) {
-                            Icon(
-                                if (showKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                                "Toggle", tint = textSecondary
-                            )
-                        }
-                    },
-                    colors = fieldColors()
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Status
-                val hasKey = currentKey.isNotBlank()
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(
-                        if (hasKey) Color(0xFF4CAF50) else Color(0xFFF44336)
-                    ))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        if (hasKey) "API Key configurada" else "Sin API Key",
-                        fontSize = 12.sp, color = if (hasKey) Color(0xFF4CAF50) else Color(0xFFF44336)
-                    )
+                val currentKey = when (selectedProvider) {
+                    "openrouter" -> openRouterKey
+                    "google_ai" -> googleAiKey
+                    else -> ollamaKey
+                }
+                val showKey = when (selectedProvider) {
+                    "openrouter" -> showOrKey
+                    "google_ai" -> showGaKey
+                    else -> showOlKey
                 }
 
-                Spacer(modifier = Modifier.height(4.dp))
-                Button(
-                    onClick = {
-                        val key = if (selectedProvider == "openrouter") openRouterKey.trim() else ollamaKey.trim()
-                        val prefKey = if (selectedProvider == "openrouter") "openrouter_api_key" else "ollama_api_key"
-                        securePrefs.edit().putString(prefKey, key).apply()
-                        viewModel.updateApiKey(selectedProvider, key)
-                        Toast.makeText(context, "Key guardada", Toast.LENGTH_SHORT).show()
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = textSecondary.copy(alpha = 0.5f)),
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Text("Guardar Key", color = textPrimary, fontSize = 13.sp)
+                if (selectedProvider != "local") {
+                    OutlinedTextField(
+                        value = currentKey,
+                        onValueChange = {
+                            when (selectedProvider) {
+                                "openrouter" -> openRouterKey = it
+                                "google_ai" -> googleAiKey = it
+                                else -> ollamaKey = it
+                            }
+                        },
+                        label = { Text(if (selectedProvider == "google_ai") "Google AI API Key" else "API Key") },
+                        placeholder = { Text(if (selectedProvider == "google_ai") "AIzaSy..." else "", color = textSecondary) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = {
+                                when (selectedProvider) {
+                                    "openrouter" -> showOrKey = !showOrKey
+                                    "google_ai" -> showGaKey = !showGaKey
+                                    else -> showOlKey = !showOlKey
+                                }
+                            }) {
+                                Icon(
+                                    if (showKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                    "Toggle", tint = textSecondary
+                                )
+                            }
+                        },
+                        colors = fieldColors()
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Status
+                    val hasKey = currentKey.isNotBlank()
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(
+                            if (hasKey) Color(0xFF4CAF50) else Color(0xFFF44336)
+                        ))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            if (hasKey) "API Key configurada" else if (selectedProvider == "google_ai") "Obtén tu key gratis en aistudio.google.com/apikey" else "Sin API Key",
+                            fontSize = 12.sp, color = if (hasKey) Color(0xFF4CAF50) else Color(0xFFF44336)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Button(
+                        onClick = {
+                            val key = currentKey.trim()
+                            val prefKey = when (selectedProvider) {
+                                "openrouter" -> "openrouter_api_key"
+                                "google_ai" -> "google_ai_key"
+                                else -> "ollama_api_key"
+                            }
+                            securePrefs.edit().putString(prefKey, key).apply()
+                            viewModel.updateApiKey(selectedProvider, key)
+                            Toast.makeText(context, "Key guardada", Toast.LENGTH_SHORT).show()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = textSecondary.copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Guardar Key", color = textPrimary, fontSize = 13.sp)
+                    }
                 }
             }
 
@@ -358,6 +388,7 @@ fun SettingsScreen(
                             val cached = com.beemovil.llm.DynamicModelFetcher.getCachedOllamaModels(context)
                             cached.map { LlmFactory.ModelOption(it.id, it.name, it.free) }
                         }
+                        "google_ai" -> LlmFactory.GOOGLE_AI.models
                         "local" -> LlmFactory.LOCAL.models
                         else -> LlmFactory.OPENROUTER.models
                     }
@@ -367,6 +398,7 @@ fun SettingsScreen(
                     when (selectedProvider) {
                         "openrouter" -> LlmFactory.OPENROUTER.models
                         "ollama" -> LlmFactory.OLLAMA_CLOUD.models
+                        "google_ai" -> LlmFactory.GOOGLE_AI.models
                         "local" -> LlmFactory.LOCAL.models
                         else -> LlmFactory.OPENROUTER.models
                     }
@@ -780,7 +812,11 @@ fun SettingsScreen(
                                 putExtra(TelegramBotService.EXTRA_PROVIDER, selectedProvider)
                                 putExtra(TelegramBotService.EXTRA_MODEL, selectedModel)
                                 putExtra(TelegramBotService.EXTRA_API_KEY,
-                                    if (selectedProvider == "openrouter") openRouterKey else ollamaKey)
+                                    when (selectedProvider) {
+                                        "openrouter" -> openRouterKey
+                                        "google_ai" -> googleAiKey
+                                        else -> ollamaKey
+                                    })
                             }
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                                 context.startForegroundService(intent)

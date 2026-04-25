@@ -632,6 +632,7 @@ class EmmaEngine(private val context: Context) {
         val key = securePrefs.getString(when(preset) {
             "openrouter" -> "openrouter_api_key"
             "ollama" -> "ollama_api_key"
+            "google_ai" -> "google_ai_key"
             else -> "openrouter_api_key"
         }, "") ?: ""
 
