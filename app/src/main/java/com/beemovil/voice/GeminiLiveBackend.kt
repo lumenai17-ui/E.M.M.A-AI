@@ -66,7 +66,9 @@ class GeminiLiveBackend(
     override fun isAvailable(): Boolean {
         val prefs = SecurePrefs.get(context)
         val key = prefs.getString("google_ai_key", "") ?: ""
-        return key.isNotBlank()
+        val available = key.isNotBlank()
+        Log.d(TAG, "isAvailable=$available (key=${if (key.isNotBlank()) "${key.take(8)}... (${key.length} chars)" else "EMPTY"})")
+        return available
     }
 
     override suspend fun startSession(config: ConversationConfig) {
@@ -75,6 +77,11 @@ class GeminiLiveBackend(
 
         val prefs = SecurePrefs.get(context)
         apiKey = prefs.getString("google_ai_key", "") ?: ""
+
+        if (apiKey.isBlank()) {
+            Log.e(TAG, "❌ API key is EMPTY after reading from SecurePrefs!")
+            throw Exception("Google AI API key no configurada. Ve a Settings → Google AI.")
+        }
 
         // Allow user to pick model via config (e.g. "gemini-2.0-flash" or "gemini-1.5-pro")
         model = if (config.llmModel.contains("gemini")) {
@@ -100,7 +107,7 @@ class GeminiLiveBackend(
         }
 
         conversationHistory.clear()
-        Log.i(TAG, "Session started (model=$model, key=${apiKey.take(8)}...)")
+        Log.i(TAG, "✅ Session started (model=$model, key=${apiKey.take(8)}..., apiKeyLen=${apiKey.length})")
     }
 
     override suspend fun processTranscript(transcript: String): String {

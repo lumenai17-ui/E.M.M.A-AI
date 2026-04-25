@@ -191,20 +191,53 @@ fun ConversationScreen(
     LaunchedEffect(Unit) {
         if (viewModel.autoStartConversation.value) {
             viewModel.autoStartConversation.value = false // Consume flag
-            delay(500)
+            delay(600)
             val backend = engine.backends.find { it.id == selectedBackendId }
                 ?: engine.getDefaultBackend()
             android.util.Log.i("ConversationScreen", "Auto-start with backend: ${backend.displayName} (id=${backend.id})")
-            val config = ConversationConfig(
-                autoListenAfterTTS = autoListen,
-                language = java.util.Locale.getDefault().toLanguageTag(),
-                speakResponses = !isMuted,
-                llmProvider = viewModel.currentProvider.value,
-                llmModel = viewModel.currentModel.value,
-                threadId = conversationThreadId,
-                agentId = "conversation"
+
+            // Greet the user first — natural voice cue that Emma is ready
+            val greeting = listOf(
+                "Hola, te escucho.",
+                "Hola, ¿en qué te ayudo?",
+                "Aquí estoy, dime.",
+                "Hola, ¿qué necesitas?"
+            ).random()
+
+            history.add(ConversationTurn("Hello Emma", greeting))
+            feedbackManager.onSpeakingStarted()
+
+            // Speak greeting, then start listening
+            viewModel.voiceManager.speak(
+                text = greeting,
+                language = java.util.Locale.getDefault().language,
+                onDone = {
+                    // After greeting, start the conversation engine
+                    val config = ConversationConfig(
+                        autoListenAfterTTS = autoListen,
+                        language = java.util.Locale.getDefault().toLanguageTag(),
+                        speakResponses = !isMuted,
+                        llmProvider = viewModel.currentProvider.value,
+                        llmModel = viewModel.currentModel.value,
+                        threadId = conversationThreadId,
+                        agentId = "conversation"
+                    )
+                    engine.start(backend, config)
+                },
+                onError = { _ ->
+                    // Even if TTS fails, start listening
+                    val config = ConversationConfig(
+                        autoListenAfterTTS = autoListen,
+                        language = java.util.Locale.getDefault().toLanguageTag(),
+                        speakResponses = !isMuted,
+                        llmProvider = viewModel.currentProvider.value,
+                        llmModel = viewModel.currentModel.value,
+                        threadId = conversationThreadId,
+                        agentId = "conversation"
+                    )
+                    engine.start(backend, config)
+                }
             )
-            engine.start(backend, config)
         }
     }
 

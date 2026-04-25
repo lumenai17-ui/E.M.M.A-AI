@@ -96,36 +96,88 @@ class WakeWordService : Service() {
         Log.i(TAG, "🎯 WAKE WORD DETECTED — launching conversation")
         updateNotification("¡Hello Emma detectado! Abriendo...")
 
-        // Launch app with lock screen flags + auto_start
+        // Wake screen if locked/off
+        try {
+            val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+            val wakeLock = pm.newWakeLock(
+                android.os.PowerManager.FULL_WAKE_LOCK or
+                android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP or
+                android.os.PowerManager.ON_AFTER_RELEASE,
+                "emma:wakeword"
+            )
+            wakeLock.acquire(5000) // 5 second wake
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to acquire wake lock: ${e.message}")
+        }
+
+        // Build launch intent
         val launchIntent = Intent(applicationContext, MainActivity::class.java).apply {
             action = ACTION_WAKE_DETECTED
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                     Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                    Intent.FLAG_ACTIVITY_CLEAR_TOP
-            // Signal ConversationScreen to auto-start listening
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
             putExtra("auto_start", true)
-            // Lock screen support
-            addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
         }
 
-        // Turn screen on for lock screen wake
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-            launchIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        // Try direct launch first (works when app is in foreground)
+        try {
+            startActivity(launchIntent)
+            Log.i(TAG, "Direct startActivity succeeded")
+        } catch (e: Exception) {
+            Log.w(TAG, "Direct startActivity failed: ${e.message}")
         }
 
-        startActivity(launchIntent)
+        // Also fire a high-priority notification to bring app forward (Android 10+ background restriction workaround)
+        try {
+            val pendingIntent = PendingIntent.getActivity(
+                applicationContext, 42, launchIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            val alertChannel = "emma_wake_alert"
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel(
+                    alertChannel, "Wake Word Alert",
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "Alerta cuando Hello Emma es detectado"
+                    setBypassDnd(true)
+                    lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                }
+                val manager = getSystemService(NotificationManager::class.java)
+                manager.createNotificationChannel(channel)
+            }
+
+            val alertNotification = NotificationCompat.Builder(this, alertChannel)
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setContentTitle("E.M.M.A. Voice")
+                .setContentText("Hello Emma detectado — toca para abrir")
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setCategory(NotificationCompat.CATEGORY_CALL)
+                .setAutoCancel(true)
+                .setContentIntent(pendingIntent)
+                .setFullScreenIntent(pendingIntent, true) // Brings app to front on lock screen
+                .setTimeoutAfter(10000) // Auto-dismiss after 10s
+                .build()
+
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.notify(4243, alertNotification)
+            Log.i(TAG, "Full-screen notification fired")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to fire alert notification: ${e.message}")
+        }
 
         // Re-start listening after a delay (conversation will claim mic via arbiter)
         android.os.Handler(mainLooper).postDelayed({
             if (isRunning) {
                 updateNotification("Escuchando \"Hello Emma\"...")
-                // Fix: Use same callback — not empty!
                 wakeEngine?.start(
                     onWakeWordDetected = { onWakeDetected() },
                     onError = { err -> Log.w(TAG, "Wake re-start error: $err") }
                 )
             }
-        }, 15000) // 15s delay for conversation to finish
+        }, 20000) // 20s delay for greeting + conversation to start
     }
 
     private fun stopWakeWordDetection() {

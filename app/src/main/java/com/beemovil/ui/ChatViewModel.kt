@@ -157,7 +157,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val defaultAgents = listOf(
                     com.beemovil.database.AgentConfigEntity("emma_chat", "E.M.M.A. Chat", "🧠", "Eres E.M.M.A. Coordinadora Central.", "openrouter:openai/gpt-4o-mini"),
                     com.beemovil.database.AgentConfigEntity("live_vision", "Live Vision", "👁️", "Eres un analizador de contexto visual en tiempo real.", "openrouter:openai/gpt-4-vision-preview"),
-                    com.beemovil.database.AgentConfigEntity("conversation", "Conversación", "🗣️", "Modo de voz conversacional continuo.", "koog-engine")
+                    com.beemovil.database.AgentConfigEntity("conversation", "Conversación", "🗣️", "Modo de voz conversacional continuo con E.M.M.A.", "openrouter:openai/gpt-4o-mini")
                 )
                 defaultAgents.forEach { chatHistoryDB.chatHistoryDao().insertAgent(it) }
                 dbAgents = chatHistoryDB.chatHistoryDao().getAllAgents()
