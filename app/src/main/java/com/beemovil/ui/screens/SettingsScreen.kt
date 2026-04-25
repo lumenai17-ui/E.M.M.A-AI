@@ -885,10 +885,121 @@ fun SettingsScreen(
             }
 
             // ═══════════════════════════════════════
+            // POLLINATIONS NOVA TTS (Free Premium Voice)
+            // ═══════════════════════════════════════
+            SectionCard {
+                SectionTitle("VOZ PREMIUM (NOVA)")
+                Text("Voz de IA premium gratuita — sin API key requerida", fontSize = 12.sp, color = textSecondary)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                var novaEnabled by remember { mutableStateOf(prefs.getBoolean("use_pollinations_tts", true)) }
+                var novaVoice by remember { mutableStateOf(prefs.getString("pollinations_tts_voice", "nova") ?: "nova") }
+
+                // Enable/Disable Toggle
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Nova TTS", fontSize = 14.sp, color = textPrimary, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            if (novaEnabled) "✅ Activo — voz premium gratuita" else "⏸️ Desactivado — usando alternativas",
+                            fontSize = 11.sp, color = if (novaEnabled) Color(0xFF4CAF50) else textSecondary
+                        )
+                    }
+                    Switch(
+                        checked = novaEnabled,
+                        onCheckedChange = { novaEnabled = it },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = if (isDark) BeeBlack else Color.White,
+                            checkedTrackColor = Color(0xFF9C27B0),
+                            uncheckedTrackColor = textSecondary.copy(alpha = 0.3f)
+                        )
+                    )
+                }
+
+                if (novaEnabled) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text("ELIGE LA VOZ", fontSize = 11.sp, color = Color(0xFF9C27B0),
+                        fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    val novaVoices = listOf(
+                        Triple("nova", "Nova", "Femenina, cálida"),
+                        Triple("alloy", "Alloy", "Neutra, profesional"),
+                        Triple("shimmer", "Shimmer", "Femenina, suave"),
+                        Triple("coral", "Coral", "Femenina, energética"),
+                        Triple("echo", "Echo", "Masculina, profunda"),
+                        Triple("sage", "Sage", "Masculina, tranquila")
+                    )
+
+                    novaVoices.forEach { (id, name, desc) ->
+                        val isSelected = novaVoice == id
+                        val isFemale = id in listOf("nova", "shimmer", "coral", "alloy")
+                        Surface(
+                            onClick = { novaVoice = id },
+                            color = if (isSelected) Color(0xFF9C27B0).copy(alpha = 0.12f) else Color.Transparent,
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    if (isFemale) Icons.Filled.Face else Icons.Filled.RecordVoiceOver,
+                                    name,
+                                    tint = if (isSelected) Color(0xFF9C27B0) else textSecondary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(name, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                                        color = if (isSelected) Color(0xFF9C27B0) else textPrimary)
+                                    Text(desc, fontSize = 11.sp, color = textSecondary)
+                                }
+                                if (isSelected) {
+                                    Icon(Icons.Filled.CheckCircle, "Selected", tint = Color(0xFF9C27B0), modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+                Button(
+                    onClick = {
+                        prefs.edit()
+                            .putBoolean("use_pollinations_tts", novaEnabled)
+                            .putString("pollinations_tts_voice", novaVoice)
+                            .apply()
+                        val voiceName = when(novaVoice) {
+                            "nova" -> "Nova"; "alloy" -> "Alloy"; "echo" -> "Echo"
+                            "shimmer" -> "Shimmer"; "coral" -> "Coral"; "sage" -> "Sage"
+                            else -> novaVoice
+                        }
+                        Toast.makeText(context, if (novaEnabled) "✅ Voz $voiceName activada" else "Nova TTS desactivado", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF9C27B0), contentColor = Color.White),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(Icons.Filled.GraphicEq, "Save", modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Guardar Voz Nova", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "Cadena TTS: Nova → ElevenLabs → Deepgram → Android Nativo",
+                    fontSize = 10.sp, color = textSecondary
+                )
+            }
+
+            // ═══════════════════════════════════════
             // DEEPGRAM VOICE (Phase 20)
             // ═══════════════════════════════════════
             SectionCard {
-                SectionTitle("VOZ (DEEPGRAM)")
+                SectionTitle("VOZ AVANZADA (DEEPGRAM)")
                 Text("Text-to-Speech y Speech-to-Text avanzado", fontSize = 12.sp, color = textSecondary)
                 Spacer(modifier = Modifier.height(8.dp))
 
