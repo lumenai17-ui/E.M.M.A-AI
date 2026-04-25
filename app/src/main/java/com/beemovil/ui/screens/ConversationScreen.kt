@@ -36,9 +36,6 @@ import android.content.ClipboardManager
 import android.content.Intent
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.selection.SelectionContainer
 
 /**
  * ConversationScreen — Voice Intelligence Phase V3
@@ -103,7 +100,6 @@ fun ConversationScreen(
     val history = remember { mutableStateListOf<ConversationTurn>() }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-    var showBackendMenu by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var audioLevel by remember { mutableFloatStateOf(0f) } // V5: Volume meter 0..1
 
@@ -451,15 +447,13 @@ fun ConversationScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
-                SelectionContainer {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        items(history) { turn ->
-                            ConversationTurnCard(turn, isDark, textPrimary, textSecondary, cardBg, accent, context)
-                        }
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(history) { turn ->
+                        ConversationTurnCard(turn, isDark, textPrimary, textSecondary, cardBg, accent, context)
                     }
                 }
 
