@@ -63,24 +63,51 @@ class DeepgramVoiceManager(private val context: Context) {
     private var nativeSTTReady = false
     fun hasNativeSTT(): Boolean = nativeSTTReady || android.speech.SpeechRecognizer.isRecognitionAvailable(context)
 
+    /**
+     * Start listening with MicrophoneArbiter gate.
+     * @param micOwner Who is requesting the mic (defaults to PUSH_TO_TALK for backward compat)
+     * @param micTag Human-readable tag for debug logging
+     */
     fun startListening(
         language: String = "es-MX",
         onPartial: ((String) -> Unit)? = null,
         onResult: (String) -> Unit,
         onError: ((String) -> Unit)? = null,
-        onState: ((Boolean) -> Unit)? = null
+        onState: ((Boolean) -> Unit)? = null,
+        micOwner: MicrophoneArbiter.MicOwner = MicrophoneArbiter.MicOwner.PUSH_TO_TALK,
+        micTag: String = "DeepgramVoiceManager"
     ) {
+        // V1: Gate through MicrophoneArbiter
+        if (!MicrophoneArbiter.requestMic(micOwner, micTag)) {
+            Log.w(TAG, "Mic denied by arbiter for $micOwner ($micTag)")
+            onError?.invoke("Micrófono en uso por otra función")
+            return
+        }
+        activeMicOwner = micOwner
+
+        // Wrap onResult and onError to release mic when done
+        val wrappedResult: (String) -> Unit = { text ->
+            MicrophoneArbiter.releaseMic(micOwner)
+            activeMicOwner = null
+            onResult(text)
+        }
+        val wrappedError: (String) -> Unit = { error ->
+            MicrophoneArbiter.releaseMic(micOwner)
+            activeMicOwner = null
+            onError?.invoke(error)
+        }
+
         // R3-1c FIX: If Deepgram STT is enabled but null (init failed), fall back to native
         if (useDeepgramSTT && deepgramSTT != null) {
             deepgramSTT.startListening(
                 apiKey = apiKey,
                 language = language.substringBefore("-"),
                 onPartial = onPartial,
-                onResult = onResult,
+                onResult = wrappedResult,
                 onErrorCb = { error ->
                     Log.w(TAG, "Deepgram STT failed: $error, falling back to native")
                     // R3-1: Auto-fallback to native on Deepgram error
-                    startNativeListening(language, onResult, onError)
+                    startNativeListening(language, wrappedResult, wrappedError)
                 },
                 onState = onState
             )
@@ -88,7 +115,7 @@ class DeepgramVoiceManager(private val context: Context) {
             if (useDeepgramSTT && deepgramSTT == null) {
                 Log.w(TAG, "Deepgram STT configured but unavailable, using native fallback")
             }
-            startNativeListening(language, onResult, onError)
+            startNativeListening(language, wrappedResult, wrappedError)
         }
     }
 
@@ -134,10 +161,18 @@ class DeepgramVoiceManager(private val context: Context) {
         }
     }
 
+    // V1: Track which MicOwner is active for release on stop
+    private var activeMicOwner: MicrophoneArbiter.MicOwner? = null
+
     fun stopListening() {
         deepgramSTT?.stopListening()
         android.os.Handler(android.os.Looper.getMainLooper()).post {
             nativeSTT?.stopListening()
+        }
+        // V1: Release mic through arbiter
+        activeMicOwner?.let { owner ->
+            MicrophoneArbiter.releaseMic(owner)
+            activeMicOwner = null
         }
     }
 

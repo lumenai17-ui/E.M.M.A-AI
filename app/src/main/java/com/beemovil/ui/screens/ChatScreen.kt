@@ -1,6 +1,7 @@
 package com.beemovil.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -30,6 +31,11 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.ui.draw.scale
 import android.content.Intent
 import coil.compose.AsyncImage
@@ -214,6 +220,13 @@ fun ChatScreen(
                                         .pointerInput(Unit) {
                                             detectTapGestures(
                                                 onPress = {
+                                                    // V5: Haptic feedback on mic press
+                                                    try {
+                                                        val vib = context.getSystemService(android.content.Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+                                                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                                                            vib?.vibrate(android.os.VibrationEffect.createOneShot(40, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+                                                        }
+                                                    } catch (_: Exception) {}
                                                     viewModel.toggleVoiceInput { text -> 
                                                         viewModel.sendMessage(text)
                                                     }
@@ -225,6 +238,25 @@ fun ChatScreen(
                                             )
                                         }
                                 ) {
+                                    // V5: Pulsing red ring when recording
+                                    if (viewModel.isRecording.value) {
+                                        val infiniteTransition = rememberInfiniteTransition(label = "mic")
+                                        val ringPulse by infiniteTransition.animateFloat(
+                                            initialValue = 0.8f,
+                                            targetValue = 1.2f,
+                                            animationSpec = infiniteRepeatable(
+                                                animation = tween(600),
+                                                repeatMode = RepeatMode.Reverse
+                                            ),
+                                            label = "ringPulse"
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .size(44.dp)
+                                                .scale(ringPulse)
+                                                .border(2.dp, Color.Red.copy(alpha = 0.6f), CircleShape)
+                                        )
+                                    }
                                     val scaleAnim by animateFloatAsState(targetValue = if (viewModel.isRecording.value) 1.3f else 1.0f)
                                     Icon(
                                         if (viewModel.isRecording.value) Icons.Filled.Stop else Icons.Filled.Mic, 

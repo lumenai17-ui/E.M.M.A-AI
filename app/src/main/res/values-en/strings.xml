@@ -15,8 +15,8 @@
     <string name="dash_card_vision_title">Emma Vision</string>
     <string name="dash_card_vision_subtitle">Real-time offline vision</string>
     
-    <string name="dash_card_voice_title">Deep Voice</string>
-    <string name="dash_card_voice_subtitle">Walkie-talkie mode</string>
+    <string name="dash_card_voice_title">Conversation</string>
+    <string name="dash_card_voice_subtitle">Continuous voice mode</string>
     
     <string name="dash_card_ops_title">Ops Inbox</string>
     <string name="dash_card_ops_subtitle">Mail &amp; Notifications</string>

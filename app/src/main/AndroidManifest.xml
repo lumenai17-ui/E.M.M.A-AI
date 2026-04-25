@@ -124,6 +124,13 @@
             android:exported="false"
             android:foregroundServiceType="location|microphone" />
 
+        <!-- V4: Wake Word Detection Service ("Hello Emma") -->
+        <service
+            android:name=".service.WakeWordService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
         <!-- FileProvider para compartir archivos exportables autogenerados seguros (Fase 10.3) -->
         <provider
             android:name="androidx.core.content.FileProvider"

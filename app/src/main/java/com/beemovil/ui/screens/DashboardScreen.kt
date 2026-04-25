@@ -179,8 +179,8 @@ fun DashboardScreen(
             MainModuleCard(
                 title = stringResource(R.string.dash_card_voice_title),
                 subtitle = stringResource(R.string.dash_card_voice_subtitle),
-                icon = Icons.Filled.Mic,
-                onClick = { viewModel.currentScreen.value = "voice" }
+                icon = Icons.Filled.RecordVoiceOver,
+                onClick = { viewModel.currentScreen.value = "conversation" }
             )
             MainModuleCard(
                 title = "Tareas",

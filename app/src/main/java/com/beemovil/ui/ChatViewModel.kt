@@ -49,10 +49,11 @@ data class DashboardMatrixState(
 )
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
-    private val engine = EmmaEngine(application)
+    // V3: Made internal for ConversationEngine access from ConversationScreen
+    internal val engine = EmmaEngine(application)
     // Motor aislado para el Dashboard — nunca contamina el contexto del chat del usuario
     private val dashboardEngine = EmmaEngine(application)
-    private val voiceManager = DeepgramVoiceManager(application)
+    internal val voiceManager = DeepgramVoiceManager(application)
     private val envScanner = com.beemovil.core.EnvironmentScanner(application)
 
     val dynamicDashboardState = mutableStateOf(DashboardMatrixState())
@@ -156,7 +157,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val defaultAgents = listOf(
                     com.beemovil.database.AgentConfigEntity("emma_chat", "E.M.M.A. Chat", "🧠", "Eres E.M.M.A. Coordinadora Central.", "openrouter:openai/gpt-4o-mini"),
                     com.beemovil.database.AgentConfigEntity("live_vision", "Live Vision", "👁️", "Eres un analizador de contexto visual en tiempo real.", "openrouter:openai/gpt-4-vision-preview"),
-                    com.beemovil.database.AgentConfigEntity("deep_voice", "Deep Voice", "🎙️", "Especialista en flujos de voz y síntesis neuronal.", "koog-engine")
+                    com.beemovil.database.AgentConfigEntity("conversation", "Conversación", "🗣️", "Modo de voz conversacional continuo.", "koog-engine")
                 )
                 defaultAgents.forEach { chatHistoryDB.chatHistoryDao().insertAgent(it) }
                 dbAgents = chatHistoryDB.chatHistoryDao().getAllAgents()
@@ -976,6 +977,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun navigateToConversations() { currentScreen.value = "conversations" }
     // C-07 fix: Conectar al motor real de refresh
     fun forceRefreshInsight() { refreshLiveDashboard() }
+    // V1: Conversation mode toggle (Phase V3 will wire this to UI)
+    val conversationModeActive = mutableStateOf(false)
+
     fun toggleVoiceInput(onText: (String) -> Unit) {
         if (isRecording.value) {
             isRecording.value = false
@@ -988,9 +992,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     isRecording.value = false
                     onText(text) // Este onText se enviará a sendMessage en el Screen
                 },
-                onError = {
+                onError = { error ->
                     isRecording.value = false
-                }
+                    Log.w("ChatViewModel", "Voice input error: $error")
+                },
+                micOwner = com.beemovil.voice.MicrophoneArbiter.MicOwner.PUSH_TO_TALK,
+                micTag = "ChatScreen"
             )
         }
     }

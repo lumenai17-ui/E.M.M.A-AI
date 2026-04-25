@@ -3,6 +3,7 @@ package com.beemovil.vision
 import android.content.Context
 import android.util.Log
 import com.beemovil.voice.DeepgramVoiceManager
+import com.beemovil.voice.MicrophoneArbiter
 
 /**
  * VisionVoiceController — Phase V3: La Voz
@@ -169,7 +170,9 @@ class VisionVoiceController(
                 Log.w(TAG, "STT error: $error")
                 setState(VoiceState.IDLE)
                 onError?.invoke("Mic: $error")
-            }
+            },
+            micOwner = MicrophoneArbiter.MicOwner.PUSH_TO_TALK,
+            micTag = "LiveVision"
         )
         return true
     }

@@ -997,6 +997,83 @@ fun SettingsScreen(
             }
             
             // ═══════════════════════════════════════
+            // WAKE WORD ("Hello Emma")
+            // ═══════════════════════════════════════
+            SectionCard {
+                SectionTitle("WAKE WORD")
+                Text("Di \"Hello Emma\" para activar el modo conversación", fontSize = 12.sp, color = textSecondary)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                var wakeWordEnabled by remember {
+                    mutableStateOf(com.beemovil.service.WakeWordService.isRunning)
+                }
+
+                // Status indicator
+                Surface(
+                    color = if (wakeWordEnabled) Color(0xFF4CAF50).copy(alpha = 0.12f) else textSecondary.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(
+                            if (wakeWordEnabled) Color(0xFF4CAF50) else textSecondary
+                        ))
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                if (wakeWordEnabled) "Escuchando en segundo plano" else "Desactivado",
+                                fontSize = 13.sp, fontWeight = FontWeight.Bold, color = textPrimary
+                            )
+                            Text(
+                                "Frase: \"Hello Emma\"",
+                                fontSize = 11.sp, color = textSecondary
+                            )
+                        }
+                        Switch(
+                            checked = wakeWordEnabled,
+                            onCheckedChange = { enabled ->
+                                wakeWordEnabled = enabled
+                                val intent = Intent(context, com.beemovil.service.WakeWordService::class.java).apply {
+                                    action = if (enabled)
+                                        com.beemovil.service.WakeWordService.ACTION_START
+                                    else
+                                        com.beemovil.service.WakeWordService.ACTION_STOP
+                                }
+                                if (enabled) {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                        context.startForegroundService(intent)
+                                    } else {
+                                        context.startService(intent)
+                                    }
+                                    prefs.edit().putBoolean("wake_word_enabled", true).apply()
+                                    Toast.makeText(context, "Wake word activado: di \"Hello Emma\"", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    context.startService(intent)
+                                    prefs.edit().putBoolean("wake_word_enabled", false).apply()
+                                    Toast.makeText(context, "Wake word desactivado", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = if (isDark) BeeBlack else Color.White,
+                                checkedTrackColor = accent,
+                                uncheckedTrackColor = textSecondary.copy(alpha = 0.3f)
+                            )
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    "⚡ Usa SpeechRecognizer nativo. Consume batería moderada.\n" +
+                    "💡 Tip: Diga \"Hello Emma\" o \"Hola Emma\" para despertar el agente.",
+                    fontSize = 10.sp, color = textSecondary.copy(alpha = 0.7f)
+                )
+            }
+
+            // ═══════════════════════════════════════
             // ELEVENLABS (CLONACION DE VOZ)
             // ═══════════════════════════════════════
             SectionCard {
@@ -1062,6 +1139,79 @@ fun SettingsScreen(
                         fontSize = 11.sp, color = accent.copy(alpha = 0.8f)
                     )
                 }
+            }
+
+            // ═══════════════════════════════════════
+            // GOOGLE AI (GEMINI LIVE)
+            // ═══════════════════════════════════════
+            SectionCard {
+                SectionTitle("GOOGLE AI (GEMINI)")
+                Text("Usa Gemini directamente en modo conversación", fontSize = 12.sp, color = textSecondary)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                var googleKey by remember { mutableStateOf(securePrefs.getString("google_ai_key", "") ?: "") }
+                var showGoogleKey by remember { mutableStateOf(false) }
+
+                OutlinedTextField(
+                    value = googleKey,
+                    onValueChange = { googleKey = it },
+                    label = { Text("Google AI API Key") },
+                    placeholder = { Text("AIzaSy...", color = textSecondary) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    visualTransformation = if (showGoogleKey) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { showGoogleKey = !showGoogleKey }) {
+                            Icon(if (showGoogleKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Toggle", tint = textSecondary)
+                        }
+                    },
+                    colors = fieldColors()
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Status
+                val hasGoogleKey = googleKey.isNotBlank()
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(
+                        if (hasGoogleKey) Color(0xFF4CAF50) else Color(0xFFF44336)
+                    ))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        if (hasGoogleKey) "API Key configurada — Gemini Live disponible" else "Sin API Key — obtén una gratis en aistudio.google.com/apikey",
+                        fontSize = 11.sp, color = if (hasGoogleKey) Color(0xFF4CAF50) else textSecondary
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Button(
+                    onClick = {
+                        securePrefs.edit().putString("google_ai_key", googleKey.trim()).apply()
+                        Toast.makeText(
+                            context,
+                            if (googleKey.isNotBlank()) "Gemini Live activado" else "Gemini Live desactivado",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF4285F4),
+                        contentColor = Color.White
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(Icons.Filled.SmartToy, "Save", modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Guardar Google AI", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "⚡ Gratis: 15 req/min con gemini-2.0-flash\n" +
+                    "🔑 Obtén tu key: aistudio.google.com/apikey",
+                    fontSize = 10.sp, color = textSecondary.copy(alpha = 0.7f)
+                )
             }
 
             // ═══════════════════════════════════════

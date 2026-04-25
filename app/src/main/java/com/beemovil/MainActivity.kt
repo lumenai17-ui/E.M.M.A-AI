@@ -54,6 +54,9 @@ class MainActivity : ComponentActivity() {
         // FILE-09: Manejar incoming Share Intent desde otras apps
         handleIncomingShareIntent(intent)
 
+        // V4: Handle wake word detection on cold launch
+        handleWakeWordIntent(intent)
+
         // S-14: Restaurar tema visual guardado en prefs
         val themePrefs = getSharedPreferences("beemovil", MODE_PRIVATE)
         val savedTheme = themePrefs.getString("app_theme", null)
@@ -158,7 +161,7 @@ class MainActivity : ComponentActivity() {
                                         viewModel = viewModel,
                                         onBack = { viewModel.currentScreen.value = "dashboard" }
                                     )
-                                    "voice" -> VoiceChatScreen(
+                                    "conversation", "voice" -> ConversationScreen(
                                         viewModel = viewModel,
                                         onBack = { viewModel.currentScreen.value = "dashboard" }
                                     )
@@ -208,5 +211,14 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleIncomingShareIntent(intent)
+        handleWakeWordIntent(intent)
+    }
+
+    /** V4: Handle wake word detection — auto-navigate to conversation */
+    private fun handleWakeWordIntent(incomingIntent: Intent?) {
+        if (incomingIntent?.action == com.beemovil.service.WakeWordService.ACTION_WAKE_DETECTED) {
+            android.util.Log.i("MainActivity", "🎯 Wake word intent received — opening conversation")
+            viewModel.currentScreen.value = "conversation"
+        }
     }
 }
