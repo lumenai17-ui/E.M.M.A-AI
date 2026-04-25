@@ -19,10 +19,11 @@ class DeepgramVoiceManager(private val context: Context) {
         const val KEY_ELEVENLABS_VOICE = "elevenlabs_voice_id"
     }
 
-    // Deepgram engines
+    // TTS/STT engines
     private val deepgramSTT = try { DeepgramSTT(context) } catch (e: Exception) { null }
     private val deepgramTTS = try { DeepgramTTS(context) } catch (e: Exception) { null }
     private val elevenLabsTTS = try { ElevenLabsTTS(context) } catch (e: Exception) { null }
+    private val pollinationsTTS = try { PollinationsTTS(context) } catch (e: Exception) { null }
 
     private var nativeTTS: TextToSpeech? = null
     private var nativeTTSReady = false
@@ -39,6 +40,14 @@ class DeepgramVoiceManager(private val context: Context) {
 
     val useDeepgramTTS: Boolean get() = hasApiKey && context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         .getBoolean(KEY_USE_DEEPGRAM_TTS, true)
+    
+    // Pollinations Nova voice preference (default: nova)
+    val novaVoice: String get() = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .getString("pollinations_tts_voice", PollinationsTTS.DEFAULT_VOICE) ?: PollinationsTTS.DEFAULT_VOICE
+    
+    // Whether to use Pollinations Nova as primary TTS (default: true)
+    val usePollinationsTTS: Boolean get() = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        .getBoolean("use_pollinations_tts", true)
         
     val elevenLabsKey: String get() = SecurePrefs.get(context).getString(KEY_ELEVENLABS_API, "") ?: ""
     val elevenLabsVoice: String get() = SecurePrefs.get(context).getString(KEY_ELEVENLABS_VOICE, "") ?: ""
@@ -176,6 +185,13 @@ class DeepgramVoiceManager(private val context: Context) {
         }
     }
 
+    /**
+     * TTS Priority Chain:
+     * 1. Pollinations Nova (FREE, premium, multilingual) — if internet
+     * 2. ElevenLabs (PAID, premium, multilingual)        — if key configured
+     * 3. Deepgram Aura (PAID, EN only)                   — if key configured + English
+     * 4. Android Native (FREE, offline)                  — always available
+     */
     fun speak(
         text: String,
         language: String = "es",
@@ -183,10 +199,38 @@ class DeepgramVoiceManager(private val context: Context) {
         onStart: (() -> Unit)? = null,
         onError: ((String) -> Unit)? = null
     ) {
+        // Priority 1: Pollinations Nova (free, premium)
+        if (usePollinationsTTS && pollinationsTTS != null) {
+            Log.d(TAG, "TTS: Trying Pollinations Nova (voice=$novaVoice)")
+            pollinationsTTS.speak(
+                text = text,
+                voice = novaVoice,
+                onDone = onDone,
+                onStart = onStart,
+                onError = { error ->
+                    Log.w(TAG, "Pollinations TTS failed: $error, falling back")
+                    speakElevenLabsOrBelow(text, language, onDone, onStart, onError)
+                }
+            )
+            return
+        }
+
+        speakElevenLabsOrBelow(text, language, onDone, onStart, onError)
+    }
+
+    private fun speakElevenLabsOrBelow(
+        text: String,
+        language: String,
+        onDone: (() -> Unit)?,
+        onStart: (() -> Unit)?,
+        onError: ((String) -> Unit)?
+    ) {
+        // Priority 2: ElevenLabs (paid, premium)
         val eKey = elevenLabsKey
         val eVoice = elevenLabsVoice
 
         if (eKey.isNotBlank() && eVoice.isNotBlank() && elevenLabsTTS != null) {
+            Log.d(TAG, "TTS: Trying ElevenLabs")
             elevenLabsTTS.speak(
                 text = text,
                 apiKey = eKey,
@@ -212,6 +256,7 @@ class DeepgramVoiceManager(private val context: Context) {
     ) {
         val isEnglish = language.lowercase().startsWith("en")
 
+        // Priority 3: Deepgram Aura (paid, EN only)
         if (useDeepgramTTS && isEnglish) {
             deepgramTTS?.speak(
                 text = text,
@@ -225,11 +270,13 @@ class DeepgramVoiceManager(private val context: Context) {
                 }
             )
         } else {
+            // Priority 4: Android Native (free, offline)
             speakNative(text, onDone)
         }
     }
 
     fun stopSpeaking() {
+        pollinationsTTS?.stop()
         elevenLabsTTS?.stop()
         deepgramTTS?.stop()
         nativeTTS?.stop()
