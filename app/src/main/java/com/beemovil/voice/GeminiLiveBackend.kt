@@ -186,14 +186,30 @@ class GeminiLiveBackend(
                 val errorBody = errorStream?.let {
                     BufferedReader(InputStreamReader(it)).readText()
                 } ?: "Unknown error"
-                Log.e(TAG, "Gemini API error $responseCode: $errorBody")
+                Log.e(TAG, "Gemini API error $responseCode: ${errorBody.take(500)}")
 
                 // Parse specific error types
                 return when {
-                    responseCode == 429 -> "Espera un momento, estoy recibiendo muchas solicitudes."
+                    responseCode == 429 -> {
+                        Log.w(TAG, "Rate limited (429) — will fall back to OpenRouter")
+                        throw Exception("Gemini rate limit (429). Usando respaldo.")
+                    }
                     responseCode == 403 -> "La API key de Google AI no tiene permisos. Verifica en aistudio.google.com."
-                    responseCode == 400 && errorBody.contains("SAFETY") ->
-                        "No puedo responder a eso por políticas de seguridad."
+                    responseCode == 400 -> {
+                        // Could be safety, invalid key, or bad request
+                        Log.e(TAG, "Bad request (400): $errorBody")
+                        when {
+                            errorBody.contains("SAFETY") -> "No puedo responder a eso por políticas de seguridad."
+                            errorBody.contains("API_KEY_INVALID") -> {
+                                throw Exception("API key inválida. Verifica tu key de Google AI Studio.")
+                            }
+                            else -> throw Exception("Gemini 400: ${errorBody.take(150)}")
+                        }
+                    }
+                    responseCode == 404 -> {
+                        Log.e(TAG, "Model not found (404) — model=$model")
+                        throw Exception("Modelo '$model' no encontrado. Verifica en Google AI Studio.")
+                    }
                     else -> throw Exception("HTTP $responseCode: ${errorBody.take(200)}")
                 }
             }

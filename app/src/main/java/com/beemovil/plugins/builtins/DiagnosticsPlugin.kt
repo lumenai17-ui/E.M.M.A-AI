@@ -36,6 +36,7 @@ class DiagnosticsPlugin(private val context: Context) : EmmaPlugin {
             description = """Tu herramienta de auto-diagnóstico interno. Úsala SIEMPRE que el usuario pregunte: 
                 '¿por qué no funciona X?', '¿qué permisos tengo?', '¿estás conectada?', 
                 '¿cómo estás de salud?', o cualquier pregunta sobre tu estado interno.
+                También puedes leer tus propios logs para diagnosticar errores en tiempo real.
                 NUNCA inventes tu estado — SIEMPRE consulta este plugin.""".trimIndent(),
             parameters = JSONObject().apply {
                 put("type", "object")
@@ -49,6 +50,7 @@ class DiagnosticsPlugin(private val context: Context) : EmmaPlugin {
                             .put("feature_status")
                             .put("connectivity_test")
                             .put("why_not_working")
+                            .put("read_logs")
                         )
                         put("description", """Operación de diagnóstico:
                             - health_check: Estado general de todos los proveedores y servicios
@@ -56,11 +58,13 @@ class DiagnosticsPlugin(private val context: Context) : EmmaPlugin {
                             - storage_report: Uso de almacenamiento del dispositivo
                             - feature_status: Estado de todas las features configuradas
                             - connectivity_test: Probar conectividad a cada proveedor
-                            - why_not_working: Diagnóstico guiado de un problema específico""".trimIndent())
+                            - why_not_working: Diagnóstico guiado de un problema específico
+                            - read_logs: Leer tus propios logs de runtime (logcat) para diagnosticar errores""".trimIndent())
                     })
                     put("target", JSONObject().apply {
                         put("type", "string")
-                        put("description", "(Solo para why_not_working) Qué componente investigar: 'tts', 'stt', 'vision', 'llm', 'google', 'email'")
+                        put("description", """Para why_not_working: qué componente investigar: 'tts', 'stt', 'vision', 'llm', 'google', 'email'.
+                            Para read_logs: filtro opcional de tag (ej: 'GeminiLiveBackend', 'ConversationEngine', 'WakeWord', 'error'). Si no se especifica, lee los últimos logs generales.""".trimIndent())
                     })
                 })
                 put("required", JSONArray().put("operation"))
@@ -82,6 +86,10 @@ class DiagnosticsPlugin(private val context: Context) : EmmaPlugin {
                     "why_not_working" -> {
                         val target = args["target"] as? String ?: "general"
                         whyNotWorking(target)
+                    }
+                    "read_logs" -> {
+                        val filter = args["target"] as? String
+                        readLogs(filter)
                     }
                     else -> "Operación desconocida: $operation"
                 }
@@ -105,6 +113,7 @@ class DiagnosticsPlugin(private val context: Context) : EmmaPlugin {
             "Ollama Cloud" to (securePrefs.getString("ollama_api_key", "") ?: ""),
             "Deepgram" to (securePrefs.getString("deepgram_api_key", "") ?: ""),
             "ElevenLabs" to (securePrefs.getString("elevenlabs_api_key", "") ?: ""),
+            "Google AI (Gemini)" to (securePrefs.getString("google_ai_key", "") ?: ""),
             "Google OAuth" to (securePrefs.getString("google_access_token", "") ?: "")
         )
 
@@ -391,6 +400,80 @@ class DiagnosticsPlugin(private val context: Context) : EmmaPlugin {
                 appendLine("  tts, stt, vision, llm, google, email")
                 appendLine("💡 Ejecuta 'health_check' para un diagnóstico general completo.")
             }
+        }
+    }
+
+    /**
+     * Read logcat output — Emma can see her own runtime logs!
+     * Uses `logcat -d` (dump mode) to get recent logs without blocking.
+     *
+     * @param filter Optional tag or keyword filter (e.g. "GeminiLiveBackend", "error")
+     */
+    private fun readLogs(filter: String?): String = buildString {
+        appendLine("═══ LOGS DE RUNTIME (LOGCAT) ═══")
+        appendLine()
+
+        try {
+            // Build logcat command
+            // -d = dump and exit (non-blocking)
+            // -t 200 = last 200 lines
+            // --pid = our process only
+            val pid = android.os.Process.myPid()
+            val command = if (filter.isNullOrBlank()) {
+                // No filter — get last 150 lines from our process
+                arrayOf("logcat", "-d", "-t", "150", "--pid=$pid")
+            } else {
+                // With filter — get more lines and grep later
+                arrayOf("logcat", "-d", "-t", "500", "--pid=$pid")
+            }
+
+            val process = Runtime.getRuntime().exec(command)
+            val reader = process.inputStream.bufferedReader()
+            val lines = reader.readLines()
+            process.waitFor()
+
+            // Apply filter if specified
+            val filteredLines = if (!filter.isNullOrBlank()) {
+                val filterLower = filter.lowercase()
+                lines.filter { line ->
+                    line.lowercase().contains(filterLower)
+                }.takeLast(100) // Max 100 filtered lines
+            } else {
+                lines.takeLast(100) // Last 100 lines
+            }
+
+            if (filteredLines.isEmpty()) {
+                appendLine("No se encontraron logs ${if (filter != null) "con filtro '$filter'" else ""}.")
+                appendLine()
+                appendLine("💡 Tags útiles para filtrar:")
+                appendLine("  - GeminiLiveBackend (errores de Gemini API)")
+                appendLine("  - ConversationEngine (flujo de conversación)")
+                appendLine("  - WakeWord / NativeWakeWord (detección de Hello Emma)")
+                appendLine("  - PipelineBackend (backend Pipeline)")
+                appendLine("  - DeepgramVoice (STT/TTS)")
+                appendLine("  - EmmaEngine (motor principal)")
+                appendLine("  - error (cualquier error)")
+            } else {
+                if (filter != null) {
+                    appendLine("Filtro: '$filter' | ${filteredLines.size} líneas encontradas")
+                } else {
+                    appendLine("Últimas ${filteredLines.size} líneas del proceso E.M.M.A.")
+                }
+                appendLine("─".repeat(50))
+
+                filteredLines.forEach { line ->
+                    // Clean up logcat format for readability
+                    appendLine(line.take(200)) // Cap line length
+                }
+            }
+
+            appendLine()
+            appendLine("─".repeat(50))
+            appendLine("📊 PID: $pid | Total líneas leídas: ${lines.size}")
+
+        } catch (e: Exception) {
+            appendLine("❌ Error leyendo logcat: ${e.message}")
+            appendLine("💡 Algunos dispositivos restringen acceso a logcat.")
         }
     }
 
