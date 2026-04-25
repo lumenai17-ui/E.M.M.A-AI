@@ -6,13 +6,11 @@ package com.beemovil.voice
  * Interface for pluggable conversation backends.
  * Each backend handles the full STT → LLM → TTS pipeline differently:
  * - OfflineBackend: Native Android STT + LLM via OpenRouter + Native TTS
- * - PipelineBackend: Deepgram streaming + any LLM + ElevenLabs/Deepgram TTS
- * - GeminiLiveBackend: Single Google WebSocket (all-in-one)
- * - ElevenLabsAgentBackend: ElevenLabs all-in-one
+ * - PipelineBackend: Deepgram streaming + any LLM + Nova/ElevenLabs/Deepgram TTS
  */
 interface ConversationBackend {
 
-    /** Unique identifier for this backend (e.g. "offline", "pipeline", "gemini_live") */
+    /** Unique identifier for this backend (e.g. "offline", "pipeline") */
     val id: String
 
     /** Display name for UI (e.g. "Offline", "Pipeline (Deepgram + LLM + EL)") */

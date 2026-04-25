@@ -46,8 +46,7 @@ class ConversationEngine(
     val backends: List<ConversationBackend> by lazy {
         listOf(
             OfflineConversationBackend(context, voiceManager, engine),
-            PipelineConversationBackend(context, voiceManager, engine),
-            GeminiLiveBackend(context, voiceManager, engine)
+            PipelineConversationBackend(context, voiceManager, engine)
         )
     }
 

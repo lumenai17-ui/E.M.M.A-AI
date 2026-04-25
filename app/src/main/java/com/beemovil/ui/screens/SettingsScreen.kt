@@ -48,10 +48,10 @@ fun SettingsScreen(
 
     var openRouterKey by remember { mutableStateOf(securePrefs.getString("openrouter_api_key", "") ?: "") }
     var ollamaKey by remember { mutableStateOf(securePrefs.getString("ollama_api_key", "") ?: "") }
-    var googleAiKey by remember { mutableStateOf(securePrefs.getString("google_ai_key", "") ?: "") }
+
     var showOrKey by remember { mutableStateOf(false) }
     var showOlKey by remember { mutableStateOf(false) }
-    var showGaKey by remember { mutableStateOf(false) }
+
     var hfToken by remember { mutableStateOf(securePrefs.getString("huggingface_token", "") ?: "") }
     var showHfToken by remember { mutableStateOf(false) }
     var selectedProvider by remember { mutableStateOf(viewModel.currentProvider.value) }
@@ -268,10 +268,7 @@ fun SettingsScreen(
                         selectedProvider = it
                         selectedModel = LlmFactory.OPENROUTER.models.first().id
                     }
-                    ProviderChip("Google AI", "google_ai", selectedProvider) {
-                        selectedProvider = it
-                        selectedModel = LlmFactory.GOOGLE_AI.models.first().id
-                    }
+
                     ProviderChip("Ollama Cloud", "ollama", selectedProvider) {
                         selectedProvider = it
                         selectedModel = LlmFactory.OLLAMA_CLOUD.models.first().id
@@ -287,12 +284,12 @@ fun SettingsScreen(
                 // API Key
                 val currentKey = when (selectedProvider) {
                     "openrouter" -> openRouterKey
-                    "google_ai" -> googleAiKey
+
                     else -> ollamaKey
                 }
                 val showKey = when (selectedProvider) {
                     "openrouter" -> showOrKey
-                    "google_ai" -> showGaKey
+
                     else -> showOlKey
                 }
 
@@ -302,12 +299,12 @@ fun SettingsScreen(
                         onValueChange = {
                             when (selectedProvider) {
                                 "openrouter" -> openRouterKey = it
-                                "google_ai" -> googleAiKey = it
+
                                 else -> ollamaKey = it
                             }
                         },
-                        label = { Text(if (selectedProvider == "google_ai") "Google AI API Key" else "API Key") },
-                        placeholder = { Text(if (selectedProvider == "google_ai") "AIzaSy..." else "", color = textSecondary) },
+                        label = { Text("API Key") },
+                        placeholder = { Text("", color = textSecondary) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
@@ -315,7 +312,7 @@ fun SettingsScreen(
                             IconButton(onClick = {
                                 when (selectedProvider) {
                                     "openrouter" -> showOrKey = !showOrKey
-                                    "google_ai" -> showGaKey = !showGaKey
+
                                     else -> showOlKey = !showOlKey
                                 }
                             }) {
@@ -338,7 +335,7 @@ fun SettingsScreen(
                         ))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            if (hasKey) "API Key configurada" else if (selectedProvider == "google_ai") "Obtén tu key gratis en aistudio.google.com/apikey" else "Sin API Key",
+                            if (hasKey) "API Key configurada" else "Sin API Key",
                             fontSize = 12.sp, color = if (hasKey) Color(0xFF4CAF50) else Color(0xFFF44336)
                         )
                     }
@@ -349,7 +346,7 @@ fun SettingsScreen(
                             val key = currentKey.trim()
                             val prefKey = when (selectedProvider) {
                                 "openrouter" -> "openrouter_api_key"
-                                "google_ai" -> "google_ai_key"
+
                                 else -> "ollama_api_key"
                             }
                             securePrefs.edit().putString(prefKey, key).apply()
@@ -357,7 +354,7 @@ fun SettingsScreen(
                             val verify = securePrefs.getString(prefKey, "") ?: ""
                             android.util.Log.i("SettingsScreen", "Key saved: $prefKey (${key.length} chars) → verify read: ${verify.length} chars, match=${verify == key}")
                             viewModel.updateApiKey(selectedProvider, key)
-                            val providerName = when(selectedProvider) { "openrouter" -> "OpenRouter"; "google_ai" -> "Google AI"; else -> "Ollama" }
+                            val providerName = when(selectedProvider) { "openrouter" -> "OpenRouter"; else -> "Ollama" }
                             Toast.makeText(context, if (verify == key) "✅ Key $providerName guardada" else "⚠️ Error guardando key", Toast.LENGTH_SHORT).show()
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = textSecondary.copy(alpha = 0.5f)),
@@ -392,7 +389,7 @@ fun SettingsScreen(
                             val cached = com.beemovil.llm.DynamicModelFetcher.getCachedOllamaModels(context)
                             cached.map { LlmFactory.ModelOption(it.id, it.name, it.free) }
                         }
-                        "google_ai" -> LlmFactory.GOOGLE_AI.models
+
                         "local" -> LlmFactory.LOCAL.models
                         else -> LlmFactory.OPENROUTER.models
                     }
@@ -402,7 +399,7 @@ fun SettingsScreen(
                     when (selectedProvider) {
                         "openrouter" -> LlmFactory.OPENROUTER.models
                         "ollama" -> LlmFactory.OLLAMA_CLOUD.models
-                        "google_ai" -> LlmFactory.GOOGLE_AI.models
+
                         "local" -> LlmFactory.LOCAL.models
                         else -> LlmFactory.OPENROUTER.models
                     }
@@ -818,7 +815,7 @@ fun SettingsScreen(
                                 putExtra(TelegramBotService.EXTRA_API_KEY,
                                     when (selectedProvider) {
                                         "openrouter" -> openRouterKey
-                                        "google_ai" -> googleAiKey
+
                                         else -> ollamaKey
                                     })
                             }
@@ -1292,86 +1289,7 @@ fun SettingsScreen(
                 }
             }
 
-            // ═══════════════════════════════════════
-            // GOOGLE AI (GEMINI LIVE)
-            // ═══════════════════════════════════════
-            SectionCard {
-                SectionTitle("GOOGLE AI (GEMINI)")
-                Text("Usa Gemini directamente en modo conversación", fontSize = 12.sp, color = textSecondary)
-                Spacer(modifier = Modifier.height(8.dp))
 
-                var googleKey by remember { mutableStateOf(securePrefs.getString("google_ai_key", "") ?: "") }
-                var showGoogleKey by remember { mutableStateOf(false) }
-
-                OutlinedTextField(
-                    value = googleKey,
-                    onValueChange = { googleKey = it },
-                    label = { Text("Google AI API Key") },
-                    placeholder = { Text("AIzaSy...", color = textSecondary) },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    visualTransformation = if (showGoogleKey) VisualTransformation.None else PasswordVisualTransformation(),
-                    trailingIcon = {
-                        IconButton(onClick = { showGoogleKey = !showGoogleKey }) {
-                            Icon(if (showGoogleKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Toggle", tint = textSecondary)
-                        }
-                    },
-                    colors = fieldColors()
-                )
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                // Status
-                val hasGoogleKey = googleKey.isNotBlank()
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(
-                        if (hasGoogleKey) Color(0xFF4CAF50) else Color(0xFFF44336)
-                    ))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        if (hasGoogleKey) "API Key configurada — Gemini Live disponible" else "Sin API Key — obtén una gratis en aistudio.google.com/apikey",
-                        fontSize = 11.sp, color = if (hasGoogleKey) Color(0xFF4CAF50) else textSecondary
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Button(
-                    onClick = {
-                        val trimmedKey = googleKey.trim()
-                        securePrefs.edit().putString("google_ai_key", trimmedKey).apply()
-                        // Sync with the Provider Chip's state variable
-                        googleAiKey = trimmedKey
-                        // Verify write
-                        val verify = securePrefs.getString("google_ai_key", "") ?: ""
-                        android.util.Log.i("SettingsScreen", "Gemini key saved: ${trimmedKey.length} chars → verify: ${verify.length} chars, match=${verify == trimmedKey}")
-                        Toast.makeText(
-                            context,
-                            if (verify == trimmedKey && trimmedKey.isNotBlank()) "✅ Gemini Live activado" 
-                            else if (trimmedKey.isBlank()) "Gemini Live desactivado"
-                            else "⚠️ Error guardando key",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF4285F4),
-                        contentColor = Color.White
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Icon(Icons.Filled.SmartToy, "Save", modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Guardar Google AI", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                }
-
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    "⚡ Gratis: 15 req/min con gemini-2.0-flash\n" +
-                    "🔑 Obtén tu key: aistudio.google.com/apikey",
-                    fontSize = 10.sp, color = textSecondary.copy(alpha = 0.7f)
-                )
-            }
 
             // ═══════════════════════════════════════
             // POLLINATIONS (ESTUDIO CREATIVO)

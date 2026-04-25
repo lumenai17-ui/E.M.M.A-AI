@@ -34,7 +34,6 @@ object SecurePrefs {
         "email_address",
         "telegram_owner_username",
         "deepgram_api_key",
-        "google_ai_key",
         "elevenlabs_api_key",
         "elevenlabs_voice_id"
     )

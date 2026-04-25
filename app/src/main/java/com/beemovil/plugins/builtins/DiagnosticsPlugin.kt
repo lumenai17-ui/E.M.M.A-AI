@@ -113,7 +113,7 @@ class DiagnosticsPlugin(private val context: Context) : EmmaPlugin {
             "Ollama Cloud" to (securePrefs.getString("ollama_api_key", "") ?: ""),
             "Deepgram" to (securePrefs.getString("deepgram_api_key", "") ?: ""),
             "ElevenLabs" to (securePrefs.getString("elevenlabs_api_key", "") ?: ""),
-            "Google AI (Gemini)" to (securePrefs.getString("google_ai_key", "") ?: ""),
+
             "Google OAuth" to (securePrefs.getString("google_access_token", "") ?: "")
         )
 
@@ -446,7 +446,6 @@ class DiagnosticsPlugin(private val context: Context) : EmmaPlugin {
                 appendLine("No se encontraron logs ${if (filter != null) "con filtro '$filter'" else ""}.")
                 appendLine()
                 appendLine("💡 Tags útiles para filtrar:")
-                appendLine("  - GeminiLiveBackend (errores de Gemini API)")
                 appendLine("  - ConversationEngine (flujo de conversación)")
                 appendLine("  - WakeWord / NativeWakeWord (detección de Hello Emma)")
                 appendLine("  - PipelineBackend (backend Pipeline)")

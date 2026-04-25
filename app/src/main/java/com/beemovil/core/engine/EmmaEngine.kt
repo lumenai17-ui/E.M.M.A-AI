@@ -632,7 +632,6 @@ class EmmaEngine(private val context: Context) {
         val keyName = when(preset) {
             "openrouter" -> "openrouter_api_key"
             "ollama" -> "ollama_api_key"
-            "google_ai" -> "google_ai_key"
             else -> "openrouter_api_key"
         }
         val key = securePrefs.getString(keyName, "") ?: ""
@@ -645,9 +644,8 @@ class EmmaEngine(private val context: Context) {
         if (key.isBlank() && forcedProvider == null) {
             Log.w(TAG, "Provider '$preset' has no API key ($keyName is empty). Trying fallback providers...")
             
-            // Try providers in priority order: google_ai → openrouter → ollama
+            // Try providers in priority order: openrouter → ollama
             val fallbackOrder = listOf(
-                Triple("google_ai", "google_ai_key", "gemini-2.0-flash"),
                 Triple("openrouter", "openrouter_api_key", "openai/gpt-4o-mini"),
                 Triple("ollama", "ollama_api_key", "llama3.3")
             )
@@ -674,14 +672,7 @@ class EmmaEngine(private val context: Context) {
         }
 
         return try {
-            // Normalize model name for Google AI: strip "google/" prefix used by OpenRouter
-            val normalizedModel = if (effectivePreset == "google_ai" && effectiveModel.startsWith("google/")) {
-                effectiveModel.removePrefix("google/")
-            } else {
-                effectiveModel
-            }
-            
-            val provider = LlmFactory.createProvider(effectivePreset, effectiveKey, normalizedModel)
+            val provider = LlmFactory.createProvider(effectivePreset, effectiveKey, effectiveModel)
             val result = provider.complete(messages, tools)
             Pair(result.text ?: "", result.toolCalls)
         } catch (e: Exception) {
@@ -696,7 +687,6 @@ class EmmaEngine(private val context: Context) {
             val providerLabel = when(effectivePreset) {
                 "openrouter" -> "OpenRouter"
                 "ollama" -> "Ollama Cloud"
-                "google_ai" -> "Google AI"
                 else -> effectivePreset
             }
             
