@@ -10,19 +10,20 @@ import android.util.Log
  * Replaces scattered context logic in LiveVisionScreen with a single
  * buildContextBlock() call that respects a token budget.
  *
- * 6 Layers:
+ * 7 Layers:
  * 1. Sensor Fusion (GPS speed, heading, altitude, time, battery)
  * 2. Location Intelligence (structured web search)
  * 3. Route Intelligence (zone changes, speed transitions)
  * 4. Temporal Patterns (already exists, just integrated)
  * 5. Session State (topics, narrative, compression)
  * 6. Memory (place profiles, past sessions)
+ * 7. Cross-System Intelligence (Tasks, Email, Calendar, Chat pre-loads) — R7
  */
 class ContextOrchestrator(private val context: Context) {
 
     companion object {
         private const val TAG = "ContextOrchestrator"
-        private const val MAX_CONTEXT_CHARS = 1200 // ~800 tokens budget for all context
+        private const val MAX_CONTEXT_CHARS = 1500 // ~1000 tokens budget for all context (R7 expanded)
         private const val ZONE_CHANGE_THRESHOLD_METERS = 2000.0 // ~2km = new zone
     }
 
@@ -30,6 +31,7 @@ class ContextOrchestrator(private val context: Context) {
     val structuredSearch = StructuredWebSearch()
     private val offlineCache = OfflineContextCache.getInstance(context)
     val geoIntel = GeoIntelligenceProvider(offlineCache)
+    val crossContext = CrossContextEngine(context)
 
     // Zone tracking
     private var lastZoneAddress = ""
@@ -149,6 +151,23 @@ class ContextOrchestrator(private val context: Context) {
             if (memCtx.isNotBlank()) {
                 block.memoryContext = memCtx
             }
+        }
+
+        // ── Layer 7: Cross-System Intelligence (R7) ──
+        try {
+            val locality = gpsData.address.substringBefore(",").trim()
+            val crossCtx = crossContext.buildContextParagraph(
+                locality = locality,
+                lat = gpsData.latitude,
+                lng = gpsData.longitude,
+                placeHistory = block.memoryContext.takeIf { it.isNotBlank() },
+                sessionSummary = block.sessionContext.takeIf { it.isNotBlank() }
+            )
+            if (crossCtx.isNotBlank()) {
+                block.crossSystemContext = crossCtx
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "CrossContext layer failed: ${e.message}")
         }
 
         // ── Budget enforcement ──
@@ -329,15 +348,17 @@ data class ContextBlock(
     var routeContext: String = "",
     var temporalContext: String = "",
     var sessionContext: String = "",
-    var memoryContext: String = ""
+    var memoryContext: String = "",
+    var crossSystemContext: String = ""  // R7: Tasks, Email, Calendar, Chat pre-loads
 ) {
     fun totalChars(): Int = sensorContext.length + locationContext.length +
             routeContext.length + temporalContext.length +
-            sessionContext.length + memoryContext.length
+            sessionContext.length + memoryContext.length +
+            crossSystemContext.length
 
     /**
      * Enforce budget by trimming lower-priority layers.
-     * Priority: sensor > session > location > temporal > memory > route
+     * Priority: sensor > crossSystem > session > location > temporal > memory > route
      */
     fun enforeBudget(maxChars: Int) {
         var remaining = maxChars
@@ -346,23 +367,27 @@ data class ContextBlock(
         sensorContext = sensorContext.take(remaining)
         remaining -= sensorContext.length
 
-        // 2. Session (always keep)
+        // 2. Cross-System R7 (user instructions + personal signals — high priority)
+        crossSystemContext = crossSystemContext.take(remaining.coerceAtLeast(0))
+        remaining -= crossSystemContext.length
+
+        // 3. Session (always keep)
         sessionContext = sessionContext.take(remaining.coerceAtLeast(0))
         remaining -= sessionContext.length
 
-        // 3. Location (main value-add)
+        // 4. Location (main value-add)
         locationContext = locationContext.take(remaining.coerceAtLeast(0))
         remaining -= locationContext.length
 
-        // 4. Temporal
+        // 5. Temporal
         temporalContext = temporalContext.take(remaining.coerceAtLeast(0))
         remaining -= temporalContext.length
 
-        // 5. Memory
+        // 6. Memory
         memoryContext = memoryContext.take(remaining.coerceAtLeast(0))
         remaining -= memoryContext.length
 
-        // 6. Route (least priority)
+        // 7. Route (least priority)
         routeContext = routeContext.take(remaining.coerceAtLeast(0))
     }
 }

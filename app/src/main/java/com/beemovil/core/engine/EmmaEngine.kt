@@ -135,8 +135,20 @@ class EmmaEngine(private val context: Context) {
                         "\n\nAGENTES ESPECIALIZADOS DISPONIBLES (usa delegate_to_agent para delegarles tareas):\n$agentList\n"
                     } else ""
                 } catch (e: Exception) { "" }
+
+                // R7: Cross-system context (Tasks, Email, Calendar, behavioral)
+                val crossContextInjection = try {
+                    val crossEngine = com.beemovil.vision.CrossContextEngine(context)
+                    val paragraph = kotlinx.coroutines.runBlocking(Dispatchers.IO) {
+                        crossEngine.buildContextParagraph()
+                    }
+                    if (paragraph.isNotBlank()) "\n\nCONTEXTO SITUACIONAL DEL USUARIO (usa esto para ser proactivo):\n$paragraph\n" else ""
+                } catch (e: Exception) {
+                    Log.w(TAG, "CrossContext for chat failed: ${e.message}")
+                    ""
+                }
                 
-                messagesHistory.add(ChatMessage("system", EMMA_SUPERVISOR_PROMPT + memoryInjection + agentInjection))
+                messagesHistory.add(ChatMessage("system", EMMA_SUPERVISOR_PROMPT + memoryInjection + agentInjection + crossContextInjection))
             }
             delay(500)
         } catch (e: Exception) {

@@ -14,6 +14,9 @@ interface ChatHistoryDao {
     @Query("SELECT * FROM chat_history WHERE threadId = :threadId ORDER BY timestamp ASC")
     suspend fun getHistory(threadId: String): List<ChatMessageEntity>
 
+    @Query("SELECT * FROM chat_history WHERE threadId = :threadId ORDER BY timestamp ASC")
+    fun getHistorySync(threadId: String): List<ChatMessageEntity>
+
     @Query("SELECT * FROM chat_history WHERE threadId = :threadId AND content LIKE '%' || :query || '%' ORDER BY timestamp ASC")
     suspend fun searchHistory(threadId: String, query: String): List<ChatMessageEntity>
 

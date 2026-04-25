@@ -160,7 +160,8 @@ class VisionConversation {
         memoryContext: String = "",
         temporalAlerts: String = "",
         faceHint: String = "",
-        sessionContext: String = ""
+        sessionContext: String = "",
+        crossSystemContext: String = ""  // R7: Tasks, Email, Calendar, user instructions
     ): String = buildString {
         // Personality first — only affects TONE, not intelligence
         if (personality != null) {
@@ -321,6 +322,13 @@ class VisionConversation {
             appendLine()
             appendLine("MEMORIAS RELEVANTES:")
             appendLine(memoryContext.take(300))
+        }
+
+        // R7: Cross-system context (Tasks, Email, Calendar, user instructions)
+        if (crossSystemContext.isNotBlank()) {
+            appendLine()
+            appendLine("CONTEXTO PERSONAL DEL USUARIO (usa esto para ser proactivo y relevante):")
+            appendLine(crossSystemContext)
         }
 
         // Temporal alerts

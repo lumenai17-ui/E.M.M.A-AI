@@ -203,6 +203,7 @@ fun LiveVisionScreen(
         conversation.markSessionStart() // V8: track session timing
         sessionState.reset() // R5: fresh session state
         contextOrchestrator.reset() // R5: fresh zone tracking
+        contextOrchestrator.crossContext.refreshAll() // R7: pre-load Tasks, Email, Calendar, chat instructions
 
         // V8: Record place visit
         if (currentGpsData.address.isNotBlank()) {
@@ -386,7 +387,8 @@ fun LiveVisionScreen(
                 memoryContext = ctxBlock.memoryContext,
                 temporalAlerts = ctxBlock.temporalContext,
                 faceHint = currentFaceHint,
-                sessionContext = ctxBlock.sessionContext
+                sessionContext = ctxBlock.sessionContext,
+                crossSystemContext = ctxBlock.crossSystemContext  // R7
             )
 
             captureLoop.captureAndAnalyze(
