@@ -141,8 +141,29 @@ class VisionCaptureLoop(private val context: Context) {
                         return
                     }
 
-                    val bitmap = imageProxy.toBitmap()
+                    val rawBitmap = imageProxy.toBitmap()
+                    val rotationDegrees = imageProxy.imageInfo.rotationDegrees
                     imageProxy.close() // Release camera immediately
+
+                    // V11: Apply sensor rotation correction
+                    // Android camera sensors are physically mounted in landscape.
+                    // Without this, all bitmaps arrive rotated 90° causing:
+                    // - LLM narrates wrong left/right directions
+                    // - Timelapse videos render sideways
+                    // - Scanner captures are rotated
+                    val bitmap = if (rotationDegrees != 0) {
+                        val matrix = android.graphics.Matrix()
+                        matrix.postRotate(rotationDegrees.toFloat())
+                        val rotated = Bitmap.createBitmap(
+                            rawBitmap, 0, 0,
+                            rawBitmap.width, rawBitmap.height,
+                            matrix, true
+                        )
+                        rawBitmap.recycle()
+                        rotated
+                    } else {
+                        rawBitmap
+                    }
 
                     // Resize + encode on background thread
                     Thread {

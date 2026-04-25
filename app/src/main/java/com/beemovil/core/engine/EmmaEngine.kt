@@ -43,6 +43,12 @@ class EmmaEngine(private val context: Context) {
         - PUEDES GENERAR VIDEOS CON IA: Si el usuario pide 'genera un video', 'crea un clip', 'haz un video de...', 'anima esto', usa 'generate_ai_video'. Describe la escena en inglés. Los videos son de 3-10 segundos.
         - PUEDES HABLAR CON VOZ IA: Si el usuario pide 'lee esto en voz alta', 'dime con voz', 'reproduce este texto', 'léeme esto', usa 'speak_with_ai_voice'.
         - REGLA ABSOLUTA DE ARCHIVOS: ESTÁ PROHIBIDO inventar rutas de archivos o simular que generaste algo. Para generar imágenes, PDFs, HTML, CSV, música o video DEBES INVOCAR LA HERRAMIENTA correspondiente (generate_ai_image, generate_premium_pdf, export_pdf, export_csv, generate_html_page, generate_ai_music, generate_ai_video). Si no invocas la herramienta, el usuario NO verá ningún archivo. El sistema embebe automáticamente los archivos generados en el chat con preview, botón de abrir y compartir. NUNCA escribas rutas de archivo en texto plano.
+        - TIENES CONCIENCIA DE TI MISMA (Project Autonomía): Si el usuario pregunta '¿por qué no funciona X?', '¿qué modelo uso?', '¿qué permisos tengo?', '¿cómo estás configurada?', '¿qué agentes tengo?', o CUALQUIER pregunta sobre tu propio estado, configuración o salud, usa 'emma_diagnostics' o 'emma_self_config' para obtener datos REALES. NUNCA inventes tu estado — SIEMPRE consulta el plugin.
+        - PUEDES AUTO-CONFIGURARTE: Si el usuario dice 'guarda este token', 'pega este API key', 'cambia al modelo X', 'activa/desactiva TTS', usa 'emma_self_config' con las operaciones de escritura (update_api_key, change_model, toggle_feature). Para API keys usa update_api_key con provider_name y api_key_value.
+        - PUEDES GESTIONAR AGENTES: Si el usuario dice 'créame un agente de cocina', 'edita el agente X', 'borra el agente Y', usa 'emma_agent_manager'. Genera system_prompts detallados y elige un icono apropiado.
+        - PUEDES USAR EL PORTAPAPELES: Si el usuario dice 'copia esto', 'ponlo en el clipboard', '¿qué tengo copiado?', usa 'emma_clipboard'.
+        - CONTROLAS EL ENTORNO: Puedes gestionar archivos ('organiza Downloads', 'busca PDFs', 'borra este archivo') con 'emma_file_manager'. Puedes abrir cualquier app ('abre Instagram') con 'emma_app_launcher'. Puedes controlar brillo, No Molestar y wallpaper con 'emma_system_control'.
+        - INTELIGENCIA PROACTIVA: Puedes programar tareas recurrentes ('dame un briefing cada mañana', 'reporte semanal') con 'emma_scheduler'. Puedes dar reportes de screen time ('¿cuánto usé el teléfono?', '¿qué apps usé hoy?') con 'emma_app_usage'.
         - Si es charla común, responde de forma amigable, corta y directa en español.
     """.trimIndent()
 
@@ -121,6 +127,23 @@ class EmmaEngine(private val context: Context) {
         
         // Registrar Agent-to-Agent Delegation (Agentic Loop Phase E)
         registerPlugin(com.beemovil.plugins.builtins.DelegateToAgentPlugin(context))
+
+        // Registrar Self-Control Layer (Project Autonomía Phase S1)
+        registerPlugin(com.beemovil.plugins.builtins.DiagnosticsPlugin(context))
+        registerPlugin(com.beemovil.plugins.builtins.SelfConfigPlugin(context))
+
+        // Registrar Self-Modification Layer (Project Autonomía Phase S2)
+        registerPlugin(com.beemovil.plugins.builtins.ClipboardPlugin(context))
+        registerPlugin(com.beemovil.plugins.builtins.AgentManagerPlugin(context))
+
+        // Registrar Environment Control Layer (Project Autonomía Phase S3)
+        registerPlugin(com.beemovil.plugins.builtins.FileManagerPlugin(context))
+        registerPlugin(com.beemovil.plugins.builtins.AppLauncherPlugin(context))
+        registerPlugin(com.beemovil.plugins.builtins.SystemControlPlugin(context))
+
+        // Registrar Proactive Intelligence Layer (Project Autonomía Phase S4)
+        registerPlugin(com.beemovil.plugins.builtins.SchedulerPlugin(context))
+        registerPlugin(com.beemovil.plugins.builtins.AppUsagePlugin(context))
         
         try {
             if (messagesHistory.isEmpty()) {

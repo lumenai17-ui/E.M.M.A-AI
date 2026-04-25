@@ -40,6 +40,12 @@ interface ChatHistoryDao {
     @Query("SELECT * FROM agent_config")
     fun getAllAgentsSync(): List<AgentConfigEntity>
 
+    @Query("SELECT * FROM agent_config WHERE agentId = :agentId")
+    suspend fun getAgent(agentId: String): AgentConfigEntity?
+
+    @Query("DELETE FROM agent_config WHERE agentId = :agentId")
+    suspend fun deleteAgent(agentId: String)
+
     @Insert
     suspend fun createThread(thread: ChatThreadEntity)
 
