@@ -674,27 +674,18 @@ class EmmaEngine(private val context: Context) {
         }
 
         return try {
-            val provider = LlmFactory.createProvider(effectivePreset, effectiveKey, effectiveModel)
+            // Normalize model name for Google AI: strip "google/" prefix used by OpenRouter
+            val normalizedModel = if (effectivePreset == "google_ai" && effectiveModel.startsWith("google/")) {
+                effectiveModel.removePrefix("google/")
+            } else {
+                effectiveModel
+            }
+            
+            val provider = LlmFactory.createProvider(effectivePreset, effectiveKey, normalizedModel)
             val result = provider.complete(messages, tools)
             Pair(result.text ?: "", result.toolCalls)
         } catch (e: Exception) {
             Log.e(TAG, "executeProvider falló: preset=$effectivePreset model=$effectiveModel keyLen=${effectiveKey.length}", e)
-            
-            // Auto-retry with a different provider if the current one failed
-            if (effectiveKey.isNotBlank()) {
-                // Key exists but call failed — try OpenRouter as last resort
-                val orKey = securePrefs.getString("openrouter_api_key", "") ?: ""
-                if (orKey.isNotBlank() && effectivePreset != "openrouter") {
-                    try {
-                        Log.w(TAG, "Reintentando con OpenRouter fallback...")
-                        val fallback = LlmFactory.createProvider("openrouter", orKey, "openai/gpt-4o-mini")
-                        val result = fallback.complete(messages, tools)
-                        return Pair(result.text ?: "", result.toolCalls)
-                    } catch (retryEx: Exception) {
-                        Log.e(TAG, "Retry con OpenRouter también falló", retryEx)
-                    }
-                }
-            }
 
             // Re-throw cancellation so the outer catch in processUserMessage handles it
             if (e is CancellationException) throw e
