@@ -31,6 +31,14 @@ import com.beemovil.ui.theme.*
 import com.beemovil.voice.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Intent
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
 
 /**
  * ConversationScreen — Voice Intelligence Phase V3
@@ -318,39 +326,27 @@ fun ConversationScreen(
                     }
                 },
                 actions = {
-                    // Backend selector
-                    Box {
-                        TextButton(onClick = { showBackendMenu = true }) {
-                            val backendName = engine.backends.find { it.id == selectedBackendId }?.displayName ?: "Auto"
-                            Text(
-                                backendName.take(12),
-                                color = textSecondary,
-                                fontSize = 11.sp
-                            )
-                            Icon(Icons.Filled.ArrowDropDown, "Menu", tint = textSecondary, modifier = Modifier.size(16.dp))
-                        }
-                        DropdownMenu(expanded = showBackendMenu, onDismissRequest = { showBackendMenu = false }) {
-                            engine.backends.forEach { backend ->
-                                val available = backend.isAvailable()
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            "${backend.displayName}${if (!available) " ⚠️" else ""}",
-                                            color = if (available) textPrimary else textSecondary
-                                        )
-                                    },
-                                    onClick = {
-                                        if (available) {
-                                            selectedBackendId = backend.id
-                                            // Persist selection
-                                            prefs.edit().putString("conversation_backend", backend.id).apply()
-                                            showBackendMenu = false
-                                        }
-                                    },
-                                    enabled = available
+                    // Backend indicator (auto-select: Pipeline if available, else Offline)
+                    val activeBackend = engine.backends.find { it.id == selectedBackendId }
+                        ?: engine.getDefaultBackend()
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(end = 8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .background(
+                                    if (activeBackend.isAvailable()) Color(0xFF4CAF50) else Color(0xFFF44336),
+                                    CircleShape
                                 )
-                            }
-                        }
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            if (activeBackend.requiresInternet) "Online" else "Offline",
+                            color = textSecondary,
+                            fontSize = 10.sp
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
@@ -455,13 +451,15 @@ fun ConversationScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(history) { turn ->
-                        ConversationTurnCard(turn, isDark, textPrimary, textSecondary, cardBg, accent)
+                SelectionContainer {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(history) { turn ->
+                            ConversationTurnCard(turn, isDark, textPrimary, textSecondary, cardBg, accent, context)
+                        }
                     }
                 }
 
@@ -744,8 +742,9 @@ fun AudioLevelBar(
     }
 }
 
-// === Turn Card ===
+// === Turn Card (V8 Enhanced: Copy, Share, Timestamps) ===
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ConversationTurnCard(
     turn: ConversationTurn,
@@ -753,40 +752,101 @@ fun ConversationTurnCard(
     textPrimary: Color,
     textSecondary: Color,
     cardBg: Color,
-    accent: Color
+    accent: Color,
+    context: android.content.Context
 ) {
+    val clipboard = remember { context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as ClipboardManager }
+
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         // User bubble
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             Surface(
                 color = accent.copy(alpha = 0.15f),
                 shape = RoundedCornerShape(16.dp, 16.dp, 4.dp, 16.dp),
-                modifier = Modifier.widthIn(max = 280.dp)
+                modifier = Modifier
+                    .widthIn(max = 300.dp)
+                    .combinedClickable(
+                        onClick = {},
+                        onLongClick = {
+                            clipboard.setPrimaryClip(ClipData.newPlainText("user", turn.userText))
+                            android.widget.Toast.makeText(context, "Copiado", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    )
             ) {
-                Text(
-                    text = turn.userText,
-                    color = textPrimary,
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(12.dp)
-                )
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = turn.userText,
+                        color = textPrimary,
+                        fontSize = 13.sp
+                    )
+                }
             }
         }
 
-        // Emma bubble
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+        // Emma bubble with actions
+        Column(modifier = Modifier.fillMaxWidth()) {
             Surface(
                 color = cardBg,
                 shape = RoundedCornerShape(16.dp, 16.dp, 16.dp, 4.dp),
-                modifier = Modifier.widthIn(max = 280.dp)
+                modifier = Modifier
+                    .widthIn(max = 300.dp)
+                    .combinedClickable(
+                        onClick = {},
+                        onLongClick = {
+                            clipboard.setPrimaryClip(ClipData.newPlainText("emma", turn.emmaText))
+                            android.widget.Toast.makeText(context, "Respuesta copiada", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    )
             ) {
-                Text(
-                    text = turn.emmaText,
-                    color = textPrimary.copy(alpha = 0.9f),
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(12.dp)
-                )
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = turn.emmaText,
+                        color = textPrimary.copy(alpha = 0.9f),
+                        fontSize = 13.sp
+                    )
+                }
+            }
+
+            // Action buttons row
+            Row(
+                modifier = Modifier.padding(start = 4.dp, top = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                // Copy button
+                IconButton(
+                    onClick = {
+                        clipboard.setPrimaryClip(ClipData.newPlainText("emma", turn.emmaText))
+                        android.widget.Toast.makeText(context, "📋 Copiado", android.widget.Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.ContentCopy,
+                        "Copiar",
+                        tint = textSecondary.copy(alpha = 0.5f),
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+
+                // Share button
+                IconButton(
+                    onClick = {
+                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, turn.emmaText)
+                        }
+                        context.startActivity(Intent.createChooser(shareIntent, "Compartir respuesta"))
+                    },
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.Share,
+                        "Compartir",
+                        tint = textSecondary.copy(alpha = 0.5f),
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
             }
         }
     }
 }
-
