@@ -42,6 +42,13 @@ object LifeStreamManager {
         val prefs = context.getSharedPreferences("beemovil", Context.MODE_PRIVATE)
         prefs.edit().putBoolean(PREF_ENABLED, enabled).apply()
         Log.i(TAG, "LifeStream ${if (enabled) "ENABLED" else "DISABLED"}")
+
+        // Schedule or cancel signal collector
+        if (enabled) {
+            LifeSignalCollector.schedule(context)
+        } else {
+            LifeSignalCollector.cancel(context)
+        }
     }
 
     /**

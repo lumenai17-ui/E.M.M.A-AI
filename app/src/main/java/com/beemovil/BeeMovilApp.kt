@@ -69,6 +69,12 @@ class BeeMovilApp : Application() {
             ExistingPeriodicWorkPolicy.KEEP,
             telemetryWork
         )
+
+        // LifeStream: Auto-start signal collector if enabled
+        if (com.beemovil.lifestream.LifeStreamManager.isEnabled(this)) {
+            com.beemovil.lifestream.LifeSignalCollector.schedule(this)
+            Log.i("BeeMovilApp", "🌊 LifeStream collector auto-started")
+        }
     }
 
     /** Read the last crash log (used by Settings/debug). */
