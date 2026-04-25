@@ -335,7 +335,11 @@ class ConversationEngine(
         if (state != newState) {
             Log.d(TAG, "State: $state → $newState")
             state = newState
-            onStateChange?.invoke(newState)
+            try {
+                onStateChange?.invoke(newState)
+            } catch (e: Exception) {
+                Log.w(TAG, "setState callback failed (composable disposed?): ${e.message}")
+            }
         }
     }
 

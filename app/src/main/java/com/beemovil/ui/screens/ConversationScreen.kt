@@ -161,11 +161,56 @@ fun ConversationScreen(
         }
     }
 
-    // Cleanup on exit
+    // Fix: Pause WakeWordService when conversation is open (avoids SpeechRecognizer conflict)
     DisposableEffect(Unit) {
+        // Stop wake word to free the SpeechRecognizer for conversation
+        val wasWakeWordRunning = com.beemovil.service.WakeWordService.isRunning
+        if (wasWakeWordRunning) {
+            try {
+                val stopIntent = android.content.Intent(context, com.beemovil.service.WakeWordService::class.java).apply {
+                    action = com.beemovil.service.WakeWordService.ACTION_STOP
+                }
+                context.startService(stopIntent)
+                android.util.Log.i("ConversationScreen", "Paused WakeWordService to free SpeechRecognizer")
+            } catch (e: Exception) {
+                android.util.Log.w("ConversationScreen", "Failed to stop wake word: ${e.message}")
+            }
+        }
+
         onDispose {
-            engine.stop()
-            engine.destroy()
+            // Stop conversation safely
+            try {
+                engine.onStateChange = null
+                engine.onPartialTranscript = null
+                engine.onFinalTranscript = null
+                engine.onResponse = null
+                engine.onError = null
+                engine.onTurnComplete = null
+                engine.stop()
+                engine.destroy()
+            } catch (e: Exception) {
+                android.util.Log.w("ConversationScreen", "Error cleaning up engine: ${e.message}")
+            }
+
+            // Resume WakeWordService if it was running before
+            if (wasWakeWordRunning) {
+                try {
+                    val prefs = context.getSharedPreferences("beemovil", android.content.Context.MODE_PRIVATE)
+                    if (prefs.getBoolean("wake_word_enabled", false)) {
+                        val startIntent = android.content.Intent(context, com.beemovil.service.WakeWordService::class.java).apply {
+                            action = com.beemovil.service.WakeWordService.ACTION_START
+                        }
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                            context.startForegroundService(startIntent)
+                        } else {
+                            context.startService(startIntent)
+                        }
+                        android.util.Log.i("ConversationScreen", "Resumed WakeWordService")
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("ConversationScreen", "Failed to resume wake word: ${e.message}")
+                }
+            }
         }
     }
 
