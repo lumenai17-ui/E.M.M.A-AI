@@ -144,6 +144,9 @@ class EmmaEngine(private val context: Context) {
         // Registrar Proactive Intelligence Layer (Project Autonomía Phase S4)
         registerPlugin(com.beemovil.plugins.builtins.SchedulerPlugin(context))
         registerPlugin(com.beemovil.plugins.builtins.AppUsagePlugin(context))
+
+        // Registrar LifeStream Intelligence (Signal Query)
+        registerPlugin(com.beemovil.plugins.builtins.LifeStreamPlugin(context))
         
         try {
             if (messagesHistory.isEmpty()) {
