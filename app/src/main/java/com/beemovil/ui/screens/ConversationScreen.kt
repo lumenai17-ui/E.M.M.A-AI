@@ -70,11 +70,26 @@ fun ConversationScreen(
         )
     }
 
+    // Persistent preferences
+    val prefs = remember { context.getSharedPreferences("beemovil", android.content.Context.MODE_PRIVATE) }
+
+    // Fixed thread for all voice conversations — unifies with Chats tab
+    val conversationThreadId = "conversation"
+
     // State
     var conversationState by remember { mutableStateOf(ConversationState.IDLE) }
     var previousState by remember { mutableStateOf(ConversationState.IDLE) }
     var partialTranscript by remember { mutableStateOf("") }
-    var selectedBackendId by remember { mutableStateOf(engine.getDefaultBackend().id) }
+    // Fix 1: Persist backend selection — remembers Gemini across sessions
+    var selectedBackendId by remember {
+        val saved = prefs.getString("conversation_backend", null)
+        val backendId = if (saved != null && engine.backends.any { it.id == saved }) {
+            saved
+        } else {
+            engine.getDefaultBackend().id
+        }
+        mutableStateOf(backendId)
+    }
     var autoListen by remember { mutableStateOf(true) }
     var isMuted by remember { mutableStateOf(false) }
     val history = remember { mutableStateListOf<ConversationTurn>() }
@@ -83,6 +98,39 @@ fun ConversationScreen(
     var showBackendMenu by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var audioLevel by remember { mutableFloatStateOf(0f) } // V5: Volume meter 0..1
+
+    // Fix 2: Load conversation history from Room DB on entry
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val db = com.beemovil.database.ChatHistoryDB.getDatabase(context)
+                val messages = db.chatHistoryDao().getHistory(conversationThreadId)
+                // Pair user/assistant messages into ConversationTurns
+                val turns = mutableListOf<ConversationTurn>()
+                var i = 0
+                while (i < messages.size) {
+                    val msg = messages[i]
+                    if (msg.role == "user") {
+                        // Look for next assistant message
+                        val nextAssistant = if (i + 1 < messages.size && messages[i + 1].role == "assistant") {
+                            messages[i + 1].content
+                        } else {
+                            "..."
+                        }
+                        turns.add(ConversationTurn(msg.content, nextAssistant))
+                        i += 2 // Skip both user + assistant
+                    } else {
+                        i++ // Skip orphan assistant messages
+                    }
+                }
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    history.addAll(turns.takeLast(50)) // Load last 50 turns
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("ConversationScreen", "Failed to load history: ${e.message}")
+            }
+        }
+    }
 
     // V5: Fire haptic feedback on state transitions
     LaunchedEffect(conversationState) {
@@ -103,7 +151,6 @@ fun ConversationScreen(
     // V5: Simulate audio level during LISTENING (based on partial transcript activity)
     LaunchedEffect(conversationState, partialTranscript) {
         if (conversationState == ConversationState.LISTENING) {
-            // Animate audio level based on transcript activity
             audioLevel = if (partialTranscript.isNotBlank()) 0.7f + (Math.random() * 0.3).toFloat() else 0.2f + (Math.random() * 0.3).toFloat()
         } else if (conversationState == ConversationState.SPEAKING) {
             audioLevel = 0.5f + (Math.random() * 0.5).toFloat()
@@ -144,18 +191,18 @@ fun ConversationScreen(
     LaunchedEffect(Unit) {
         if (viewModel.autoStartConversation.value) {
             viewModel.autoStartConversation.value = false // Consume flag
-            // Brief delay to let UI compose
             delay(500)
             val backend = engine.backends.find { it.id == selectedBackendId }
                 ?: engine.getDefaultBackend()
+            android.util.Log.i("ConversationScreen", "Auto-start with backend: ${backend.displayName} (id=${backend.id})")
             val config = ConversationConfig(
                 autoListenAfterTTS = autoListen,
                 language = java.util.Locale.getDefault().toLanguageTag(),
                 speakResponses = !isMuted,
                 llmProvider = viewModel.currentProvider.value,
                 llmModel = viewModel.currentModel.value,
-                threadId = viewModel.activeThreadId.value,
-                agentId = viewModel.activeAgentId.value
+                threadId = conversationThreadId,
+                agentId = "conversation"
             )
             engine.start(backend, config)
         }
@@ -262,6 +309,8 @@ fun ConversationScreen(
                                     onClick = {
                                         if (available) {
                                             selectedBackendId = backend.id
+                                            // Persist selection
+                                            prefs.edit().putString("conversation_backend", backend.id).apply()
                                             showBackendMenu = false
                                         }
                                     },
@@ -420,14 +469,15 @@ fun ConversationScreen(
                                 errorMessage = null
                                 val backend = engine.backends.find { it.id == selectedBackendId }
                                     ?: engine.getDefaultBackend()
+                                android.util.Log.i("ConversationScreen", "Manual start with backend: ${backend.displayName} (id=${backend.id})")
                                 val config = ConversationConfig(
                                     autoListenAfterTTS = autoListen,
                                     language = java.util.Locale.getDefault().toLanguageTag(),
                                     speakResponses = !isMuted,
                                     llmProvider = viewModel.currentProvider.value,
                                     llmModel = viewModel.currentModel.value,
-                                    threadId = viewModel.activeThreadId.value,
-                                    agentId = viewModel.activeAgentId.value
+                                    threadId = conversationThreadId,
+                                    agentId = "conversation"
                                 )
                                 engine.start(backend, config)
                             }

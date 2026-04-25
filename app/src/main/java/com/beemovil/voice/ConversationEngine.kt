@@ -87,7 +87,7 @@ class ConversationEngine(
         scope.launch {
             try {
                 backend.startSession(config)
-                Log.i(TAG, "Conversation started with backend: ${backend.displayName}")
+                Log.i(TAG, "Conversation started with backend: ${backend.displayName} (id=${backend.id}, thread=${config.threadId})")
                 // Begin first listen cycle
                 beginListening()
             } catch (e: Exception) {
