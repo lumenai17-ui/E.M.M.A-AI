@@ -169,6 +169,29 @@ class BackgroundConversationService : Service() {
                 Log.e(TAG, "Engine init failed: ${e.message}")
             }
 
+            // Wait for native TTS to be ready (async init takes 1-3s)
+            // This is critical: without it, speak() silently skips on Spanish
+            // because Pollinations/ElevenLabs/DeepgramTTS may not be configured
+            Log.d(TAG, "Waiting for TTS to initialize...")
+            updateNotification("🔊 Preparando voz...")
+            var ttsWait = 0
+            while (ttsWait < 4000) {
+                delay(200)
+                ttsWait += 200
+                // Try a test speak — if native TTS is ready, we'll know
+                try {
+                    val testField = voiceManager?.javaClass?.getDeclaredField("nativeTTSReady")
+                    testField?.isAccessible = true
+                    if (testField?.getBoolean(voiceManager) == true) {
+                        Log.i(TAG, "✅ TTS ready after ${ttsWait}ms")
+                        break
+                    }
+                } catch (_: Exception) {
+                    // Reflection failed — just wait the full duration
+                }
+            }
+            Log.i(TAG, "TTS wait complete (${ttsWait}ms)")
+
             // Now greet and start listening
             greetAndStartListening()
         }
@@ -370,7 +393,8 @@ class BackgroundConversationService : Service() {
         conversationJob = serviceScope.launch {
             try {
                 val response = withContext(Dispatchers.IO) {
-                    val prefs = SecurePrefs.get(applicationContext)
+                    // Read from "beemovil" SharedPreferences (same as SettingsScreen writes to)
+                    val prefs = applicationContext.getSharedPreferences("beemovil", Context.MODE_PRIVATE)
                     val provider = prefs.getString("selected_provider", "openrouter") ?: "openrouter"
                     val model = prefs.getString("selected_model", "") ?: ""
 
