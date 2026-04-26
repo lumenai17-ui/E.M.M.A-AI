@@ -95,8 +95,11 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
     var composeTo by remember { mutableStateOf("") }
     var composeSubject by remember { mutableStateOf("") }
     var composeBody by remember { mutableStateOf("") }
+    var composeAttachments by remember { mutableStateOf<List<android.net.Uri>>(emptyList()) }
     var isSending by remember { mutableStateOf(false) }
     var sendResult by remember { mutableStateOf<String?>(null) }
+    // Search
+    var searchQuery by remember { mutableStateOf("") }
 
     // Helper: force network refresh
     fun forceRefresh() {
@@ -209,7 +212,16 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                                                     } else if (hasImapConfig) {
                                                         val emailService = com.beemovil.email.EmailService(context)
                                                         val config = com.beemovil.email.EmailService.EmailConfig(imapHost, imapPort, smtpHost, smtpPort)
-                                                        val ok = emailService.sendEmail(imapEmail, imapPassword, config, composeTo.trim(), composeSubject, composeBody)
+                                                    val ok = emailService.sendEmail(imapEmail, imapPassword, config, composeTo.trim(), composeSubject, composeBody,
+                                                                     attachmentPaths = composeAttachments.mapNotNull { uri ->
+                                                                         try {
+                                                                             val input = context.contentResolver.openInputStream(uri)
+                                                                             val name = uri.lastPathSegment ?: "attachment"
+                                                                             val file = java.io.File(context.cacheDir, name)
+                                                                             input?.use { i -> file.outputStream().use { o -> i.copyTo(o) } }
+                                                                             file.absolutePath
+                                                                         } catch (_: Exception) { null }
+                                                                     })
                                                         sendResult = if (ok) "✅ Enviado" else "❌ Error al enviar"
                                                     }
                                                 } catch (e: Exception) { sendResult = "❌ ${e.message}" }
@@ -218,7 +230,7 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                                             if (sendResult?.startsWith("✅") == true) {
                                                 // Clear and go back after short delay
                                                 kotlinx.coroutines.delay(1000)
-                                                composeTo = ""; composeSubject = ""; composeBody = ""
+                                                composeTo = ""; composeSubject = ""; composeBody = ""; composeAttachments = emptyList()
                                                 viewMode = "list"
                                             }
                                         }
@@ -235,7 +247,7 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
             if (viewMode == "list" && (accessToken != null || hasImapConfig)) {
                 FloatingActionButton(
                     onClick = {
-                        composeTo = ""; composeSubject = ""; composeBody = ""; sendResult = null
+                        composeTo = ""; composeSubject = ""; composeBody = ""; composeAttachments = emptyList(); sendResult = null
                         viewMode = "compose"
                     },
                     containerColor = accent,
@@ -489,6 +501,19 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                                 focusedLabelColor = accent, unfocusedLabelColor = textSecondary, cursorColor = accent
                             )
                         )
+                        // Attachments section
+                        if (composeAttachments.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Adjuntos (${composeAttachments.size})", color = textSecondary, fontSize = 12.sp)
+                            composeAttachments.forEachIndexed { i, uri ->
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
+                                    Text("📎 ${uri.lastPathSegment ?: "archivo"}", color = accent, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                                    IconButton(onClick = { composeAttachments = composeAttachments.toMutableList().apply { removeAt(i) } }, modifier = Modifier.size(24.dp)) {
+                                        Icon(Icons.Filled.Close, "Remove", tint = Color(0xFFF44336), modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            }
+                        }
                         Spacer(modifier = Modifier.height(16.dp))
                     }
                 }
@@ -553,6 +578,22 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                     leadingIcon = { Icon(Icons.Filled.Send, "Sent", modifier = Modifier.size(16.dp)) },
                     colors = FilterChipDefaults.filterChipColors(selectedContainerColor = accent.copy(alpha = 0.2f), selectedLabelColor = accent)
                 )
+            }
+
+            // Search bar
+            if (!isLoading) {
+                androidx.compose.foundation.layout.Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = searchQuery, onValueChange = { searchQuery = it },
+                        placeholder = { Text("🔍 Buscar correos...", color = textSecondary, fontSize = 13.sp) },
+                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = textPrimary, unfocusedTextColor = textPrimary, focusedBorderColor = accent, unfocusedBorderColor = textSecondary.copy(alpha = 0.3f)),
+                        modifier = Modifier.fillMaxWidth().height(44.dp),
+                        shape = RoundedCornerShape(12.dp), singleLine = true
+                    )
+                }
             }
 
             val noSourceConfigured = !hasGoogle && !hasImapConfig
@@ -667,9 +708,12 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                     }
                 }
             } else {
-                // Google email list
+                // Google email list (filtered by search)
+                val filteredEmails = if (searchQuery.isBlank()) emails else emails.filter {
+                    it.subject.contains(searchQuery, true) || it.from.contains(searchQuery, true) || it.snippet.contains(searchQuery, true)
+                }
                 LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)) {
-                    items(emails, key = { it.id }) { email ->
+                    items(filteredEmails, key = { it.id }) { email ->
                         EmailItemCard(
                             email = email, isDark = isDark, textPrimary = textPrimary, textSecondary = textSecondary,
                             accent = accent, avatarBg = avatarBg, dividerColor = dividerColor,
