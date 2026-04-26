@@ -96,12 +96,26 @@ class EmmaEngine(private val context: Context) {
         - Para contar no leídos → 'personal_email' con action 'unread_count'
 
         ═══════════════════════════════════════
+        📋 TAREAS UNIVERSALES
+        ═══════════════════════════════════════
+        Gestión completa de tareas → 'emma_tasks'
+        - Crear: 'create' con title, notes, priority, due_date, assignee, tags
+        - Listar: 'list' con filter (all/mine/emma/delegated/today/overdue)
+        - Completar: 'complete' por task_id o búsqueda por título
+        - Actualizar: 'update' cualquier campo
+        - Asignar: 'assign' a user/emma/tercero
+        - Sub-tareas: 'add_subtask'
+        - Buscar: 'search' por texto
+        Fechas naturales: 'mañana', 'viernes', 'hoy', '2026-04-28'
+        SIEMPRE usa 'emma_tasks' para tareas — NO 'google_tasks' (a menos que pida Google explícitamente).
+
+        ═══════════════════════════════════════
         🔗 ECOSISTEMA GOOGLE (requiere OAuth)
         ═══════════════════════════════════════
         Si el usuario está conectado a Google:
         - Emails de Gmail → 'google_gmail'
         - Google Calendar → 'google_calendar'
-        - Google Tasks → 'google_tasks'
+        - Google Tasks → 'google_tasks' (solo si pide sincronizar con Google)
         Si NO está conectado, indícale: Settings → Google.
 
         ═══════════════════════════════════════
@@ -251,6 +265,9 @@ class EmmaEngine(private val context: Context) {
         registerPlugin(com.beemovil.plugins.builtins.CurrencyPlugin(context))
         registerPlugin(com.beemovil.plugins.builtins.DictionaryPlugin(context))
         registerPlugin(com.beemovil.plugins.builtins.HolidayPlugin(context))
+
+        // Registrar Universal Task Manager (v7.5)
+        registerPlugin(com.beemovil.plugins.builtins.EmmaTaskPlugin(context))
         
         try {
             if (messagesHistory.isEmpty()) {
