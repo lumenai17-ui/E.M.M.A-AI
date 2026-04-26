@@ -52,7 +52,9 @@ object BarcodeScanner {
         val nutriscore: String = "",    // A-E grade for food
         val ingredients: String = "",
         val imageUrl: String = "",
-        val source: String = ""         // "OpenFoodFacts" or "UPCitemdb"
+        val source: String = "",         // "OpenFoodFacts", "UPCitemdb", "WebSearch"
+        val reviews: String = "",        // Review snippets from web
+        val price: String = ""           // Price info if found
     )
 
     /**
@@ -97,13 +99,24 @@ object BarcodeScanner {
 
     /**
      * Lookup product information from open APIs.
+     * Pipeline: OpenFoodFacts → UPCitemdb → Web Search
      */
     private suspend fun lookupProduct(barcode: String): ProductInfo? {
         // Check cache first
         recentScans[barcode]?.let { return it }
 
         // Try OpenFoodFacts (best for food products, worldwide)
-        val product = lookupOpenFoodFacts(barcode) ?: lookupUPCitemdb(barcode)
+        var product = lookupOpenFoodFacts(barcode)
+
+        // Try UPCitemdb (general products)
+        if (product == null) {
+            product = lookupUPCitemdb(barcode)
+        }
+
+        // Fallback: Web search for the barcode
+        if (product == null) {
+            product = lookupViaWebSearch(barcode)
+        }
 
         if (product != null) {
             recentScans[barcode] = product
@@ -120,7 +133,7 @@ object BarcodeScanner {
         try {
             val request = Request.Builder()
                 .url("https://world.openfoodfacts.org/api/v2/product/$barcode.json?fields=product_name,brands,categories,nutriscore_grade,ingredients_text,image_url")
-                .header("User-Agent", "E.M.M.A. AI/6.0 (Android)")
+                .header("User-Agent", "E.M.M.A. AI/7.2 (Android)")
                 .build()
 
             val response = http.newCall(request).execute()
@@ -149,7 +162,7 @@ object BarcodeScanner {
         try {
             val request = Request.Builder()
                 .url("https://api.upcitemdb.com/prod/trial/lookup?upc=$barcode")
-                .header("User-Agent", "E.M.M.A. AI/6.0 (Android)")
+                .header("User-Agent", "E.M.M.A. AI/7.2 (Android)")
                 .build()
 
             val response = http.newCall(request).execute()
@@ -173,7 +186,61 @@ object BarcodeScanner {
     }
 
     /**
+     * Fallback: Search the web for the barcode to find product info.
+     * Uses a simple DuckDuckGo instant answer API (no API key needed).
+     */
+    private suspend fun lookupViaWebSearch(barcode: String): ProductInfo? = withContext(Dispatchers.IO) {
+        try {
+            // DuckDuckGo instant answer — free, no key
+            val query = java.net.URLEncoder.encode("$barcode product review price", "UTF-8")
+            val request = Request.Builder()
+                .url("https://api.duckduckgo.com/?q=$query&format=json&no_html=1&skip_disambig=1")
+                .header("User-Agent", "E.M.M.A. AI/7.2 (Android)")
+                .build()
+
+            val response = http.newCall(request).execute()
+            if (!response.isSuccessful) return@withContext null
+
+            val json = JSONObject(response.body?.string() ?: return@withContext null)
+            val abstractText = json.optString("AbstractText", "")
+            val heading = json.optString("Heading", "")
+            val abstractUrl = json.optString("AbstractURL", "")
+
+            // Also check related topics for more info
+            val relatedTopics = json.optJSONArray("RelatedTopics")
+            val snippets = buildString {
+                if (relatedTopics != null) {
+                    for (i in 0 until minOf(relatedTopics.length(), 3)) {
+                        val topic = relatedTopics.optJSONObject(i) ?: continue
+                        val text = topic.optString("Text", "")
+                        if (text.isNotBlank()) {
+                            if (isNotEmpty()) append(" | ")
+                            append(text.take(100))
+                        }
+                    }
+                }
+            }
+
+            if (heading.isBlank() && abstractText.isBlank() && snippets.isBlank()) {
+                return@withContext null
+            }
+
+            ProductInfo(
+                name = heading.ifBlank { "Producto (código: $barcode)" },
+                brand = "",
+                category = "",
+                reviews = (abstractText.take(200) + if (snippets.isNotBlank()) " | $snippets" else "").take(300),
+                source = "WebSearch"
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Web search lookup failed: ${e.message}")
+            null
+        }
+    }
+
+    /**
      * Build a context string for the LLM from a scan result.
+     * Enhanced to prompt for richer, more actionable responses.
      */
     fun buildProductContext(result: ScanResult): String = buildString {
         appendLine("[PRODUCT SCAN] Barcode: ${result.rawValue} (${result.format})")
@@ -183,8 +250,21 @@ object BarcodeScanner {
             if (p.category.isNotBlank()) appendLine("Category: ${p.category}")
             if (p.nutriscore.isNotBlank()) appendLine("Nutri-Score: ${p.nutriscore}")
             if (p.ingredients.isNotBlank()) appendLine("Ingredients: ${p.ingredients}")
+            if (p.price.isNotBlank()) appendLine("Price: ${p.price}")
+            if (p.reviews.isNotBlank()) appendLine("Web Info: ${p.reviews}")
             appendLine("Source: ${p.source}")
-        } ?: appendLine("Product info not found in database.")
+            appendLine()
+            appendLine("[INSTRUCTION] Provide a helpful summary of this product. Include:")
+            appendLine("- What it is and what it's used for")
+            appendLine("- Quality assessment or Nutri-Score explanation if food")
+            appendLine("- Estimated price range if known")
+            appendLine("- Suggest better alternatives if applicable")
+            appendLine("- Any health/safety considerations")
+        } ?: run {
+            appendLine("Product info not found in any database (OpenFoodFacts, UPCitemdb, Web).")
+            appendLine("[INSTRUCTION] Tell the user you couldn't find this product in databases.")
+            appendLine("Suggest they try scanning again or searching manually.")
+        }
     }
 
     /**

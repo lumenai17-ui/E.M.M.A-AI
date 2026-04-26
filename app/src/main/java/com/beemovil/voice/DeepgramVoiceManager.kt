@@ -47,7 +47,7 @@ class DeepgramVoiceManager(private val context: Context) {
     
     // Whether to use Pollinations Nova as primary TTS (default: true)
     val usePollinationsTTS: Boolean get() = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        .getBoolean("use_pollinations_tts", true)
+        .getBoolean("use_pollinations_tts", false)
         
     val elevenLabsKey: String get() = SecurePrefs.get(context).getString(KEY_ELEVENLABS_API, "") ?: ""
     val elevenLabsVoice: String get() = SecurePrefs.get(context).getString(KEY_ELEVENLABS_VOICE, "") ?: ""

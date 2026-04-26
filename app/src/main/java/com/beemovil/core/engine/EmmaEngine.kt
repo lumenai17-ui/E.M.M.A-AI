@@ -147,6 +147,12 @@ class EmmaEngine(private val context: Context) {
 
         // Registrar LifeStream Intelligence (Signal Query)
         registerPlugin(com.beemovil.plugins.builtins.LifeStreamPlugin(context))
+
+        // Registrar Public APIs Intelligence Layer (v7.2 — Zero-cost contextual data)
+        registerPlugin(com.beemovil.plugins.builtins.WeatherPlugin(context))
+        registerPlugin(com.beemovil.plugins.builtins.CurrencyPlugin(context))
+        registerPlugin(com.beemovil.plugins.builtins.DictionaryPlugin(context))
+        registerPlugin(com.beemovil.plugins.builtins.HolidayPlugin(context))
         
         try {
             if (messagesHistory.isEmpty()) {

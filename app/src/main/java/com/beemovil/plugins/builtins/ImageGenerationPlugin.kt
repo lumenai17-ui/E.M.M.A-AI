@@ -64,8 +64,16 @@ class ImageGenerationPlugin(private val context: Context) : EmmaPlugin {
                             put("sketch")
                             put("logo")
                             put("flat_design")
+                            put("cinematic")
+                            put("fashion")
+                            put("architectural")
+                            put("comic")
+                            put("surreal")
+                            put("vintage")
+                            put("neon")
+                            put("sticker")
                         })
-                        put("description", "Estilo visual de la imagen.")
+                        put("description", "Estilo visual de la imagen. Opciones: photorealistic, digital_art, anime, oil_painting, watercolor, 3d_render, pixel_art, sketch, logo, flat_design, cinematic, fashion, architectural, comic, surreal, vintage, neon, sticker.")
                     })
                     put("width", JSONObject().apply {
                         put("type", "integer")
@@ -143,19 +151,66 @@ class ImageGenerationPlugin(private val context: Context) : EmmaPlugin {
     }
 
     private fun buildEnhancedPrompt(basePrompt: String, style: String): String {
-        val styleModifier = when (style) {
-            "photorealistic" -> "photorealistic, ultra detailed, 8k resolution, studio lighting"
-            "digital_art" -> "digital art, vibrant colors, highly detailed, artstation quality"
-            "anime" -> "anime style, studio ghibli inspired, cel shading, vibrant"
-            "oil_painting" -> "oil painting style, classical art, rich textures, museum quality"
-            "watercolor" -> "watercolor painting, soft edges, fluid colors, artistic"
-            "3d_render" -> "3D render, octane render, volumetric lighting, high detail"
-            "pixel_art" -> "pixel art, retro gaming style, 16-bit aesthetic"
-            "sketch" -> "pencil sketch, hand drawn, fine lines, artistic"
-            "logo" -> "logo design, clean vector style, minimalist, professional, white background"
-            "flat_design" -> "flat design, minimal, clean lines, modern illustration"
-            else -> "digital art, high quality"
+        val intent = detectIntent(basePrompt)
+        val styleDNA = getStyleDNA(style)
+        val intentBoost = getIntentBoost(intent)
+        val qualityBase = "masterpiece, best quality, highly detailed"
+
+        return "$basePrompt, $intentBoost, $styleDNA, $qualityBase"
+    }
+
+    private fun detectIntent(prompt: String): String {
+        val p = prompt.lowercase()
+        return when {
+            p.containsAny("logo", "brand", "icon", "emblem", "logotipo", "marca") -> "LOGO"
+            p.containsAny("portrait", "face", "person", "headshot", "selfie", "retrato", "rostro") -> "PORTRAIT"
+            p.containsAny("landscape", "scenery", "mountain", "ocean", "city", "skyline", "paisaje", "montaña") -> "LANDSCAPE"
+            p.containsAny("product", "item", "bottle", "packaging", "shoe", "producto") -> "PRODUCT"
+            p.containsAny("food", "dish", "meal", "recipe", "plate", "comida", "plato") -> "FOOD"
+            p.containsAny("ui", "interface", "app", "dashboard", "website", "mockup") -> "UI_DESIGN"
+            p.containsAny("pattern", "texture", "wallpaper", "background", "patrón", "fondo") -> "PATTERN"
+            p.containsAny("meme", "funny", "reaction", "viral", "chistoso") -> "MEME"
+            p.containsAny("sticker", "emoji", "whatsapp", "telegram") -> "STICKER"
+            else -> "ART"
         }
-        return "$basePrompt, $styleModifier"
+    }
+
+    private fun String.containsAny(vararg keywords: String): Boolean =
+        keywords.any { this.contains(it, ignoreCase = true) }
+
+    private fun getIntentBoost(intent: String): String = when (intent) {
+        "LOGO" -> "isolated on pure white background, no text, geometric precision, brand identity, scalable vector-like design, negative space, single focal element, corporate clean"
+        "PORTRAIT" -> "bust shot, cinematic composition, eye contact with viewer, sharp focus on eyes, beautiful bokeh background, rembrandt lighting, skin texture detail, catchlight in eyes"
+        "LANDSCAPE" -> "panoramic wide angle, rule of thirds composition, leading lines toward horizon, atmospheric perspective, dramatic cloud formations, golden hour warm lighting, depth layering"
+        "PRODUCT" -> "studio product photography, three-point lighting setup, clean gradient background, soft reflections on surface, commercial advertising quality, floating hero shot"
+        "FOOD" -> "overhead food photography, rustic wooden table, fresh ingredients, steam rising, natural window light, shallow DOF, food styling, appetizing warm tones"
+        "UI_DESIGN" -> "modern UI design, clean layout, consistent spacing, glass morphism effects, dark mode interface, subtle gradients, professional mockup"
+        "PATTERN" -> "seamless tileable pattern, repeating motif, decorative design, symmetrical, textile quality, wallpaper design"
+        "MEME" -> "humorous exaggerated expression, bold outlines, vibrant flat colors, meme-worthy composition, internet culture aesthetic"
+        "STICKER" -> "die-cut sticker design, thick white border, cute chibi style, transparent background, bold clean outlines, kawaii aesthetic, emoji quality"
+        else -> "award-winning composition, museum gallery quality, masterful use of light and shadow, emotionally evocative"
+    }
+
+    private fun getStyleDNA(style: String): String = when (style) {
+        "photorealistic" -> "photorealistic photograph, shot on Canon EOS R5 with 85mm f/1.4 lens, shallow depth of field, natural lighting, RAW photo quality, subtle film grain, ACES tonemapped, professional color grading, 8K UHD"
+        "digital_art" -> "digital illustration masterpiece, trending on ArtStation top weekly, by Greg Rutkowski and Alphonse Mucha, intricate ornamental details, volumetric atmospheric fog, dramatic rim lighting with color spill, cinematic color grading"
+        "anime" -> "anime key visual, studio ufotable production quality, dynamic action pose, particle effects, cel-shaded rendering with soft gradient shadows, vibrant saturated color palette, detailed background environment painting"
+        "oil_painting" -> "oil painting on canvas, classical fine art technique, rich impasto brushwork, chiaroscuro dramatic lighting, renaissance composition, warm color palette with deep shadows, museum gallery piece"
+        "watercolor" -> "watercolor painting, wet-on-wet technique, soft bleeding edges, transparent color washes, visible paper texture, fluid organic forms, delicate botanical illustration quality, ethereal luminous atmosphere"
+        "3d_render" -> "3D render, Octane Render engine, volumetric god rays, subsurface scattering on organic materials, PBR materials, HDRi environment lighting, depth of field, Unreal Engine 5 cinematic quality"
+        "pixel_art" -> "pixel art, 32-bit retro aesthetic, limited color palette, dithering technique, isometric perspective, nostalgic gaming style, clean pixel-perfect edges, sprite sheet quality"
+        "sketch" -> "detailed pencil sketch, fine cross-hatching technique, anatomically precise proportions, graphite on textured paper, architectural rendering quality, expressive confident line work"
+        "logo" -> "professional brand logo, clean vector graphic design, minimalist composition, clever use of negative space, single color plus accent variation, perfectly symmetrical, pure white background, Fortune 500 corporate identity quality"
+        "flat_design" -> "flat design illustration, modern geometric shapes, clean bold outlines, limited harmonious color palette, Material Design inspired, infographic quality, crisp edges, contemporary editorial illustration"
+        // ── New styles ──
+        "cinematic" -> "cinematic film still, anamorphic lens flare, widescreen 2.39:1 aspect, dramatic volumetric lighting, color graded teal and orange, shallow DOF, epic scale, IMAX quality, directed by Denis Villeneuve"
+        "fashion" -> "high fashion editorial photography, Vogue magazine cover quality, studio rim lighting, model pose, haute couture styling, clean background, professional retouching, Alexander McQueen aesthetic"
+        "architectural" -> "architectural visualization render, V-Ray global illumination, clean modern lines, floor-to-ceiling windows, natural daylight, interior design magazine, ArchDaily featured, minimalist Scandinavian"
+        "comic" -> "comic book art style, bold ink outlines, halftone dot shading, dynamic action panel composition, vibrant primary colors, Marvel/DC quality, speech bubble ready, superhero energy"
+        "surreal" -> "surrealist masterpiece, dreamlike impossible geometry, melting reality, floating objects, Salvador Dali meets Magritte, impossible architecture, vivid subconscious imagery"
+        "vintage" -> "vintage film photography, Kodak Portra 400 color profile, soft warm tones, light leak artifacts, grainy texture, 1970s aesthetic, nostalgic golden hour, retro magazine quality"
+        "neon" -> "neon cyberpunk aesthetic, rain-soaked streets, holographic reflections, magenta and cyan neon glow, Blade Runner atmosphere, night city scene, volumetric fog, futuristic Tokyo"
+        "sticker" -> "die-cut sticker illustration, thick white border outline, cute kawaii chibi style, bold clean vectors, transparent background, emoji quality, WhatsApp sticker pack"
+        else -> "professional quality, highly detailed, sharp focus, beautiful composition, award-winning, trending on ArtStation"
     }
 }

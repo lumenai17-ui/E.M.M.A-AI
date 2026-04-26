@@ -31,8 +31,11 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.beemovil.llm.*
 import com.beemovil.ui.ChatViewModel
+import com.beemovil.vision.BarcodeScanner
 import com.beemovil.vision.GpsModule
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
 
@@ -68,17 +71,112 @@ fun CameraScreen(
     val gpsModule = remember { GpsModule(context) }
     var gpsAddress by remember { mutableStateOf("") }
     var gpsCoords by remember { mutableStateOf("") }
+    var gpsLat by remember { mutableStateOf(0.0) }
+    var gpsLng by remember { mutableStateOf(0.0) }
+
+    // ── Ambient data (v7.2 — zero-cost APIs) ──
+    var ambientWeather by remember { mutableStateOf("") }
+    var ambientHoliday by remember { mutableStateOf("") }
+    var ambientCurrency by remember { mutableStateOf("") }
+    var barcodeInfo by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         if (gpsModule.hasPermission) {
             gpsModule.onLocationUpdate = { data ->
                 gpsAddress = data.address
                 gpsCoords = data.coordsShort
+                gpsLat = data.latitude
+                gpsLng = data.longitude
             }
             gpsModule.start()
         }
     }
     DisposableEffect(Unit) { onDispose { gpsModule.stop() } }
+
+    // ── Fetch ambient data once on screen load ──
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            try {
+                val http = okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                    .build()
+                // Currency
+                try {
+                    val req = okhttp3.Request.Builder()
+                        .url("https://api.frankfurter.app/latest?from=USD&to=MXN,EUR,COP")
+                        .header("User-Agent", "E.M.M.A. AI/7.2").build()
+                    val resp = http.newCall(req).execute()
+                    if (resp.isSuccessful) {
+                        val json = org.json.JSONObject(resp.body?.string() ?: "")
+                        val rates = json.optJSONObject("rates")
+                        if (rates != null) {
+                            val parts = mutableListOf<String>()
+                            val iter = rates.keys()
+                            while (iter.hasNext()) { val c = iter.next(); parts.add("$c=${"%,.2f".format(rates.optDouble(c))}") }
+                            ambientCurrency = "USD→${parts.joinToString(", ")}"
+                        }
+                    }
+                    resp.close()
+                } catch (_: Exception) {}
+                // Holiday
+                try {
+                    val country = java.util.Locale.getDefault().country.ifBlank { "US" }
+                    val today = java.time.LocalDate.now()
+                    val tomorrow = today.plusDays(1)
+                    val req = okhttp3.Request.Builder()
+                        .url("https://date.nager.at/api/v3/publicholidays/${today.year}/$country")
+                        .header("User-Agent", "E.M.M.A. AI/7.2").build()
+                    val resp = http.newCall(req).execute()
+                    if (resp.isSuccessful) {
+                        val holidays = org.json.JSONArray(resp.body?.string() ?: "[]")
+                        for (i in 0 until holidays.length()) {
+                            val h = holidays.getJSONObject(i)
+                            val d = java.time.LocalDate.parse(h.optString("date"))
+                            if (d.isEqual(today)) { ambientHoliday = "Hoy es feriado: ${h.optString("localName")}"; break }
+                            if (d.isEqual(tomorrow)) { ambientHoliday = "Mañana es feriado: ${h.optString("localName")}" }
+                        }
+                    }
+                    resp.close()
+                } catch (_: Exception) {}
+            } catch (_: Exception) {}
+        }
+    }
+
+    // ── Fetch weather when GPS arrives ──
+    LaunchedEffect(gpsLat, gpsLng) {
+        if (gpsLat != 0.0 && gpsLng != 0.0 && ambientWeather.isBlank()) {
+            withContext(Dispatchers.IO) {
+                try {
+                    val http = okhttp3.OkHttpClient.Builder()
+                        .connectTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
+                        .readTimeout(5, java.util.concurrent.TimeUnit.SECONDS).build()
+                    val req = okhttp3.Request.Builder()
+                        .url("https://api.open-meteo.com/v1/forecast?latitude=$gpsLat&longitude=$gpsLng&current=temperature_2m,weather_code,wind_speed_10m&timezone=auto")
+                        .header("User-Agent", "E.M.M.A. AI/7.2").build()
+                    val resp = http.newCall(req).execute()
+                    if (resp.isSuccessful) {
+                        val json = org.json.JSONObject(resp.body?.string() ?: "")
+                        val cur = json.optJSONObject("current")
+                        if (cur != null) {
+                            val temp = cur.optDouble("temperature_2m", 0.0)
+                            val code = cur.optInt("weather_code", 0)
+                            val wind = cur.optDouble("wind_speed_10m", 0.0)
+                            val cond = when (code) {
+                                0 -> "despejado"; 1 -> "mayormente despejado"; 2 -> "parcialmente nublado"
+                                3 -> "nublado"; in 45..48 -> "niebla"; in 51..57 -> "llovizna"
+                                in 61..67 -> "lluvia"; in 71..77 -> "nieve"; in 80..82 -> "chubascos"
+                                95, 96, 99 -> "tormenta"; else -> "variable"
+                            }
+                            ambientWeather = "${temp.toInt()}°C, $cond, viento ${wind.toInt()}km/h"
+                        }
+                    }
+                    resp.close()
+                } catch (_: Exception) {}
+            }
+        }
+    }
 
     // ── Auto-select best vision model ──
     LaunchedEffect(Unit) {
@@ -113,45 +211,130 @@ fun CameraScreen(
         }
     }
 
-    // ── Quick prompts (7) ──
+    // ── Quick prompts (8) — Prompt DNA v7.2 ──
     val quickPrompts = listOf(
-        Triple(Icons.Filled.Description, "Describir", "Describe en detalle lo que ves en esta imagen."),
-        Triple(Icons.Filled.TextFields, "OCR", "Extrae todo el texto visible en esta imagen (OCR)."),
-        Triple(Icons.Filled.Receipt, "Factura", "Analiza esta factura o recibo. Extrae monto, fecha, concepto, emisor."),
-        Triple(Icons.Filled.BarChart, "Datos", "Analiza los datos, tablas o gráficos en esta imagen."),
-        Triple(Icons.Filled.Sell, "Marca", "Identifica la marca, producto o modelo que ves."),
-        Triple(Icons.Filled.Park, "Natural", "Identifica esta planta, animal o elemento natural."),
-        Triple(Icons.Filled.Place, "¿Qué lugar?", buildPlacePrompt(gpsAddress, gpsCoords))
+        Triple(Icons.Filled.Description, "Describir", """
+            Analiza esta imagen con ojo experto. Identifica:
+            1. SUJETO PRINCIPAL: Qué es exactamente (nombre específico, no genérico)
+            2. CONTEXTO: Dónde parece estar, época, estilo, ambiente
+            3. DETALLES CLAVE: Marca, modelo, material, estado, colores dominantes
+            4. DATOS VERIFICABLES: Si reconoces el objeto/lugar, comparte 1 dato real
+            5. Si ves texto en otro idioma, tradúcelo automáticamente
+            Formato: Respuesta directa y específica, máximo 4 oraciones. NO digas "veo una imagen de".
+        """.trimIndent()),
+        Triple(Icons.Filled.TextFields, "OCR", """
+            Extrae TODO el texto visible en esta imagen con precisión de OCR profesional.
+            1. IDIOMA: Detecta el idioma del texto. Si no es español, tradúcelo debajo
+            2. ESTRUCTURA: Mantén el formato original (listas, columnas, párrafos)
+            3. TIPO DE DOCUMENTO: Identifica qué tipo de documento es (carta, menú, cartel, receta, código)
+            4. DATOS CLAVE: Resalta fechas, montos, nombres, direcciones, teléfonos
+            5. Si hay texto parcialmente legible, indica [ilegible] en esa parte
+            Formato: Primero el texto extraído literal, luego un resumen de 1 línea.
+        """.trimIndent()),
+        Triple(Icons.Filled.Receipt, "Factura", """
+            Analiza esta factura, recibo o ticket con precisión contable.
+            EXTRAE con formato estructurado:
+            📋 EMISOR: Nombre del negocio, RUC/NIT si visible
+            📅 FECHA: Fecha y hora de la transacción
+            💰 MONTO: Subtotal, impuestos, total (identifica la moneda)
+            🛒 ITEMS: Lista de productos/servicios con precio individual
+            💳 MÉTODO DE PAGO: Efectivo, tarjeta, transferencia
+            Si la moneda NO es la local del usuario, convierte al tipo de cambio actual.
+            Si detectas errores de cálculo en la factura, señálalos.
+        """.trimIndent()),
+        Triple(Icons.Filled.BarChart, "Datos", """
+            Analiza los datos, tablas o gráficos de esta imagen como un analista de datos.
+            1. TIPO: Identifica (tabla, gráfico de barras, líneas, pie chart, dashboard, infografía)
+            2. DATOS: Extrae los valores numéricos clave con precisión
+            3. TENDENCIA: Identifica la tendencia principal (subida, bajada, estable, pico)
+            4. ANOMALÍAS: Señala valores atípicos o inconsistencias
+            5. CONCLUSIÓN: Resume el insight principal en 1 oración
+            Si hay cifras monetarias, indica la moneda. Si hay porcentajes, valida que sumen correctamente.
+        """.trimIndent()),
+        Triple(Icons.Filled.Sell, "Producto", """
+            Identifica este producto con precisión comercial:
+            📦 PRODUCTO: Nombre exacto, marca, modelo, línea, generación/versión
+            📏 PRESENTACIÓN: Tamaño, peso, cantidad, color
+            💰 PRECIO: Si visible, repórtalo exacto con moneda
+            ⭐ VALORACIÓN: Si conoces el producto, rating general del mercado
+            🔄 ALTERNATIVAS: Sugiere 1-2 alternativas comparables (mejor precio o calidad)
+            🏷️ Si es alimento: Nutri-Score estimado (A=excelente a E=evitar)
+            🔧 Si es electrónica: Especificaciones clave, generación, ¿vale la pena en 2026?
+            Sé el aliado del comprador: datos reales, no marketing.
+        """.trimIndent()),
+        Triple(Icons.Filled.Park, "Natural", """
+            Identifica este elemento natural con precisión de biólogo:
+            🌿 IDENTIFICACIÓN: Nombre común + nombre científico (Género especie)
+            📍 ORIGEN: Región nativa, hábitat típico
+            🔬 CARACTERÍSTICAS: Rasgos distintivos que confirman la identificación
+            ⚠️ SEGURIDAD: ¿Es comestible, venenoso, alérgeno, o peligroso?
+            💊 USOS: Usos medicinales, culinarios o industriales conocidos
+            🌍 CONSERVACIÓN: Estado de conservación si aplica (peligro, vulnerable, etc.)
+            Si no estás seguro de la especie exacta, da las 2-3 opciones más probables.
+        """.trimIndent()),
+        Triple(Icons.Filled.Place, "¿Qué lugar?", buildPlacePrompt(gpsAddress, gpsCoords)),
+        Triple(Icons.Filled.QrCodeScanner, "Barcode", """
+            Analiza los códigos de barras o QR visibles en esta imagen.
+            1. Lee el código numérico/texto del barcode o QR
+            2. Si es un producto: identifica nombre, marca, precio estimado
+            3. Si es un QR con URL: indica a dónde lleva
+            4. Si es un QR de contacto/WiFi: extrae los datos
+            5. Si conoces el producto por el código, incluye reviews y alternativas
+            Formato: 📊 [Código] → [Información del producto]
+        """.trimIndent())
     )
 
-    // ── Analysis function ──
+    // ── Analysis function (v7.2: ambient context + barcode pre-scan) ──
     fun analyzeImage(question: String) {
         if (imageBase64.isBlank()) return
-        isAnalyzing = true; analysisResult = ""
+        isAnalyzing = true; analysisResult = ""; barcodeInfo = ""
 
-        Thread {
+        scope.launch {
             try {
-                val enrichedPrompt = enrichWithGps(question, gpsAddress, gpsCoords)
-                val modelEntry = ModelRegistry.findModel(selectedVisionModel)
-                val providerType = modelEntry?.provider ?: viewModel.currentProvider.value
-                val apiKey = getApiKeyForProvider(context, providerType)
-
-                if (apiKey.isBlank() && providerType != "local") {
-                    analysisResult = "Configura tu API key de $providerType en Settings"
-                    isAnalyzing = false; return@Thread
+                // Pre-scan for barcodes (async, before LLM call)
+                var bcContext = ""
+                capturedBitmap?.let { bmp ->
+                    try {
+                        val scans = withContext(Dispatchers.IO) { BarcodeScanner.scan(bmp) }
+                        if (scans.isNotEmpty()) {
+                            bcContext = scans.joinToString("\n") { BarcodeScanner.buildProductContext(it) }
+                            barcodeInfo = scans.joinToString(", ") { "${it.format}: ${it.rawValue}" }
+                        }
+                    } catch (_: Exception) {}
                 }
 
-                val provider = LlmFactory.createProvider(providerType, apiKey, selectedVisionModel)
-                val messages = listOf(
-                    ChatMessage(role = "user", content = enrichedPrompt, images = listOf(imageBase64))
+                // Build enriched prompt with all ambient data
+                val enrichedPrompt = enrichWithContext(
+                    question = question,
+                    address = gpsAddress, coords = gpsCoords,
+                    weather = ambientWeather,
+                    holiday = ambientHoliday,
+                    currency = ambientCurrency,
+                    barcodeContext = bcContext
                 )
-                val response = provider.complete(messages, emptyList())
-                analysisResult = response.text ?: "Sin respuesta del modelo"
+
+                withContext(Dispatchers.IO) {
+                    val modelEntry = ModelRegistry.findModel(selectedVisionModel)
+                    val providerType = modelEntry?.provider ?: viewModel.currentProvider.value
+                    val apiKey = getApiKeyForProvider(context, providerType)
+
+                    if (apiKey.isBlank() && providerType != "local") {
+                        analysisResult = "Configura tu API key de $providerType en Settings"
+                        isAnalyzing = false; return@withContext
+                    }
+
+                    val provider = LlmFactory.createProvider(providerType, apiKey, selectedVisionModel)
+                    val messages = listOf(
+                        ChatMessage(role = "user", content = enrichedPrompt, images = listOf(imageBase64))
+                    )
+                    val response = provider.complete(messages, emptyList())
+                    analysisResult = response.text ?: "Sin respuesta del modelo"
+                }
             } catch (e: Exception) {
                 analysisResult = "Error: ${e.message?.take(150)}"
             }
             isAnalyzing = false
-        }.start()
+        }
     }
 
     // ── UI ──
@@ -201,18 +384,40 @@ fun CameraScreen(
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
-            // ── GPS context indicator ──
-            if (gpsAddress.isNotBlank()) {
+            // ── Context indicators (v7.2 — ambient data strip) ──
+            if (gpsAddress.isNotBlank() || ambientWeather.isNotBlank() || ambientCurrency.isNotBlank()) {
                 Surface(
                     color = colorScheme.secondaryContainer,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.MyLocation, "GPS", tint = colorScheme.secondary, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(gpsAddress, fontSize = 12.sp, color = colorScheme.onSecondaryContainer,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        if (gpsAddress.isNotBlank()) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.MyLocation, "GPS", tint = colorScheme.secondary, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(gpsAddress, fontSize = 11.sp, color = colorScheme.onSecondaryContainer,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                        val ambientParts = mutableListOf<String>()
+                        if (ambientWeather.isNotBlank()) ambientParts.add("🌡️ $ambientWeather")
+                        if (ambientHoliday.isNotBlank()) ambientParts.add("🎉 $ambientHoliday")
+                        if (ambientCurrency.isNotBlank()) ambientParts.add("💱 $ambientCurrency")
+                        if (ambientParts.isNotEmpty()) {
+                            if (gpsAddress.isNotBlank()) Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                ambientParts.joinToString("  •  "),
+                                fontSize = 10.sp, color = colorScheme.onSecondaryContainer.copy(alpha = 0.8f),
+                                maxLines = 1, overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        if (barcodeInfo.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("📊 Barcode: $barcodeInfo", fontSize = 10.sp,
+                                color = colorScheme.primary, fontWeight = FontWeight.Bold,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
                 }
                 Spacer(modifier = Modifier.height(10.dp))
@@ -481,23 +686,50 @@ internal fun getApiKeyForProvider(context: android.content.Context, provider: St
     }
 }
 
-/** Enrich a prompt with GPS context if available */
-private fun enrichWithGps(question: String, address: String, coords: String): String {
-    if (address.isBlank() && coords.isBlank()) return question
-    val gpsCtx = buildString {
-        append("[Contexto GPS del usuario: ")
-        if (address.isNotBlank()) append("ubicación: $address")
-        if (coords.isNotBlank()) append(" ($coords)")
-        append(". Usa esta información para enriquecer tu análisis si es relevante.]")
+/** v7.2: Enrich a prompt with full ambient context (GPS + Weather + Holiday + Currency) */
+private fun enrichWithContext(
+    question: String, address: String, coords: String,
+    weather: String = "", holiday: String = "", currency: String = "",
+    barcodeContext: String = ""
+): String {
+    val ctx = buildString {
+        appendLine("[CONTEXTO AMBIENTAL — E.M.M.A. v7.2]")
+        if (address.isNotBlank() || coords.isNotBlank()) {
+            append("📍 Ubicación: ")
+            if (address.isNotBlank()) append(address)
+            if (coords.isNotBlank()) append(" ($coords)")
+            appendLine()
+        }
+        if (weather.isNotBlank()) appendLine("🌡️ Clima: $weather")
+        val now = java.util.Calendar.getInstance()
+        val dayName = java.text.SimpleDateFormat("EEEE", java.util.Locale("es")).format(now.time)
+        val dateFmt = java.text.SimpleDateFormat("d MMMM yyyy", java.util.Locale("es")).format(now.time)
+        appendLine("📅 Hoy: $dayName $dateFmt")
+        if (holiday.isNotBlank()) appendLine("🎉 $holiday")
+        if (currency.isNotBlank()) appendLine("💱 Cambio: $currency")
+        if (barcodeContext.isNotBlank()) {
+            appendLine()
+            append(barcodeContext)
+        }
+        appendLine("[Usa estos datos para enriquecer tu análisis cuando sea relevante.]")
     }
-    return "$gpsCtx\n\n$question"
+    return "$ctx\n\n$question"
 }
 
-/** Build the "What place is this?" prompt with GPS data */
+/** Build the "What place is this?" prompt with GPS data — v7.2 enhanced */
 private fun buildPlacePrompt(address: String, coords: String): String {
-    val base = "¿Qué lugar, monumento, edificio o punto de interés es este? Describe su historia y datos relevantes."
+    val base = """
+        Identifica este lugar, monumento, edificio o punto de interés:
+        🏛️ NOMBRE: Nombre oficial y nombre popular si difiere
+        📅 HISTORIA: Año de construcción/fundación + dato histórico clave
+        🎨 ESTILO: Estilo arquitectónico o artístico
+        🕐 HORARIO: Horario de visita y precio de entrada si es atracción
+        📍 ZONA: Qué más hay interesante cerca (a pie)
+        💡 DATO CURIOSO: Algo que la mayoría no sabe sobre este lugar
+        Si no reconoces el lugar exacto, usa el GPS para investigar qué hay en esa ubicación.
+    """.trimIndent()
     if (address.isBlank() && coords.isBlank()) return base
-    return "$base\n[GPS: ${address.ifBlank { coords }}. Usa esta ubicación para identificar el lugar con mayor precisión.]"
+    return "$base\n[GPS: ${address.ifBlank { coords }}. Usa esta ubicación para precisar la identificación.]"
 }
 
 /** Process a camera photo file into Bitmap + Base64 */

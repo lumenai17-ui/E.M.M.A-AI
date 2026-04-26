@@ -23,7 +23,7 @@ class ContextOrchestrator(private val context: Context) {
 
     companion object {
         private const val TAG = "ContextOrchestrator"
-        private const val MAX_CONTEXT_CHARS = 1500 // ~1000 tokens budget for all context (R7 expanded)
+        private const val MAX_CONTEXT_CHARS = 1800 // ~1200 tokens budget for all context (v7.2 expanded for ambient APIs)
         private const val ZONE_CHANGE_THRESHOLD_METERS = 2000.0 // ~2km = new zone
     }
 

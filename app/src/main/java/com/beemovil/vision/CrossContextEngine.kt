@@ -126,6 +126,19 @@ class CrossContextEngine(private val context: Context) {
 
     private var cachedPreload: PreloadData? = null
 
+    // Ambient data cache (Public APIs — zero cost)
+    private var cachedWeather: String = ""
+    private var cachedWeatherTime = 0L
+    private val CACHE_TTL_WEATHER = 30 * 60 * 1000L  // 30 min
+
+    private var cachedHoliday: String = ""
+    private var cachedHolidayTime = 0L
+    private val CACHE_TTL_HOLIDAY = 24 * 60 * 60 * 1000L  // 24h
+
+    private var cachedCurrency: String = ""
+    private var cachedCurrencyTime = 0L
+    private val CACHE_TTL_CURRENCY = 4 * 60 * 60 * 1000L  // 4h
+
     // ═══════════════════════════════════════════════════════
     // MAIN API: Build the context paragraph
     // ═══════════════════════════════════════════════════════
@@ -156,6 +169,9 @@ class CrossContextEngine(private val context: Context) {
             refreshEmailsIfNeeded(now)
             refreshCalendarIfNeeded(now)
 
+            // Refresh ambient data (weather, holidays, currency) — silent background
+            refreshAmbientDataIfNeeded(now, lat, lng)
+
             // Scan chat pre-loads (only if not already loaded this session)
             if (cachedPreload == null) {
                 cachedPreload = scanChatForPreloads()
@@ -181,6 +197,7 @@ class CrossContextEngine(private val context: Context) {
             ""
         }
     }
+
 
     /**
      * Force refresh all cached signals. Call when starting a new session.
@@ -526,7 +543,18 @@ class CrossContextEngine(private val context: Context) {
             if (scores != null) {
                 append("INTERESES: ${scores.topInterests(2)}. ")
             }
-        }.take(MAX_PARAGRAPH_CHARS)
+
+            // Ambient real-world data (weather, holidays, currency)
+            if (cachedWeather.isNotBlank()) {
+                append("CLIMA_ACTUAL: $cachedWeather. ")
+            }
+            if (cachedHoliday.isNotBlank()) {
+                append("FERIADO: $cachedHoliday. ")
+            }
+            if (cachedCurrency.isNotBlank()) {
+                append("CAMBIO: $cachedCurrency. ")
+            }
+        }.take(MAX_PARAGRAPH_CHARS + 200) // Allow extra space for ambient data
     }
 
     /**
@@ -603,5 +631,112 @@ class CrossContextEngine(private val context: Context) {
             "tech" to scores.tech
         )
         return all.sortedByDescending { it.second }.take(n).map { it.first }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // AMBIENT DATA — Public APIs (zero-cost, no API keys)
+    // ═══════════════════════════════════════════════════════
+
+    private val ambientHttp = okhttp3.OkHttpClient.Builder()
+        .connectTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
+
+    /**
+     * Silently refresh ambient data (weather, holidays, currency) if caches are stale.
+     * Failures are silently swallowed — ambient data is nice-to-have, never critical.
+     */
+    private fun refreshAmbientDataIfNeeded(now: Long, lat: Double, lng: Double) {
+        // Weather (every 30 min, only if we have GPS)
+        if (lat != 0.0 && lng != 0.0 && now - cachedWeatherTime > CACHE_TTL_WEATHER) {
+            try {
+                val url = "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lng&current=temperature_2m,weather_code,wind_speed_10m&timezone=auto"
+                val request = okhttp3.Request.Builder().url(url)
+                    .header("User-Agent", "E.M.M.A. AI/7.2").build()
+                val response = ambientHttp.newCall(request).execute()
+                if (response.isSuccessful) {
+                    val json = JSONObject(response.body?.string() ?: "")
+                    val current = json.optJSONObject("current")
+                    if (current != null) {
+                        val temp = current.optDouble("temperature_2m", 0.0)
+                        val code = current.optInt("weather_code", 0)
+                        val wind = current.optDouble("wind_speed_10m", 0.0)
+                        val condition = when (code) {
+                            0 -> "despejado"; 1 -> "mayormente despejado"; 2 -> "parcialmente nublado"
+                            3 -> "nublado"; in 45..48 -> "niebla"; in 51..57 -> "llovizna"
+                            in 61..67 -> "lluvia"; in 71..77 -> "nieve"; in 80..82 -> "chubascos"
+                            95, 96, 99 -> "tormenta"; else -> "variable"
+                        }
+                        cachedWeather = "${temp.toInt()}°C, $condition, viento ${wind.toInt()}km/h"
+                        cachedWeatherTime = now
+                    }
+                }
+                response.close()
+            } catch (e: Exception) {
+                Log.d(TAG, "Ambient weather fetch skipped: ${e.message}")
+            }
+        }
+
+        // Holidays (once per day)
+        if (now - cachedHolidayTime > CACHE_TTL_HOLIDAY) {
+            try {
+                val locale = java.util.Locale.getDefault()
+                val countryCode = locale.country.ifBlank { "US" }
+                val today = java.time.LocalDate.now()
+                val url = "https://date.nager.at/api/v3/publicholidays/${today.year}/$countryCode"
+                val request = okhttp3.Request.Builder().url(url)
+                    .header("User-Agent", "E.M.M.A. AI/7.2").build()
+                val response = ambientHttp.newCall(request).execute()
+                if (response.isSuccessful) {
+                    val holidays = JSONArray(response.body?.string() ?: "[]")
+                    // Check today and tomorrow
+                    val tomorrow = today.plusDays(1)
+                    var todayHoliday: String? = null
+                    var tomorrowHoliday: String? = null
+                    for (i in 0 until holidays.length()) {
+                        val h = holidays.getJSONObject(i)
+                        val hDate = java.time.LocalDate.parse(h.optString("date"))
+                        if (hDate.isEqual(today)) todayHoliday = h.optString("localName")
+                        if (hDate.isEqual(tomorrow)) tomorrowHoliday = h.optString("localName")
+                    }
+                    cachedHoliday = when {
+                        todayHoliday != null -> "Hoy es feriado: $todayHoliday"
+                        tomorrowHoliday != null -> "Mañana es feriado: $tomorrowHoliday"
+                        else -> ""
+                    }
+                    cachedHolidayTime = now
+                }
+                response.close()
+            } catch (e: Exception) {
+                Log.d(TAG, "Ambient holiday fetch skipped: ${e.message}")
+            }
+        }
+
+        // Currency (every 4 hours)
+        if (now - cachedCurrencyTime > CACHE_TTL_CURRENCY) {
+            try {
+                val url = "https://api.frankfurter.app/latest?from=USD&to=MXN,EUR,COP"
+                val request = okhttp3.Request.Builder().url(url)
+                    .header("User-Agent", "E.M.M.A. AI/7.2").build()
+                val response = ambientHttp.newCall(request).execute()
+                if (response.isSuccessful) {
+                    val json = JSONObject(response.body?.string() ?: "")
+                    val rates = json.optJSONObject("rates")
+                    if (rates != null) {
+                        val parts = mutableListOf<String>()
+                        val iter = rates.keys()
+                        while (iter.hasNext()) {
+                            val cur = iter.next()
+                            parts.add("$cur=${"%.2f".format(rates.optDouble(cur))}")
+                        }
+                        cachedCurrency = "USD→${parts.joinToString(",")}"
+                        cachedCurrencyTime = now
+                    }
+                }
+                response.close()
+            } catch (e: Exception) {
+                Log.d(TAG, "Ambient currency fetch skipped: ${e.message}")
+            }
+        }
     }
 }

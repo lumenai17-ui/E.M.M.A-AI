@@ -887,10 +887,10 @@ fun SettingsScreen(
             // ═══════════════════════════════════════
             SectionCard {
                 SectionTitle("VOZ PREMIUM (NOVA)")
-                Text("Voz de IA premium gratuita — sin API key requerida", fontSize = 12.sp, color = textSecondary)
+                Text("Voz de IA premium — usa créditos de Pollinations (desactivada por defecto para ahorrar)", fontSize = 12.sp, color = textSecondary)
                 Spacer(modifier = Modifier.height(8.dp))
 
-                var novaEnabled by remember { mutableStateOf(prefs.getBoolean("use_pollinations_tts", true)) }
+                var novaEnabled by remember { mutableStateOf(prefs.getBoolean("use_pollinations_tts", false)) }
                 var novaVoice by remember { mutableStateOf(prefs.getString("pollinations_tts_voice", "nova") ?: "nova") }
 
                 // Enable/Disable Toggle

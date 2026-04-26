@@ -38,6 +38,8 @@ import androidx.compose.ui.unit.sp
 import com.beemovil.R
 import com.beemovil.ui.theme.*
 import com.beemovil.llm.local.LocalModelManager
+import com.beemovil.llm.DynamicModelFetcher
+import com.beemovil.llm.ModelRegistry
 import com.beemovil.security.SecurePrefs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -1159,6 +1161,12 @@ private fun OpenRouterSetupPage(
     var validationResult by remember { mutableStateOf<String?>(null) }
     var isValid by remember { mutableStateOf(false) }
 
+    // Model selection state
+    var availableModels by remember { mutableStateOf<List<ModelRegistry.ModelEntry>>(emptyList()) }
+    var isLoadingModels by remember { mutableStateOf(false) }
+    var selectedModelId by remember { mutableStateOf<String?>(null) }
+    var showModelDropdown by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1184,7 +1192,7 @@ private fun OpenRouterSetupPage(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // ── Steps ──
+        // ── Step 1: Create account ──
         SetupStep(
             number = "1",
             title = "Crea una cuenta gratis",
@@ -1230,6 +1238,8 @@ private fun OpenRouterSetupPage(
                 apiKey = it
                 isValid = false
                 validationResult = null
+                availableModels = emptyList()
+                selectedModelId = null
             },
             label = { Text("API Key de OpenRouter") },
             placeholder = { Text("sk-or-v1-...", color = textSec) },
@@ -1281,7 +1291,22 @@ private fun OpenRouterSetupPage(
                         when (result) {
                             200 -> {
                                 isValid = true
-                                validationResult = "✅ API Key válida"
+                                validationResult = "✅ API Key válida — cargando modelos..."
+                                // Auto-fetch models after validation
+                                isLoadingModels = true
+                                try {
+                                    val models = DynamicModelFetcher.fetchOpenRouterModels(context, apiKey.trim())
+                                    availableModels = models
+                                    // Auto-select first free model
+                                    selectedModelId = models.firstOrNull { it.free }?.id ?: models.firstOrNull()?.id
+                                    validationResult = "✅ Key válida — ${models.size} modelos disponibles"
+                                } catch (e: Exception) {
+                                    // Fallback to static list
+                                    availableModels = ModelRegistry.OPENROUTER
+                                    selectedModelId = availableModels.firstOrNull { it.free }?.id
+                                    validationResult = "✅ Key válida (modelos cargados de caché)"
+                                }
+                                isLoadingModels = false
                             }
                             401, 403 -> {
                                 validationResult = "❌ Key inválida o expirada"
@@ -1331,21 +1356,121 @@ private fun OpenRouterSetupPage(
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        // ── Step 3: Model Selection (appears after validation) ──
+        if (isValid && availableModels.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(20.dp))
 
-        // ── Free models note ──
-        Surface(
-            color = AccentGreen.copy(alpha = 0.08f),
-            shape = RoundedCornerShape(10.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Text("✨ Modelos 100% gratuitos incluidos:", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = AccentGreen)
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    "• Qwen 3.6+ — Coding + Razonamiento\n• Llama 3.3 70B — Meta flagship\n• Gemma 3 27B — Google con visión\n• Y muchos más...",
-                    fontSize = 12.sp, color = textSec, lineHeight = 18.sp
-                )
+            SetupStep(
+                number = "3",
+                title = "Escoge tu modelo",
+                description = "Selecciona el modelo de IA que usará E.M.M.A."
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            if (isLoadingModels) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = AccentBlue)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Cargando modelos...", fontSize = 13.sp, color = textSec)
+                }
+            } else {
+                // Group models: Free first, then paid. Show top picks per category
+                val freeModels = availableModels.filter { it.free }.take(15)
+                val paidModels = availableModels.filter { !it.free }.take(10)
+
+                // Free models section
+                if (freeModels.isNotEmpty()) {
+                    Text("✨ Modelos Gratuitos", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = AccentGreen)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    freeModels.forEach { model ->
+                        val isSelected = selectedModelId == model.id
+                        Surface(
+                            onClick = { selectedModelId = model.id },
+                            color = if (isSelected) AccentBlue.copy(alpha = 0.12f) else Color.Transparent,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    when (model.category) {
+                                        ModelRegistry.Category.VISION -> Icons.Filled.Visibility
+                                        ModelRegistry.Category.CODE -> Icons.Filled.Code
+                                        ModelRegistry.Category.REASONING -> Icons.Filled.Psychology
+                                        else -> Icons.Filled.SmartToy
+                                    },
+                                    model.name,
+                                    tint = if (isSelected) AccentBlue else textSec,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        model.name,
+                                        fontSize = 13.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isSelected) AccentBlue else textPri,
+                                        maxLines = 1
+                                    )
+                                    Text(
+                                        model.id.split("/").first() + if (model.hasVision) " • 👁 Visión" else "",
+                                        fontSize = 11.sp, color = textSec, maxLines = 1
+                                    )
+                                }
+                                if (isSelected) {
+                                    Icon(Icons.Filled.CheckCircle, "Selected", tint = AccentBlue, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Paid models section
+                if (paidModels.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("💎 Modelos Premium", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFFFF9800))
+                    Spacer(modifier = Modifier.height(6.dp))
+                    paidModels.forEach { model ->
+                        val isSelected = selectedModelId == model.id
+                        Surface(
+                            onClick = { selectedModelId = model.id },
+                            color = if (isSelected) AccentBlue.copy(alpha = 0.12f) else Color.Transparent,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Filled.Diamond,
+                                    model.name,
+                                    tint = if (isSelected) AccentBlue else Color(0xFFFF9800),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        model.name,
+                                        fontSize = 13.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isSelected) AccentBlue else textPri,
+                                        maxLines = 1
+                                    )
+                                    Text(
+                                        model.sizeLabel + if (model.hasVision) " • 👁 Visión" else "",
+                                        fontSize = 11.sp, color = textSec, maxLines = 1
+                                    )
+                                }
+                                if (isSelected) {
+                                    Icon(Icons.Filled.CheckCircle, "Selected", tint = AccentBlue, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -1361,12 +1486,12 @@ private fun OpenRouterSetupPage(
                 val prefs = context.getSharedPreferences("beemovil", Context.MODE_PRIVATE)
                 prefs.edit()
                     .putString("selected_provider", "openrouter")
-                    .putString("selected_model", "qwen/qwen3.6-plus:free")
+                    .putString("selected_model", selectedModelId ?: "qwen/qwen3.6-plus:free")
                     .apply()
 
                 onComplete()
             },
-            enabled = isValid,
+            enabled = isValid && selectedModelId != null,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(54.dp),
@@ -1378,8 +1503,11 @@ private fun OpenRouterSetupPage(
                 disabledContentColor = if (isDark) Color.White.copy(alpha = 0.2f) else Color.Black.copy(alpha = 0.25f)
             )
         ) {
-            Text("¡Listo! Entrar a E.M.M.A.", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            if (isValid) {
+            Text(
+                if (selectedModelId != null) "¡Listo! Entrar a E.M.M.A." else "Selecciona un modelo",
+                fontSize = 16.sp, fontWeight = FontWeight.Bold
+            )
+            if (isValid && selectedModelId != null) {
                 Spacer(modifier = Modifier.width(8.dp))
                 Icon(Icons.Filled.RocketLaunch, "Go", modifier = Modifier.size(20.dp))
             }
@@ -1388,6 +1516,7 @@ private fun OpenRouterSetupPage(
         Spacer(modifier = Modifier.height(32.dp))
     }
 }
+
 
 
 // ───────────────────────────────────────────────────
@@ -1410,6 +1539,11 @@ private fun OllamaSetupPage(
     var isValidating by remember { mutableStateOf(false) }
     var validationResult by remember { mutableStateOf<String?>(null) }
     var isValid by remember { mutableStateOf(false) }
+
+    // Model selection state
+    var availableModels by remember { mutableStateOf<List<ModelRegistry.ModelEntry>>(emptyList()) }
+    var isLoadingModels by remember { mutableStateOf(false) }
+    var selectedModelId by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier
@@ -1436,7 +1570,7 @@ private fun OllamaSetupPage(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // ── Steps ──
+        // ── Step 1 ──
         SetupStep(
             number = "1",
             title = "Crea una cuenta en Ollama",
@@ -1482,6 +1616,8 @@ private fun OllamaSetupPage(
                 ollamaKey = it
                 isValid = false
                 validationResult = null
+                availableModels = emptyList()
+                selectedModelId = null
             },
             label = { Text("API Key de Ollama") },
             placeholder = { Text("Tu API key de ollama.com", color = textSec) },
@@ -1535,7 +1671,20 @@ private fun OllamaSetupPage(
                         when (code) {
                             200 -> {
                                 isValid = true
-                                validationResult = "✅ API Key válida"
+                                validationResult = "✅ API Key válida — cargando modelos..."
+                                // Auto-fetch models
+                                isLoadingModels = true
+                                try {
+                                    val models = DynamicModelFetcher.fetchOllamaModels(context, "https://ollama.com")
+                                    availableModels = models
+                                    selectedModelId = models.firstOrNull()?.id
+                                    validationResult = "✅ Key válida — ${models.size} modelos disponibles"
+                                } catch (e: Exception) {
+                                    availableModels = ModelRegistry.OLLAMA_CLOUD
+                                    selectedModelId = availableModels.firstOrNull()?.id
+                                    validationResult = "✅ Key válida (modelos cargados de caché)"
+                                }
+                                isLoadingModels = false
                             }
                             401, 403 -> validationResult = "❌ Key inválida o expirada"
                             else -> validationResult = "⚠️ Error HTTP $code"
@@ -1577,25 +1726,67 @@ private fun OllamaSetupPage(
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        // ── Step 3: Model Selection (appears after validation) ──
+        if (isValid && availableModels.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(20.dp))
 
-        // ── Models info ──
-        Surface(
-            color = AccentViolet.copy(alpha = 0.08f),
-            shape = RoundedCornerShape(10.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Text("🚀 Modelos disponibles en Ollama Cloud:", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = AccentViolet)
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    "• Gemma 4 — Google (Vision + Audio + Tools)\n" +
-                    "• DeepSeek R1 — Razonamiento profundo (671B)\n" +
-                    "• Qwen 3.5 — Alibaba multimodal\n" +
-                    "• Devstral 2 — Mistral coding agent\n" +
-                    "• Y muchos más...",
-                    fontSize = 12.sp, color = textSec, lineHeight = 18.sp
-                )
+            SetupStep(
+                number = "3",
+                title = "Escoge tu modelo",
+                description = "Selecciona el modelo de IA que usará E.M.M.A."
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            if (isLoadingModels) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = AccentViolet)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Cargando modelos...", fontSize = 13.sp, color = textSec)
+                }
+            } else {
+                availableModels.forEach { model ->
+                    val isSelected = selectedModelId == model.id
+                    Surface(
+                        onClick = { selectedModelId = model.id },
+                        color = if (isSelected) AccentViolet.copy(alpha = 0.12f) else Color.Transparent,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                when (model.category) {
+                                    ModelRegistry.Category.VISION -> Icons.Filled.Visibility
+                                    ModelRegistry.Category.CODE -> Icons.Filled.Code
+                                    ModelRegistry.Category.REASONING -> Icons.Filled.Psychology
+                                    else -> Icons.Filled.SmartToy
+                                },
+                                model.name,
+                                tint = if (isSelected) AccentViolet else textSec,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    model.name,
+                                    fontSize = 13.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) AccentViolet else textPri,
+                                    maxLines = 1
+                                )
+                                Text(
+                                    model.sizeLabel + if (model.hasVision) " • 👁 Visión" else "",
+                                    fontSize = 11.sp, color = textSec, maxLines = 1
+                                )
+                            }
+                            if (isSelected) {
+                                Icon(Icons.Filled.CheckCircle, "Selected", tint = AccentViolet, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -1611,12 +1802,12 @@ private fun OllamaSetupPage(
                 val prefs = context.getSharedPreferences("beemovil", Context.MODE_PRIVATE)
                 prefs.edit()
                     .putString("selected_provider", "ollama")
-                    .putString("selected_model", "gemma4:cloud")
+                    .putString("selected_model", selectedModelId ?: "gemma4:cloud")
                     .apply()
 
                 onComplete()
             },
-            enabled = isValid,
+            enabled = isValid && selectedModelId != null,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(54.dp),
@@ -1629,11 +1820,11 @@ private fun OllamaSetupPage(
             )
         ) {
             Text(
-                if (isValid) "¡Listo! Entrar a E.M.M.A." else "Valida tu key primero",
+                if (selectedModelId != null) "¡Listo! Entrar a E.M.M.A." else "Selecciona un modelo",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold
             )
-            if (isValid) {
+            if (isValid && selectedModelId != null) {
                 Spacer(modifier = Modifier.width(8.dp))
                 Icon(Icons.Filled.RocketLaunch, "Go", modifier = Modifier.size(20.dp))
             }
