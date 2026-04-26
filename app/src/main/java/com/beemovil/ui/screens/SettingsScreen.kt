@@ -1546,7 +1546,7 @@ fun SettingsScreen(
                                             if (memDb.getSoul("email").isNullOrBlank()) {
                                                 memDb.setSoul("email", user.email)
                                             }
-                                        } catch (_: Exception) {}
+                                        } catch (e: Exception) { android.util.Log.w("EmmaSwallowed", "ignored exception: ${e.message}") }
                                         
                                         // Request OAuth2 scopes
                                         try {

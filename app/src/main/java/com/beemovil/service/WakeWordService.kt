@@ -50,6 +50,12 @@ class WakeWordService : Service() {
 
     private var wakeEngine: WakeWordEngine? = null
 
+    // M-04: track the last wake-up so the activity can release it on destroy
+    // and so we de-bounce repeated "Hello Emma" detections within 3 seconds.
+    private var lastWakeLock: android.os.PowerManager.WakeLock? = null
+    private var lastWakeAtMs: Long = 0L
+    private val WAKE_DEBOUNCE_MS = 3_000L
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -93,10 +99,24 @@ class WakeWordService : Service() {
 
     /** Called when "Hello Emma" is detected — launch app and restart listening */
     private fun onWakeDetected() {
+        // M-04: de-bounce. If the engine fires twice within WAKE_DEBOUNCE_MS,
+        // we ignore the second one to avoid double notifications / double launches.
+        val now = System.currentTimeMillis()
+        if (now - lastWakeAtMs < WAKE_DEBOUNCE_MS) {
+            Log.d(TAG, "Wake word debounced (within ${WAKE_DEBOUNCE_MS} ms)")
+            return
+        }
+        lastWakeAtMs = now
+
         Log.i(TAG, "🎯 WAKE WORD DETECTED — launching conversation")
         updateNotification("¡Hello Emma detectado! Abriendo...")
 
-        // Wake screen if locked/off
+        // M-04: Hold a single tracked wake lock and release the previous one if any.
+        try {
+            lastWakeLock?.takeIf { it.isHeld }?.release()
+        } catch (e: Exception) {
+            Log.w(TAG, "Releasing previous wake lock failed: ${e.message}")
+        }
         try {
             val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
             val wakeLock = pm.newWakeLock(
@@ -106,6 +126,7 @@ class WakeWordService : Service() {
                 "emma:wakeword"
             )
             wakeLock.acquire(5000) // 5 second wake
+            lastWakeLock = wakeLock
         } catch (e: Exception) {
             Log.w(TAG, "Failed to acquire wake lock: ${e.message}")
         }
@@ -135,31 +156,40 @@ class WakeWordService : Service() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
+            // M-05: DND bypass + full-screen intent are opt-in. Default is off
+            // so a false detection (ambient noise) does NOT wake the user during DND.
+            val prefs = applicationContext.getSharedPreferences("beemovil", Context.MODE_PRIVATE)
+            val bypassDnd = prefs.getBoolean("wake_word_bypass_dnd", false)
+            val fullScreen = prefs.getBoolean("wake_word_full_screen_intent", false)
+
             val alertChannel = "emma_wake_alert"
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val channel = NotificationChannel(
                     alertChannel, "Wake Word Alert",
-                    NotificationManager.IMPORTANCE_HIGH
+                    if (bypassDnd) NotificationManager.IMPORTANCE_HIGH else NotificationManager.IMPORTANCE_DEFAULT
                 ).apply {
                     description = "Alerta cuando Hello Emma es detectado"
-                    setBypassDnd(true)
+                    setBypassDnd(bypassDnd)
                     lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                 }
                 val manager = getSystemService(NotificationManager::class.java)
                 manager.createNotificationChannel(channel)
             }
 
-            val alertNotification = NotificationCompat.Builder(this, alertChannel)
+            val alertBuilder = NotificationCompat.Builder(this, alertChannel)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle("E.M.M.A. Voice")
                 .setContentText("Hello Emma detectado — toca para abrir")
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setCategory(NotificationCompat.CATEGORY_CALL)
+                .setPriority(if (bypassDnd) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
                 .setAutoCancel(true)
                 .setContentIntent(pendingIntent)
-                .setFullScreenIntent(pendingIntent, true) // Brings app to front on lock screen
-                .setTimeoutAfter(10000) // Auto-dismiss after 10s
-                .build()
+                .setTimeoutAfter(10000)
+            if (fullScreen) {
+                alertBuilder
+                    .setCategory(NotificationCompat.CATEGORY_CALL)
+                    .setFullScreenIntent(pendingIntent, true)
+            }
+            val alertNotification = alertBuilder.build()
 
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.notify(4243, alertNotification)
@@ -189,6 +219,13 @@ class WakeWordService : Service() {
 
     override fun onDestroy() {
         stopWakeWordDetection()
+        // M-04: release wake lock if still held instead of relying on the timeout.
+        try {
+            lastWakeLock?.takeIf { it.isHeld }?.release()
+        } catch (e: Exception) {
+            Log.w(TAG, "onDestroy wake lock release failed: ${e.message}")
+        }
+        lastWakeLock = null
         super.onDestroy()
     }
 

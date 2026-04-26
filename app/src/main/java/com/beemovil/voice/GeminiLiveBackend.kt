@@ -67,7 +67,8 @@ class GeminiLiveBackend(
         val prefs = SecurePrefs.get(context)
         val key = prefs.getString("google_ai_key", "") ?: ""
         val available = key.isNotBlank()
-        Log.d(TAG, "isAvailable=$available (key=${if (key.isNotBlank()) "${key.take(8)}... (${key.length} chars)" else "EMPTY"})")
+        // H-03: do NOT log key prefixes — even 8 chars leak meaningful entropy on short keys.
+        Log.d(TAG, "isAvailable=$available (key ${if (key.isNotBlank()) "present, len=${key.length}" else "EMPTY"})")
         return available
     }
 
@@ -107,7 +108,8 @@ class GeminiLiveBackend(
         }
 
         conversationHistory.clear()
-        Log.i(TAG, "✅ Session started (model=$model, key=${apiKey.take(8)}..., apiKeyLen=${apiKey.length})")
+        // H-03: no key prefix in logs.
+        Log.i(TAG, "✅ Session started (model=$model, apiKeyLen=${apiKey.length})")
     }
 
     override suspend fun processTranscript(transcript: String): String {
@@ -179,8 +181,8 @@ class GeminiLiveBackend(
             // Build request body
             val requestBody = buildRequestBody()
 
-            val fullUrl = "$BASE_URL/$model:generateContent?key=${apiKey.take(8)}..."
-            Log.i(TAG, "Calling Gemini: $fullUrl (${conversationHistory.size} messages)")
+            // H-03: never log even partial key in URL.
+            Log.i(TAG, "Calling Gemini: $BASE_URL/$model:generateContent (${conversationHistory.size} messages)")
             Log.d(TAG, "Request body: ${requestBody.toString().take(500)}")
 
             connection.outputStream.use { os ->

@@ -40,7 +40,10 @@ class ContactManagerPlugin(private val context: Context) : EmmaPlugin {
                 ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
                 ContactsContract.CommonDataKinds.Phone.NUMBER
             )
-            val selection = "\${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} LIKE ?"
+            // H-08 fix: previous code had `\${...}` which left a literal `${...}` in the
+            // SQL selection — ContentResolver was being asked for a column called
+            // `${ContactsContract...}` and would either return nothing or throw.
+            val selection = "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} LIKE ?"
             val selectionArgs = arrayOf("%$query%")
             
             val sb = StringBuilder()

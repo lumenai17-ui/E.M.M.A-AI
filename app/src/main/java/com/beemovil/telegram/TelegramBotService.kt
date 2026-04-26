@@ -279,7 +279,7 @@ class TelegramBotService : Service() {
                 .post(body.toString().toRequestBody("application/json".toMediaType()))
                 .build()
             httpClient.newCall(request).execute().close()
-        } catch (_: Exception) {}
+        } catch (e: Exception) { android.util.Log.w("EmmaSwallowed", "ignored exception: ${e.message}") }
     }
 
     /**
@@ -538,7 +538,7 @@ class TelegramBotService : Service() {
         try {
             val nm = getSystemService(NotificationManager::class.java)
             nm.notify(NOTIFICATION_ID, buildNotification(text))
-        } catch (_: Exception) {}
+        } catch (e: Exception) { android.util.Log.w("EmmaSwallowed", "ignored exception: ${e.message}") }
     }
 
     // ═══════════════════════════════════════

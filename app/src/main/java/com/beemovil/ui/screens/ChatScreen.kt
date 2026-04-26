@@ -226,7 +226,7 @@ fun ChatScreen(
                                                         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                                                             vib?.vibrate(android.os.VibrationEffect.createOneShot(40, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
                                                         }
-                                                    } catch (_: Exception) {}
+                                                    } catch (e: Exception) { android.util.Log.w("EmmaSwallowed", "ignored exception: ${e.message}") }
                                                     viewModel.toggleVoiceInput { text -> 
                                                         viewModel.sendMessage(text)
                                                     }
@@ -502,6 +502,15 @@ fun ChatScreen(
             BrowserChatPanel(
                 url = viewModel.browserUrl.value,
                 onDismiss = { viewModel.showBrowser.value = false }
+            )
+        }
+
+        // C-03: SecurityGate confirmation dialog for YELLOW / RED operations.
+        viewModel.pendingConfirmation.value?.let { op ->
+            com.beemovil.ui.components.ConfirmationDialog(
+                operation = op,
+                onConfirm = { viewModel.resolveConfirmation(true) },
+                onCancel  = { viewModel.resolveConfirmation(false) }
             )
         }
         

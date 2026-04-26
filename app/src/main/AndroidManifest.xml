@@ -14,7 +14,9 @@
     <!-- Storage for files -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <!-- H-05: MANAGE_EXTERNAL_STORAGE removed. The codebase did not actually use it
+         (the only mention is a comment in LocalModelManager that states it is NOT required).
+         Keeping it triggered Play Store review and granted unnecessary file-system access. -->
 
     <!-- Notifications -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -72,6 +74,7 @@
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:supportsRtl="true"
         android:theme="@style/Theme.BeeMovil"
         android:usesCleartextTraffic="false">

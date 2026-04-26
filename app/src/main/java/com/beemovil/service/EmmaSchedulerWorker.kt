@@ -72,14 +72,14 @@ class EmmaSchedulerWorker(
             val eventCount = cursor?.count ?: 0
             cursor?.close()
             if (eventCount > 0) builder.append("Tienes $eventCount eventos hoy. ")
-        } catch (_: Exception) {}
+        } catch (e: Exception) { android.util.Log.w("EmmaSwallowed", "ignored exception: ${e.message}") }
 
         // Battery
         try {
             val scanner = com.beemovil.telemetry.DeviceScanner(appContext)
             val state = scanner.getCurrentDeviceState()
             builder.append("Batería: ${state.batteryPercent}%. ")
-        } catch (_: Exception) {}
+        } catch (e: Exception) { android.util.Log.w("EmmaSwallowed", "ignored exception: ${e.message}") }
 
         sendNotification("☀️ Briefing Matutino", builder.toString())
         return Result.success()

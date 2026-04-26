@@ -305,13 +305,13 @@ class ContextOrchestrator(private val context: Context) {
                 val roadText = roadInfo.toPromptText()
                 if (roadText.isNotBlank()) parts.add(roadText)
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) { android.util.Log.w("EmmaSwallowed", "ignored exception: ${e.message}") }
 
         // 2. Overpass: Nearby POIs
         try {
             val pois = geoIntel.fetchNearbyPOIs(gpsData.latitude, gpsData.longitude, mode = mode)
             if (pois.isNotBlank()) parts.add("Cerca: $pois")
-        } catch (_: Exception) {}
+        } catch (e: Exception) { android.util.Log.w("EmmaSwallowed", "ignored exception: ${e.message}") }
 
         // 3. Wikipedia: Historical/cultural data for the locality
         try {
@@ -320,7 +320,7 @@ class ContextOrchestrator(private val context: Context) {
                 val wikiData = geoIntel.fetchWikipediaData(zone)
                 if (wikiData.isNotBlank()) parts.add(wikiData.take(200))
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) { android.util.Log.w("EmmaSwallowed", "ignored exception: ${e.message}") }
 
         return parts.joinToString("\n").take(400)
     }

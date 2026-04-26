@@ -68,7 +68,27 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+            // C-02 fix: NO fallback to debug signing. Releasing with the public Android debug key
+            // would let anyone forge "updates" of this app. If release signing isn't configured,
+            // fail loudly when a release task is actually requested. Debug builds and IDE sync
+            // are unaffected because the throw only fires for release tasks.
+            val releaseSigning = signingConfigs.findByName("release")
+            if (releaseSigning != null) {
+                signingConfig = releaseSigning
+            } else {
+                val releaseRequested = gradle.startParameter.taskNames.any { taskName ->
+                    taskName.contains("Release", ignoreCase = true) ||
+                    taskName.contains("release", ignoreCase = false)
+                }
+                if (releaseRequested) {
+                    throw GradleException(
+                        "Cannot build release: keystore.properties missing or invalid. " +
+                        "Configure storeFile/storePassword/keyAlias/keyPassword with a valid " +
+                        "release keystore before requesting a release build. Debug fallback was " +
+                        "removed because the Android debug key is publicly known."
+                    )
+                }
+            }
         }
     }
 

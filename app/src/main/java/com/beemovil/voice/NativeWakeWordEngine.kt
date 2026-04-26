@@ -246,7 +246,7 @@ class NativeWakeWordEngine(
         try {
             recognizer?.stopListening()
             recognizer?.cancel()
-        } catch (_: Exception) {}
+        } catch (e: Exception) { android.util.Log.w("EmmaSwallowed", "ignored exception: ${e.message}") }
 
         // Release mic so ConversationEngine can take it
         MicrophoneArbiter.releaseMic(MicrophoneArbiter.MicOwner.WAKE_WORD)

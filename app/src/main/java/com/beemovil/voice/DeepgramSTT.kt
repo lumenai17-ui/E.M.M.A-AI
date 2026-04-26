@@ -172,7 +172,7 @@ class DeepgramSTT(private val context: Context) {
         try {
             audioRecord?.stop()
             audioRecord?.release()
-        } catch (_: Exception) {}
+        } catch (e: Exception) { android.util.Log.w("EmmaSwallowed", "ignored exception: ${e.message}") }
         audioRecord = null
         isRecording = false
     }

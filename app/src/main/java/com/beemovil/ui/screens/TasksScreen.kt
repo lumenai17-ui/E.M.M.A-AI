@@ -276,7 +276,7 @@ fun TasksScreen(viewModel: ChatViewModel) {
                                             val service = GoogleTasksService(accessToken)
                                             service.completeTask(task.id)
                                             tasks = service.listTasks(showCompleted = false)
-                                        } catch (_: Exception) {}
+                                        } catch (e: Exception) { android.util.Log.w("EmmaSwallowed", "ignored exception: ${e.message}") }
                                     }
                                 }
                             },
@@ -287,7 +287,7 @@ fun TasksScreen(viewModel: ChatViewModel) {
                                             val service = GoogleTasksService(accessToken)
                                             service.deleteTask(task.id)
                                             tasks = service.listTasks(showCompleted = false)
-                                        } catch (_: Exception) {}
+                                        } catch (e: Exception) { android.util.Log.w("EmmaSwallowed", "ignored exception: ${e.message}") }
                                     }
                                 }
                             }

@@ -51,6 +51,12 @@ class MainActivity : ComponentActivity() {
 
         requestPermissionLauncher.launch(permissionsToRequest.toTypedArray())
 
+        // C-03: register the SecurityGate ConfirmationHandler so YELLOW/RED operations
+        // can actually ask the user. Before this, the handler was never set, so YELLOW
+        // auto-approved silently and RED auto-blocked. The handler is detached when the
+        // ViewModel is cleared (see ChatViewModel.onCleared).
+        viewModel.attachSecurityGate()
+
         // FILE-09: Manejar incoming Share Intent desde otras apps
         handleIncomingShareIntent(intent)
 
