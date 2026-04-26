@@ -199,4 +199,86 @@ class GoogleGmailService(private val accessToken: String) {
             labelIds = msg.labelIds ?: emptyList()
         )
     }
+
+    // ═══════════════════════════════════════
+    // FULL MESSAGE (body + attachments)
+    // ═══════════════════════════════════════
+
+    data class FullEmailMessage(
+        val id: String,
+        val body: String,
+        val htmlBody: String?,
+        val attachments: List<GmailAttachmentInfo>
+    )
+
+    data class GmailAttachmentInfo(
+        val attachmentId: String,
+        val name: String,
+        val mimeType: String,
+        val size: Long
+    )
+
+    fun getFullMessage(messageId: String): FullEmailMessage? {
+        return try {
+            val msg = gmailService.users().messages().get("me", messageId)
+                .setFormat("full")
+                .execute()
+
+            var plainBody = ""
+            var htmlBody: String? = null
+            val attachments = mutableListOf<GmailAttachmentInfo>()
+
+            fun decodePart(part: com.google.api.services.gmail.model.MessagePart) {
+                val mime = part.mimeType ?: ""
+                val bodyData = part.body?.data
+                val attId = part.body?.attachmentId
+
+                if (attId != null && part.filename?.isNotBlank() == true) {
+                    attachments.add(GmailAttachmentInfo(
+                        attachmentId = attId,
+                        name = part.filename ?: "attachment",
+                        mimeType = mime,
+                        size = part.body?.size?.toLong() ?: 0L
+                    ))
+                } else if (bodyData != null) {
+                    val decoded = String(Base64.decode(bodyData, Base64.URL_SAFE))
+                    if (mime.contains("text/html")) htmlBody = decoded
+                    else if (mime.contains("text/plain")) plainBody = decoded
+                }
+
+                part.parts?.forEach { decodePart(it) }
+            }
+
+            msg.payload?.let { decodePart(it) }
+
+            FullEmailMessage(
+                id = msg.id ?: messageId,
+                body = plainBody.ifBlank { htmlBody?.replace(Regex("<[^>]*>"), " ")?.replace(Regex("\\s+"), " ")?.trim() ?: "" },
+                htmlBody = htmlBody,
+                attachments = attachments
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "getFullMessage error: ${e.message}", e)
+            null
+        }
+    }
+
+    fun downloadGmailAttachment(messageId: String, attachmentId: String): ByteArray? {
+        return try {
+            val att = gmailService.users().messages().attachments()
+                .get("me", messageId, attachmentId).execute()
+            Base64.decode(att.data, Base64.URL_SAFE)
+        } catch (e: Exception) {
+            Log.e(TAG, "Download attachment error: ${e.message}", e)
+            null
+        }
+    }
+
+    // ═══════════════════════════════════════
+    // SENT FOLDER
+    // ═══════════════════════════════════════
+
+    fun listSent(maxResults: Int = 20): List<EmailMessage> {
+        return listInbox(maxResults, "in:sent")
+    }
 }

@@ -230,6 +230,45 @@ class EmailService(private val context: Context) {
         return attachmentDir.listFiles()?.toList() ?: emptyList()
     }
 
+    /**
+     * Fetch sent emails. Tries multiple folder names for compatibility.
+     */
+    fun fetchSentFolder(
+        email: String, password: String, config: EmailConfig, limit: Int = 25
+    ): List<EmailMessage> {
+        val props = imapProperties(config)
+        val session = Session.getInstance(props)
+        val store = session.getStore("imaps")
+        store.connect(config.imapHost, config.imapPort, email, password)
+
+        val sentNames = listOf("[Gmail]/Sent Mail", "Sent", "INBOX.Sent", "Sent Items", "Sent Messages")
+        var sentFolder: Folder? = null
+        for (name in sentNames) {
+            try {
+                val f = store.getFolder(name)
+                if (f.exists()) { sentFolder = f; break }
+            } catch (_: Exception) {}
+        }
+        if (sentFolder == null) {
+            store.close()
+            return emptyList()
+        }
+
+        try {
+            sentFolder.open(Folder.READ_ONLY)
+            val total = sentFolder.messageCount
+            val start = maxOf(1, total - limit + 1)
+            val messages = sentFolder.getMessages(start, total)
+
+            return messages.mapNotNull { msg ->
+                try { parseMessage(msg, sentFolder) } catch (_: Exception) { null }
+            }.sortedByDescending { it.date }.take(limit)
+        } finally {
+            try { sentFolder.close(false) } catch (_: Exception) {}
+            try { store.close() } catch (_: Exception) {}
+        }
+    }
+
     // ═══════════════════════════════════════
     // INTERNAL
     // ═══════════════════════════════════════
