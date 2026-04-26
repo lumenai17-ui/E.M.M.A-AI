@@ -31,7 +31,9 @@ abstract class LifeStreamDB : RoomDatabase() {
                     context.applicationContext,
                     LifeStreamDB::class.java,
                     "emma_lifestream_db"
-                ).build()
+                )
+                .allowMainThreadQueries() // Required: NotificationListenerService calls insertSync from service thread
+                .build()
                 INSTANCE = instance
                 instance
             }

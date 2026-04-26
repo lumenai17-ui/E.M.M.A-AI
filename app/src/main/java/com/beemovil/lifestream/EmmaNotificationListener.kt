@@ -112,7 +112,14 @@ class EmmaNotificationListener : NotificationListenerService() {
         val pkg = sbn.packageName ?: return
 
         // 1. Check if LifeStream is enabled
-        if (!LifeStreamManager.isEnabled(applicationContext)) return
+        val isLSEnabled = LifeStreamManager.isEnabled(applicationContext)
+        if (!isLSEnabled) {
+            // Log first few skips for debugging
+            Log.w(TAG, "SKIP: LifeStream disabled in prefs (pkg=$pkg). User must enable in Settings.")
+            return
+        }
+
+        Log.d(TAG, "📩 Notification received from: $pkg")
 
         // 2. Security: Block banking/auth packages
         if (pkg in BLOCKED_PACKAGES) {
@@ -121,15 +128,24 @@ class EmmaNotificationListener : NotificationListenerService() {
         }
 
         // 3. Extract notification data
-        val notification = sbn.notification ?: return
-        val extras = notification.extras ?: return
+        val notification = sbn.notification ?: run {
+            Log.w(TAG, "SKIP: $pkg — null notification object")
+            return
+        }
+        val extras = notification.extras ?: run {
+            Log.w(TAG, "SKIP: $pkg — null extras")
+            return
+        }
 
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim() ?: ""
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.trim() ?: ""
         val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()?.trim()
 
         // Skip empty notifications
-        if (title.isBlank() && text.isBlank()) return
+        if (title.isBlank() && text.isBlank()) {
+            Log.d(TAG, "SKIP: $pkg — empty title and text")
+            return
+        }
 
         // Skip ongoing/persistent notifications (music players, etc.)
         if (notification.flags and Notification.FLAG_ONGOING_EVENT != 0) {
@@ -167,8 +183,13 @@ class EmmaNotificationListener : NotificationListenerService() {
             metadata = metadata
         )
 
-        // Use sync insert (NotificationListenerService runs on its own thread)
-        LifeStreamManager.logSync(applicationContext, entry)
+        try {
+            // Use sync insert (NotificationListenerService runs on its own thread)
+            LifeStreamManager.logSync(applicationContext, entry)
+            Log.i(TAG, "✅ CAPTURED: [$source] $title — ${contentPreview.take(50)}")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ FAILED to save notification: ${e.message}", e)
+        }
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
