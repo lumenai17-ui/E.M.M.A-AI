@@ -1,5 +1,6 @@
 package com.beemovil.ui.screens
 
+import android.content.Intent
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -10,6 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -26,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.beemovil.tasks.EmmaTask
 import com.beemovil.tasks.EmmaSubtask
+import com.beemovil.tasks.TaskAttachment
 import com.beemovil.tasks.EmmaTaskDB
 import com.beemovil.ui.ChatViewModel
 import com.beemovil.ui.theme.*
@@ -57,11 +60,13 @@ fun TasksScreen(viewModel: ChatViewModel) {
 
     var tasks by remember { mutableStateOf<List<EmmaTask>>(emptyList()) }
     var subtasksMap by remember { mutableStateOf<Map<String, List<EmmaSubtask>>>(emptyMap()) }
+    var attachmentsMap by remember { mutableStateOf<Map<String, List<TaskAttachment>>>(emptyMap()) }
     var isLoading by remember { mutableStateOf(true) }
     var activeFilter by remember { mutableStateOf("all") }
     var showNewTaskDialog by remember { mutableStateOf(false) }
     var editingTask by remember { mutableStateOf<EmmaTask?>(null) }
     var expandedTaskId by remember { mutableStateOf<String?>(null) }
+    var searchQuery by remember { mutableStateOf("") }
 
     // Load tasks
     fun loadTasks() {
@@ -76,10 +81,14 @@ fun TasksScreen(viewModel: ChatViewModel) {
                     else -> dao.getAllActiveTasks()
                 }
                 tasks = loaded
-                // Load subtasks for visible tasks
                 val sMap = mutableMapOf<String, List<EmmaSubtask>>()
-                loaded.forEach { t -> sMap[t.id] = dao.getSubtasks(t.id) }
+                val aMap = mutableMapOf<String, List<TaskAttachment>>()
+                loaded.forEach { t ->
+                    sMap[t.id] = dao.getSubtasks(t.id)
+                    aMap[t.id] = dao.getAttachments(t.id)
+                }
                 subtasksMap = sMap
+                attachmentsMap = aMap
             }
             isLoading = false
         }
@@ -241,6 +250,27 @@ fun TasksScreen(viewModel: ChatViewModel) {
                     )
                 }
             }
+            // Search bar
+            OutlinedTextField(
+                value = searchQuery, onValueChange = { q ->
+                    searchQuery = q
+                    if (q.isBlank()) { loadTasks() } else {
+                        scope.launch {
+                            withContext(Dispatchers.IO) {
+                                tasks = dao.searchTasks(q)
+                                val sMap = mutableMapOf<String, List<EmmaSubtask>>()
+                                val aMap = mutableMapOf<String, List<TaskAttachment>>()
+                                tasks.forEach { t -> sMap[t.id] = dao.getSubtasks(t.id); aMap[t.id] = dao.getAttachments(t.id) }
+                                subtasksMap = sMap; attachmentsMap = aMap
+                            }
+                        }
+                    }
+                },
+                placeholder = { Text("🔍 Buscar tareas...", color = textSecondary) },
+                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = textPrimary, unfocusedTextColor = textPrimary, focusedBorderColor = accent, unfocusedBorderColor = textSecondary.copy(alpha = 0.3f)),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).height(48.dp),
+                shape = RoundedCornerShape(12.dp), singleLine = true
+            )
             // Stats bar
             if (!isLoading && tasks.isNotEmpty()) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -268,6 +298,7 @@ fun TasksScreen(viewModel: ChatViewModel) {
                     items(tasks, key = { it.id }) { task ->
                         val isExpanded = expandedTaskId == task.id
                         val subs = subtasksMap[task.id] ?: emptyList()
+                        val attachments = attachmentsMap[task.id] ?: emptyList()
                         val subDone = subs.count { it.completed }
                         val isOverdue = task.status != "completed" && task.dueDate != null && task.dueDate < System.currentTimeMillis()
                         val priorityColor = when (task.priority) { 3 -> urgentColor; 2 -> highColor; 1 -> lowColor; else -> Color.Transparent }
@@ -339,17 +370,20 @@ fun TasksScreen(viewModel: ChatViewModel) {
                                         }
                                     }
                                 }
-                                // Expanded: notes, subtasks, actions
+                                // Expanded: notes, subtasks, attachments, actions
                                 if (isExpanded) {
                                     Spacer(Modifier.height(8.dp))
                                     HorizontalDivider(color = if (isDark) Color(0xFF2A2A3D) else Color(0xFFE0E0E0))
+                                    // Selectable notes
                                     if (task.notes.isNotBlank()) {
-                                        Text(task.notes, color = textSecondary, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 8.dp, start = 4.dp))
+                                        SelectionContainer {
+                                            Text(task.notes, color = textSecondary, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 8.dp, start = 4.dp))
+                                        }
                                     }
-                                    // Subtasks
-                                    if (subs.isNotEmpty()) {
+                                    // Subtasks + inline add
+                                    if (subs.isNotEmpty() || true) {
                                         Spacer(Modifier.height(8.dp))
-                                        Text("Sub-tareas ($subDone/${subs.size})", color = textSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                        if (subs.isNotEmpty()) Text("Sub-tareas ($subDone/${subs.size})", color = textSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                                         subs.forEach { sub ->
                                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp, top = 2.dp)) {
                                                 IconButton(onClick = {
@@ -360,28 +394,89 @@ fun TasksScreen(viewModel: ChatViewModel) {
                                                 }, modifier = Modifier.size(24.dp)) {
                                                     Icon(if (sub.completed) Icons.Filled.CheckBox else Icons.Filled.CheckBoxOutlineBlank, "Toggle", tint = if (sub.completed) completedColor else textSecondary, modifier = Modifier.size(18.dp))
                                                 }
-                                                Text(sub.title, color = if (sub.completed) textSecondary else textPrimary, fontSize = 13.sp,
-                                                    textDecoration = if (sub.completed) TextDecoration.LineThrough else TextDecoration.None)
+                                                SelectionContainer {
+                                                    Text(sub.title, color = if (sub.completed) textSecondary else textPrimary, fontSize = 13.sp, textDecoration = if (sub.completed) TextDecoration.LineThrough else TextDecoration.None)
+                                                }
+                                            }
+                                        }
+                                        // Inline add subtask
+                                        var newSubTitle by remember { mutableStateOf("") }
+                                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp, top = 4.dp)) {
+                                            OutlinedTextField(
+                                                value = newSubTitle, onValueChange = { newSubTitle = it },
+                                                placeholder = { Text("+ Sub-tarea...", fontSize = 12.sp, color = textSecondary.copy(alpha = 0.5f)) },
+                                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = textPrimary, unfocusedTextColor = textPrimary, focusedBorderColor = accent, unfocusedBorderColor = Color.Transparent),
+                                                modifier = Modifier.weight(1f).height(40.dp), singleLine = true,
+                                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                                keyboardActions = KeyboardActions(onDone = {
+                                                    if (newSubTitle.isNotBlank()) {
+                                                        val t = newSubTitle; newSubTitle = ""
+                                                        scope.launch { withContext(Dispatchers.IO) { dao.insertSubtask(EmmaSubtask(taskId = task.id, title = t, sortOrder = subs.size)) }; loadTasks() }
+                                                    }
+                                                })
+                                            )
+                                            if (newSubTitle.isNotBlank()) {
+                                                IconButton(onClick = {
+                                                    val t = newSubTitle; newSubTitle = ""
+                                                    scope.launch { withContext(Dispatchers.IO) { dao.insertSubtask(EmmaSubtask(taskId = task.id, title = t, sortOrder = subs.size)) }; loadTasks() }
+                                                }, modifier = Modifier.size(32.dp)) {
+                                                    Icon(Icons.Filled.Check, "Add", tint = completedColor, modifier = Modifier.size(20.dp))
+                                                }
                                             }
                                         }
                                     }
-                                    // Action buttons
+                                    // Attachments
+                                    if (attachments.isNotEmpty()) {
+                                        Spacer(Modifier.height(8.dp))
+                                        Text("Adjuntos (${attachments.size})", color = textSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                        attachments.forEach { att ->
+                                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp, top = 2.dp)
+                                                .clickable {
+                                                    try {
+                                                        val file = java.io.File(att.filePath)
+                                                        val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                                                        val intent = Intent(Intent.ACTION_VIEW).apply { setDataAndType(uri, att.mimeType ?: "*/*"); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+                                                        context.startActivity(intent)
+                                                    } catch (_: Exception) {}
+                                                }) {
+                                                val icon = when { att.mimeType?.startsWith("image") == true -> "🖼️"; att.mimeType?.contains("pdf") == true -> "📄"; else -> "📎" }
+                                                val sizeLabel = if (att.sizeBytes != null) " (${att.sizeBytes / 1024} KB)" else ""
+                                                Text("$icon ${att.fileName}$sizeLabel", color = accent, fontSize = 12.sp)
+                                            }
+                                        }
+                                    }
+                                    // Action buttons: Edit, Share, Delete
                                     Spacer(Modifier.height(8.dp))
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        OutlinedButton(onClick = { editingTask = task }, shape = RoundedCornerShape(8.dp), border = androidx.compose.foundation.BorderStroke(1.dp, accent)) {
-                                            Icon(Icons.Filled.Edit, "Edit", tint = accent, modifier = Modifier.size(16.dp))
-                                            Spacer(Modifier.width(4.dp))
-                                            Text("Editar", color = accent, fontSize = 12.sp)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        OutlinedButton(onClick = { editingTask = task }, shape = RoundedCornerShape(8.dp), border = androidx.compose.foundation.BorderStroke(1.dp, accent), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)) {
+                                            Icon(Icons.Filled.Edit, "Edit", tint = accent, modifier = Modifier.size(14.dp))
+                                            Spacer(Modifier.width(3.dp))
+                                            Text("Editar", color = accent, fontSize = 11.sp)
+                                        }
+                                        // Share button
+                                        OutlinedButton(onClick = {
+                                            val shareText = buildString {
+                                                appendLine("📋 ${task.title}")
+                                                if (task.notes.isNotBlank()) appendLine("📝 ${task.notes}")
+                                                if (task.dueDate != null) appendLine("📅 Vence: ${SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(java.util.Date(task.dueDate))}")
+                                                val aLabel = when (task.assigneeType) { "user" -> "Yo"; "emma" -> "Emma"; else -> task.assignee }
+                                                appendLine("👤 Asignada a: $aLabel")
+                                                if (!task.tags.isNullOrBlank()) appendLine("🏷️ ${task.tags}")
+                                                if (subs.isNotEmpty()) appendLine("☑ Sub-tareas: $subDone/${subs.size}")
+                                            }
+                                            val intent = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, shareText) }
+                                            context.startActivity(Intent.createChooser(intent, "Compartir tarea"))
+                                        }, shape = RoundedCornerShape(8.dp), border = androidx.compose.foundation.BorderStroke(1.dp, accent.copy(alpha = 0.5f)), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)) {
+                                            Icon(Icons.Filled.Share, "Share", tint = accent, modifier = Modifier.size(14.dp))
+                                            Spacer(Modifier.width(3.dp))
+                                            Text("Compartir", color = accent, fontSize = 11.sp)
                                         }
                                         OutlinedButton(onClick = {
-                                            scope.launch {
-                                                withContext(Dispatchers.IO) { dao.deleteTask(task) }
-                                                expandedTaskId = null; loadTasks()
-                                            }
-                                        }, shape = RoundedCornerShape(8.dp), border = androidx.compose.foundation.BorderStroke(1.dp, urgentColor.copy(alpha = 0.5f))) {
-                                            Icon(Icons.Filled.Delete, "Delete", tint = urgentColor, modifier = Modifier.size(16.dp))
-                                            Spacer(Modifier.width(4.dp))
-                                            Text("Eliminar", color = urgentColor, fontSize = 12.sp)
+                                            scope.launch { withContext(Dispatchers.IO) { dao.deleteTask(task) }; expandedTaskId = null; loadTasks() }
+                                        }, shape = RoundedCornerShape(8.dp), border = androidx.compose.foundation.BorderStroke(1.dp, urgentColor.copy(alpha = 0.5f)), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)) {
+                                            Icon(Icons.Filled.Delete, "Delete", tint = urgentColor, modifier = Modifier.size(14.dp))
+                                            Spacer(Modifier.width(3.dp))
+                                            Text("Eliminar", color = urgentColor, fontSize = 11.sp)
                                         }
                                     }
                                 }
