@@ -160,9 +160,11 @@ class EmmaEngine(private val context: Context) {
                 } catch (e: Exception) { "" }
 
                 // R7: Cross-system context (Tasks, Email, Calendar, behavioral)
+                // M-02: replaced runBlocking with a direct suspend call. initialize() is
+                // already suspend, so we don't need to bridge coroutine worlds.
                 val crossContextInjection = try {
                     val crossEngine = com.beemovil.vision.CrossContextEngine(context)
-                    val paragraph = kotlinx.coroutines.runBlocking(Dispatchers.IO) {
+                    val paragraph = kotlinx.coroutines.withContext(Dispatchers.IO) {
                         crossEngine.buildContextParagraph()
                     }
                     if (paragraph.isNotBlank()) "\n\nCONTEXTO SITUACIONAL DEL USUARIO (usa esto para ser proactivo):\n$paragraph\n" else ""

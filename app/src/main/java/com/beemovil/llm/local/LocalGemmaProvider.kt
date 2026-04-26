@@ -105,7 +105,7 @@ class LocalGemmaProvider(
             try {
                 try {
                     sharedEngine?.close()
-                } catch (_: Exception) {}
+                } catch (e: Exception) { android.util.Log.w("EmmaSwallowed", "ignored exception: ${e.message}") }
                 sharedEngine = null
                 currentModelPath = null
                 isInitializing = false
@@ -493,7 +493,7 @@ class LocalGemmaProvider(
                     name = name,
                     params = args
                 ))
-            } catch (_: Exception) {}
+            } catch (e: Exception) { android.util.Log.w("EmmaSwallowed", "ignored exception: ${e.message}") }
         }
 
         // Try simpler regex if none found
@@ -510,7 +510,7 @@ class LocalGemmaProvider(
                             params = args
                         ))
                     }
-                } catch (_: Exception) {}
+                } catch (e: Exception) { android.util.Log.w("EmmaSwallowed", "ignored exception: ${e.message}") }
             }
         }
 

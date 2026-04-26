@@ -530,7 +530,7 @@ class NativeSpeechInput(private val context: Context) {
         try {
             recognizer?.stopListening()
             recognizer?.destroy()
-        } catch (_: Exception) {}
+        } catch (e: Exception) { android.util.Log.w("EmmaSwallowed", "ignored exception: ${e.message}") }
         recognizer = null
         isListening = false
     }

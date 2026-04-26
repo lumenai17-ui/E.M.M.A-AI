@@ -96,7 +96,7 @@ class A2AServer(
         running = false
         try {
             serverSocket?.close()
-        } catch (_: Exception) {}
+        } catch (e: Exception) { android.util.Log.w("EmmaSwallowed", "ignored exception: ${e.message}") }
         Log.i(TAG, "A2A Server stopped")
     }
 

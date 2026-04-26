@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Network Security Config (H-07).
+    Hard rule: no cleartext HTTP from anywhere. Only HTTPS to trusted system CAs.
+    Re-state cleartext=false here in addition to AndroidManifest.usesCleartextTraffic
+    so older Android versions still enforce it.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+            <!-- We do NOT trust user-installed CAs. This blocks corporate / malware
+                 root certs from intercepting Emma's traffic to LLM and OAuth providers. -->
+        </trust-anchors>
+    </base-config>
+</network-security-config>

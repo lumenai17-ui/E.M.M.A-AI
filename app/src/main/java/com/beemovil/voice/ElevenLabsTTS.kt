@@ -138,7 +138,7 @@ class ElevenLabsTTS(private val context: Context) {
         try {
             audioTrack?.stop()
             audioTrack?.release()
-        } catch (_: Exception) {}
+        } catch (e: Exception) { android.util.Log.w("EmmaSwallowed", "ignored exception: ${e.message}") }
         audioTrack = null
         isSpeaking = false
     }
@@ -148,7 +148,7 @@ class ElevenLabsTTS(private val context: Context) {
         try {
             audioTrack?.stop()
             audioTrack?.release()
-        } catch (_: Exception) {}
+        } catch (e: Exception) { android.util.Log.w("EmmaSwallowed", "ignored exception: ${e.message}") }
         audioTrack = null
         isSpeaking = false
     }

@@ -342,7 +342,7 @@ fun LiveVisionScreen(
                         mode = selectedMode,
                         coords = currentGpsData.coordsShort
                     )
-                } catch (_: Exception) {}
+                } catch (e: Exception) { android.util.Log.w("EmmaSwallowed", "ignored exception: ${e.message}") }
                 // V5: Auto-detect mode suggestion by speed
                 suggestedMode = suggestModeBySpeed(currentGpsData.speedKmh)
             }
@@ -583,7 +583,7 @@ fun LiveVisionScreen(
                                 CameraSelector.DEFAULT_BACK_CAMERA,
                                 preview, imgCapture
                             )
-                        } catch (_: Exception) {}
+                        } catch (e: Exception) { android.util.Log.w("EmmaSwallowed", "ignored exception: ${e.message}") }
                     }, ContextCompat.getMainExecutor(ctx))
                     previewView
                 },

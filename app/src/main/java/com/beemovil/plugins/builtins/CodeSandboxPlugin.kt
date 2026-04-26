@@ -36,7 +36,8 @@ class CodeSandboxPlugin : EmmaPlugin {
     override suspend fun execute(args: Map<String, Any>): String {
         val script = args["code"] as? String ?: return "Error: Parameter 'code' missing or invalid."
 
-        Log.d(TAG, "Iniciando Rhino Sandbox Task:\n\$script")
+        // L-01: previously "\$script" — Kotlin escape made it a literal "$script" in logs.
+        Log.d(TAG, "Iniciando Rhino Sandbox Task:\n$script")
 
         // 3 segundos máximos de límite de ejecución
         val result = withContext(Dispatchers.Default) {
@@ -49,7 +50,7 @@ class CodeSandboxPlugin : EmmaPlugin {
             Log.w(TAG, "Ejecución abortada: Watchdog Timeout.")
             "Error: Watchdog Timeout alcanzado (3 segundos). El script tardaba demasiado o tenía un bucle infinito."
         } else {
-            Log.d(TAG, "Resultado Sandbox: \$result")
+            Log.d(TAG, "Resultado Sandbox: $result")
             result
         }
     }
@@ -83,14 +84,14 @@ class CodeSandboxPlugin : EmmaPlugin {
             } else ""
 
             val finalOutput = buildString {
-                if (stdoutStr.isNotBlank()) append("Salida Console:\\n\$stdoutStr\\n")
-                if (evalStr.isNotBlank()) append("Retorno Evaluado: \$evalStr")
+                if (stdoutStr.isNotBlank()) append("Salida Console:\n$stdoutStr\n")
+                if (evalStr.isNotBlank()) append("Retorno Evaluado: $evalStr")
                 if (isEmpty()) append("Ejecución sin errores pero sin un output impreso ni devuelto.")
             }.trim()
             
             finalOutput
         } catch (e: Exception) {
-            "Excepción en Sandbox: \${e.message}"
+            "Excepción en Sandbox: ${e.message}"
         } finally {
             Context.exit()
         }

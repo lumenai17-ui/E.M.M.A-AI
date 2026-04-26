@@ -9,6 +9,7 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 import com.beemovil.llm.ToolDefinition
 import com.beemovil.plugins.EmmaPlugin
+import com.beemovil.plugins.SecurityGate
 import com.beemovil.security.SecurePrefs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -88,8 +89,20 @@ class DiagnosticsPlugin(private val context: Context) : EmmaPlugin {
                         whyNotWorking(target)
                     }
                     "read_logs" -> {
+                        // H-04: read_logs can leak previously-logged sensitive info to the
+                        // remote LLM provider. Promote to YELLOW and require explicit user OK,
+                        // then redact known token/key patterns before returning.
                         val filter = args["target"] as? String
-                        readLogs(filter)
+                        val gateOp = SecurityGate.yellow(
+                            id, "read_logs",
+                            "E.M.M.A. quiere leer sus propios logs (logcat) " +
+                            "para diagnóstico. ${if (filter.isNullOrBlank()) "Sin filtro." else "Filtro: '$filter'."}"
+                        )
+                        if (!SecurityGate.evaluate(gateOp)) {
+                            "Lectura de logs cancelada por el usuario."
+                        } else {
+                            redactSecrets(readLogs(filter))
+                        }
                     }
                     else -> "Operación desconocida: $operation"
                 }
@@ -478,6 +491,35 @@ class DiagnosticsPlugin(private val context: Context) : EmmaPlugin {
     }
 
     // ── Helpers ──
+
+    /**
+     * H-04: redact common API key / token patterns before returning logs to the LLM.
+     * Logs are about to be sent to a remote provider — assume any prefix is sensitive.
+     */
+    private fun redactSecrets(input: String): String {
+        if (input.isBlank()) return input
+        val patterns = listOf(
+            // Specific provider keys (full string from prefix)
+            Regex("AIza[0-9A-Za-z_\\-]{20,}"),                  // Google
+            Regex("sk-[A-Za-z0-9_\\-]{20,}"),                   // OpenAI / OpenRouter (sk-, sk-or-, sk-proj-)
+            Regex("hf_[A-Za-z0-9]{20,}"),                       // Hugging Face
+            Regex("ghp_[A-Za-z0-9]{20,}"),                      // GitHub PAT
+            Regex("xox[baprs]-[A-Za-z0-9\\-]{10,}"),            // Slack
+            Regex("AKIA[0-9A-Z]{16}"),                          // AWS access key
+            Regex("eyJ[A-Za-z0-9_\\-]{8,}\\.[A-Za-z0-9_\\-]{8,}\\.[A-Za-z0-9_\\-]+"), // JWT
+            // Generic key=VALUE / token=VALUE / Bearer VALUE
+            Regex("(?i)(api[_-]?key|access[_-]?token|bearer|password|token|secret)\\s*[=:]\\s*['\"]?[A-Za-z0-9_\\-./+]{8,}['\"]?"),
+            Regex("(?i)Bearer\\s+[A-Za-z0-9_\\-./+]{8,}")
+        )
+        var out = input
+        for (p in patterns) {
+            out = out.replace(p) { match ->
+                val first = match.value.take(4)
+                "$first…[REDACTED]"
+            }
+        }
+        return out
+    }
 
     private fun dirSize(dir: File): Long {
         if (!dir.exists()) return 0

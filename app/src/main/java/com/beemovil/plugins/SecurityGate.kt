@@ -1,5 +1,7 @@
 package com.beemovil.plugins
 
+import java.util.concurrent.CopyOnWriteArrayList
+
 /**
  * SecurityGate — Project Autonomía Phase S1
  *
@@ -10,8 +12,12 @@ package com.beemovil.plugins
  *  🟡 YELLOW → Inline confirmation in chat (modify ops)
  *  🔴 RED    → Modal dialog with details (destructive ops)
  *
- * In Phase S1 (read-only plugins), everything is GREEN.
- * Phase S2 will add YELLOW/RED handling with UI callbacks.
+ * C-03 fix: previously, the single `confirmationHandler` was never assigned
+ * anywhere, so YELLOW operations auto-approved silently and RED operations
+ * always blocked. Now:
+ *  - The fallback for YELLOW is `false` (deny by default when no UI is attached).
+ *  - Multiple handlers can register so that whichever screen is in the
+ *    foreground can answer. The first handler to return wins.
  */
 object SecurityGate {
 
@@ -35,36 +41,57 @@ object SecurityGate {
 
     /**
      * Callback interface for the UI to handle confirmation requests.
-     * Implemented by ChatViewModel or LiveVisionScreen.
+     * Implemented by ChatViewModel (or any screen that wants to answer).
      */
     interface ConfirmationHandler {
         /**
          * Called when a YELLOW or RED operation needs user approval.
-         * Returns true if user confirmed, false if cancelled.
+         * Returns true if user confirmed, false if cancelled / timed out
+         * / this handler can't currently answer.
          */
         suspend fun requestConfirmation(operation: SecureOperation): Boolean
     }
 
-    // The active handler — set by the UI layer
-    @Volatile
-    var confirmationHandler: ConfirmationHandler? = null
+    // CopyOnWriteArrayList: safe for many reads, occasional writes (register/unregister).
+    private val handlers = CopyOnWriteArrayList<ConfirmationHandler>()
+
+    /** Register a handler. Idempotent: registering the same instance twice is a no-op. */
+    fun registerHandler(handler: ConfirmationHandler) {
+        if (!handlers.contains(handler)) handlers.add(handler)
+    }
+
+    /** Unregister a handler. Call this from onDestroy / DisposableEffect cleanup. */
+    fun unregisterHandler(handler: ConfirmationHandler) {
+        handlers.remove(handler)
+    }
+
+    /**
+     * Backwards-compatible setter that mirrors the old API. Prefer
+     * registerHandler / unregisterHandler from new code.
+     */
+    var confirmationHandler: ConfirmationHandler?
+        get() = handlers.firstOrNull()
+        set(value) {
+            handlers.clear()
+            if (value != null) handlers.add(value)
+        }
 
     /**
      * Evaluate whether an operation should proceed.
-     * GREEN → always true
-     * YELLOW/RED → asks the confirmation handler
-     * If no handler is set, YELLOW auto-approves but RED blocks.
+     * GREEN → always true (no UI needed).
+     * YELLOW/RED → ask each registered handler in order; the first one that
+     * returns true approves. If none return true (or no handler is registered),
+     * the operation is denied.
      */
     suspend fun evaluate(operation: SecureOperation): Boolean {
-        return when (operation.level) {
-            Level.GREEN -> true
-            Level.YELLOW -> {
-                confirmationHandler?.requestConfirmation(operation) ?: true // Auto-approve if no UI
-            }
-            Level.RED -> {
-                confirmationHandler?.requestConfirmation(operation) ?: false // Block if no UI
-            }
+        if (operation.level == Level.GREEN) return true
+        // Snapshot to avoid holding any lock while suspending.
+        val snapshot = handlers.toList()
+        if (snapshot.isEmpty()) return false  // C-03: deny by default when no UI.
+        for (handler in snapshot) {
+            if (handler.requestConfirmation(operation)) return true
         }
+        return false
     }
 
     /**

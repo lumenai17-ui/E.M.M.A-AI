@@ -330,7 +330,7 @@ class PocketVisionService : Service() {
         try {
             getSystemService(NotificationManager::class.java)
                 .notify(NOTIFICATION_ID, buildNotification(text))
-        } catch (_: Exception) {}
+        } catch (e: Exception) { android.util.Log.w("EmmaSwallowed", "ignored exception: ${e.message}") }
     }
 
     // ═══ WAKELOCK ═══

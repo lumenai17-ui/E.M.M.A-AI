@@ -13,6 +13,7 @@ import com.beemovil.core.engine.EmmaEngine
 import com.beemovil.service.EmmaTaskService
 import com.beemovil.voice.DeepgramVoiceManager
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import android.util.Log
 import java.util.Locale
 
@@ -322,6 +323,57 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     val autoStartConversation = mutableStateOf(false)
     val browserUrl = mutableStateOf("https://www.google.com")
     val showBrowser = mutableStateOf(false)
+
+    // C-03: pending SecurityGate confirmation. Non-null when a YELLOW/RED operation
+    // is waiting on the user. The dialog reads this state; user actions resolve
+    // `pendingConfirmationDeferred`.
+    val pendingConfirmation = mutableStateOf<com.beemovil.plugins.SecurityGate.SecureOperation?>(null)
+    private var pendingConfirmationDeferred: kotlinx.coroutines.CompletableDeferred<Boolean>? = null
+
+    /**
+     * SecurityGate ConfirmationHandler — suspends until the user confirms or
+     * cancels via the ConfirmationDialog, or until 30 s timeout (deny).
+     * Concurrent confirmation requests are serialized: only one dialog at a time.
+     */
+    private val confirmationHandler = object : com.beemovil.plugins.SecurityGate.ConfirmationHandler {
+        private val mutex = kotlinx.coroutines.sync.Mutex()
+        override suspend fun requestConfirmation(
+            operation: com.beemovil.plugins.SecurityGate.SecureOperation
+        ): Boolean = mutex.withLock {
+            val deferred = kotlinx.coroutines.CompletableDeferred<Boolean>()
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                pendingConfirmationDeferred = deferred
+                pendingConfirmation.value = operation
+            }
+            try {
+                kotlinx.coroutines.withTimeoutOrNull(30_000L) { deferred.await() } ?: false
+            } finally {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    pendingConfirmation.value = null
+                    pendingConfirmationDeferred = null
+                }
+            }
+        }
+    }
+
+    /** Resolve the pending confirmation as approved. Called from the dialog. */
+    fun resolveConfirmation(approved: Boolean) {
+        pendingConfirmationDeferred?.complete(approved)
+    }
+
+    /** Register the handler with SecurityGate. Call from MainActivity.onCreate. */
+    fun attachSecurityGate() {
+        com.beemovil.plugins.SecurityGate.registerHandler(confirmationHandler)
+    }
+
+    /** Unregister. Call from MainActivity.onDestroy or onCleared. */
+    fun detachSecurityGate() {
+        com.beemovil.plugins.SecurityGate.unregisterHandler(confirmationHandler)
+        pendingConfirmationDeferred?.complete(false)
+        pendingConfirmationDeferred = null
+        pendingConfirmation.value = null
+    }
+
     val browserAgentStatusText = mutableStateOf("Desconectado")
     
     val telegramBotStatus = mutableStateOf("offline")
@@ -597,7 +649,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             mimeType = context.contentResolver.getType(uri)
-        } catch (_: Exception) {}
+        } catch (e: Exception) { android.util.Log.w("EmmaSwallowed", "ignored exception: ${e.message}") }
         
         val localFile = java.io.File(attachDir, fileName)
         context.contentResolver.openInputStream(uri)?.use { input ->
@@ -749,7 +801,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     action = EmmaTaskService.ACTION_DONE
                 }
                 context.startService(doneIntent)
-            } catch (_: Exception) {}
+            } catch (e: Exception) { android.util.Log.w("EmmaSwallowed", "ignored exception: ${e.message}") }
 
             if (response.isBlank()) return@launch
 
@@ -970,6 +1022,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         // Remove observers to prevent leaks
         EmmaTaskService.taskResult.removeObserver(taskResultObserver)
         EmmaTaskService.taskProgress.removeObserver(taskProgressObserver)
+        // C-03: unregister SecurityGate handler so a destroyed VM doesn't keep handling.
+        detachSecurityGate()
     }
 
     fun prefillAgentChat(agentId: String, prompt: String) {
