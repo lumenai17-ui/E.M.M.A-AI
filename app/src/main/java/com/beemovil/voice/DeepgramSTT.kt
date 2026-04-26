@@ -96,29 +96,56 @@ class DeepgramSTT(private val context: Context) {
                 val buffer = ByteArray(bufferSize)
                 var silenceFrames = 0
                 val maxSilenceFrames = (SAMPLE_RATE * 2) / bufferSize  // ~2 seconds of silence
+                var hasDetectedSpeech = false
+
+                // Adaptive noise floor: calibrate during first 0.5s
+                var noiseFloor = 500.0
+                var calibrationFrames = 0
+                val calibrationLimit = (SAMPLE_RATE / 2) / bufferSize  // ~0.5 seconds
+                var calibrationSum = 0.0
 
                 while (isRecording && isActive) {
                     val bytesRead = audioRecord?.read(buffer, 0, buffer.size) ?: -1
                     if (bytesRead > 0) {
                         audioData.write(buffer, 0, bytesRead)
 
-                        // Detect silence (simple RMS threshold)
+                        // Detect silence (adaptive threshold)
                         val rms = calculateRMS(buffer, bytesRead)
-                        if (rms < 200) {
+
+                        // Calibrate noise floor from initial samples
+                        if (calibrationFrames < calibrationLimit) {
+                            calibrationSum += rms
+                            calibrationFrames++
+                            if (calibrationFrames == calibrationLimit) {
+                                noiseFloor = (calibrationSum / calibrationFrames) * 1.8
+                                if (noiseFloor < 300) noiseFloor = 300.0  // Minimum threshold
+                                Log.d(TAG, "Noise floor calibrated: $noiseFloor")
+                            }
+                            continue
+                        }
+
+                        if (rms < noiseFloor) {
                             silenceFrames++
                         } else {
                             silenceFrames = 0
+                            hasDetectedSpeech = true
                         }
 
-                        // Auto-stop after sustained silence (2 sec)
-                        if (silenceFrames > maxSilenceFrames && audioData.size() > bufferSize * 4) {
-                            Log.i(TAG, "Silence detected, stopping")
+                        // Auto-stop after sustained silence ONLY if speech was detected
+                        if (hasDetectedSpeech && silenceFrames > maxSilenceFrames && audioData.size() > bufferSize * 4) {
+                            Log.i(TAG, "Silence after speech detected, stopping")
                             break
                         }
 
-                        // Safety limit: 30 seconds max recording
-                        if (audioData.size() > SAMPLE_RATE * 2 * 30) {
-                            Log.i(TAG, "Max duration reached")
+                        // Safety limit: 15 seconds max recording
+                        if (audioData.size() > SAMPLE_RATE * 2 * 15) {
+                            Log.i(TAG, "Max duration reached (15s)")
+                            break
+                        }
+
+                        // If no speech detected after 8 seconds, stop (user isn't speaking)
+                        if (!hasDetectedSpeech && audioData.size() > SAMPLE_RATE * 2 * 8) {
+                            Log.i(TAG, "No speech detected after 8s, stopping")
                             break
                         }
                     }

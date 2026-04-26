@@ -96,8 +96,9 @@ class BackgroundConversationService : Service() {
         emmaEngine = app.emmaEngine
         chatHistoryDB = ChatHistoryDB.getDatabase(applicationContext)
 
-        // Create voice manager for TTS
+        // Create voice manager for TTS — MUST initialize for native fallback
         voiceManager = DeepgramVoiceManager(applicationContext)
+        voiceManager?.initialize()
 
         // Create Deepgram STT instance
         val prefs = SecurePrefs.get(applicationContext)
@@ -106,7 +107,7 @@ class BackgroundConversationService : Service() {
             deepgramSTT = DeepgramSTT(applicationContext)
         }
 
-        Log.i(TAG, "Service created (Deepgram=${deepgramSTT != null})")
+        Log.i(TAG, "Service created (Deepgram=${deepgramSTT != null}, TTS=initialized)")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
