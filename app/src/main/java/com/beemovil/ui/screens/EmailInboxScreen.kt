@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -23,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import com.beemovil.google.GoogleAuthManager
 import com.beemovil.google.GoogleGmailService
 import com.beemovil.ui.ChatViewModel
@@ -81,6 +83,13 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
     var errorMsg by remember { mutableStateOf<String?>(null) }
     var selectedEmail by remember { mutableStateOf<GoogleGmailService.EmailMessage?>(null) }
     var selectedImapEmail by remember { mutableStateOf<com.beemovil.email.EmailService.EmailMessage?>(null) }
+    // Full message state (loaded on detail open)
+    var fullGmailMessage by remember { mutableStateOf<GoogleGmailService.FullEmailMessage?>(null) }
+    var isLoadingDetail by remember { mutableStateOf(false) }
+    // Folder: "inbox" or "sent"
+    var activeFolder by remember { mutableStateOf("inbox") }
+    var sentGmailEmails by remember { mutableStateOf<List<GoogleGmailService.EmailMessage>>(emptyList()) }
+    var sentImapEmails by remember { mutableStateOf<List<com.beemovil.email.EmailService.EmailMessage>>(emptyList()) }
 
     // Compose state
     var composeTo by remember { mutableStateOf("") }
@@ -257,7 +266,7 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                         detailFrom = e.from
                         detailTo = e.to
                         detailSubject = e.subject
-                        detailBody = e.snippet // Gmail snippet is what we have
+                        detailBody = fullGmailMessage?.body ?: e.snippet
                         detailDate = sdf.format(Date(e.date))
                     } else if (selectedImapEmail != null) {
                         val e = selectedImapEmail!!
@@ -306,8 +315,81 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                             HorizontalDivider(color = dividerColor)
                             Spacer(modifier = Modifier.height(16.dp))
 
-                            // Body
-                            Text(detailBody, color = textPrimary, fontSize = 15.sp, lineHeight = 22.sp)
+                            // Body — HTML or plain text
+                            val htmlContent = if (activeSource == "google") fullGmailMessage?.htmlBody else null
+                            if (htmlContent != null) {
+                                AndroidView(
+                                    factory = { ctx ->
+                                        android.webkit.WebView(ctx).apply {
+                                            settings.javaScriptEnabled = false
+                                            settings.loadWithOverviewMode = true
+                                            settings.useWideViewPort = true
+                                            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                                            loadDataWithBaseURL(null, htmlContent, "text/html", "UTF-8", null)
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp, max = 500.dp)
+                                )
+                            } else {
+                                SelectionContainer {
+                                    Text(detailBody, color = textPrimary, fontSize = 15.sp, lineHeight = 22.sp)
+                                }
+                            }
+
+                            // Attachments
+                            val gmailAtts = if (activeSource == "google") fullGmailMessage?.attachments ?: emptyList() else emptyList()
+                            val imapAtts = if (activeSource == "personal") selectedImapEmail?.attachments ?: emptyList() else emptyList()
+                            if (gmailAtts.isNotEmpty() || imapAtts.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(16.dp))
+                                HorizontalDivider(color = dividerColor)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("Adjuntos", color = textSecondary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                gmailAtts.forEach { att ->
+                                    val icon = when { att.mimeType.startsWith("image") -> "🖼️"; att.mimeType.contains("pdf") -> "📄"; else -> "📎" }
+                                    val sizeKb = att.size / 1024
+                                    Surface(color = cardBg, shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp).clickable {
+                                        scope.launch {
+                                            withContext(Dispatchers.IO) {
+                                                try {
+                                                    val bytes = GoogleGmailService(accessToken!!).downloadGmailAttachment(selectedEmail!!.id, att.attachmentId)
+                                                    if (bytes != null) {
+                                                        val dir = java.io.File(context.filesDir, "email_attachments").also { it.mkdirs() }
+                                                        val file = java.io.File(dir, att.name)
+                                                        file.writeBytes(bytes)
+                                                        val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                                                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply { setDataAndType(uri, att.mimeType); addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+                                                        context.startActivity(intent)
+                                                    }
+                                                } catch (_: Exception) {}
+                                            }
+                                        }
+                                    }) {
+                                        Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            Text("$icon ${att.name} ($sizeKb KB)", color = accent, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                                            Icon(Icons.Filled.Download, "Download", tint = accent, modifier = Modifier.size(18.dp))
+                                        }
+                                    }
+                                }
+                                imapAtts.forEach { att ->
+                                    val icon = when { att.mimeType.startsWith("image") -> "🖼️"; att.mimeType.contains("pdf") -> "📄"; else -> "📎" }
+                                    Surface(color = cardBg, shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp).clickable {
+                                        if (att.localPath != null) {
+                                            try {
+                                                val file = java.io.File(att.localPath!!)
+                                                val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply { setDataAndType(uri, att.mimeType); addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+                                                context.startActivity(intent)
+                                            } catch (_: Exception) {}
+                                        }
+                                    }) {
+                                        Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            Text("$icon ${att.name} (${att.size / 1024} KB)", color = accent, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                                            Icon(Icons.Filled.Download, "Download", tint = accent, modifier = Modifier.size(18.dp))
+                                        }
+                                    }
+                                }
+                            }
 
                             Spacer(modifier = Modifier.height(24.dp))
 
@@ -440,6 +522,39 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                 }
             }
 
+            // Folder tabs (Inbox / Sent)
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FilterChip(
+                    selected = activeFolder == "inbox", onClick = { activeFolder = "inbox" },
+                    label = { Text("Bandeja", fontSize = 12.sp) },
+                    leadingIcon = { Icon(Icons.Filled.Inbox, "Inbox", modifier = Modifier.size(16.dp)) },
+                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = accent.copy(alpha = 0.2f), selectedLabelColor = accent)
+                )
+                FilterChip(
+                    selected = activeFolder == "sent", onClick = {
+                        activeFolder = "sent"
+                        if (sentGmailEmails.isEmpty() && sentImapEmails.isEmpty()) {
+                            scope.launch {
+                                isLoading = true
+                                withContext(Dispatchers.IO) {
+                                    try {
+                                        if (activeSource == "google" && accessToken != null) {
+                                            sentGmailEmails = GoogleGmailService(accessToken).listSent(25)
+                                        } else if (activeSource == "personal" && hasImapConfig) {
+                                            sentImapEmails = com.beemovil.email.EmailService(context).fetchSentFolder(imapEmail, imapPassword, com.beemovil.email.EmailService.EmailConfig(imapHost, imapPort, smtpHost, smtpPort), 25)
+                                        }
+                                    } catch (_: Exception) {}
+                                }
+                                isLoading = false
+                            }
+                        }
+                    },
+                    label = { Text("Enviados", fontSize = 12.sp) },
+                    leadingIcon = { Icon(Icons.Filled.Send, "Sent", modifier = Modifier.size(16.dp)) },
+                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = accent.copy(alpha = 0.2f), selectedLabelColor = accent)
+                )
+            }
+
             val noSourceConfigured = !hasGoogle && !hasImapConfig
             if (noSourceConfigured) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -468,11 +583,60 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                         Button(onClick = { viewModel.currentScreen.value = "settings" }, colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = if (isDark) BeeBlack else Color.White)) { Text("Verificar conexión") }
                     }
                 }
-            } else if (activeSource == "google" && emails.isEmpty() || activeSource == "personal" && imapEmails.isEmpty()) {
+            } else if (activeFolder == "inbox" && activeSource == "google" && emails.isEmpty() || activeFolder == "inbox" && activeSource == "personal" && imapEmails.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("📭", fontSize = 48.sp); Spacer(modifier = Modifier.height(12.dp))
                         Text("Tu bandeja está vacía", color = textPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            } else if (activeFolder == "sent") {
+                // Sent folder view
+                val sentList = if (activeSource == "google") sentGmailEmails else emptyList<Any>()
+                val sentImapList = if (activeSource == "personal") sentImapEmails else emptyList()
+                if (activeSource == "google" && sentGmailEmails.isEmpty() || activeSource == "personal" && sentImapEmails.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("No hay correos enviados", color = textSecondary)
+                    }
+                } else if (activeSource == "personal") {
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        items(sentImapEmails) { email ->
+                            Surface(modifier = Modifier.fillMaxWidth().clickable {
+                                selectedImapEmail = email; viewMode = "detail"
+                            }, color = Color.Transparent) {
+                                Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                                    Icon(Icons.Filled.Send, "Sent", tint = accent, modifier = Modifier.size(20.dp).padding(top = 2.dp))
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text("Para: ${email.to.take(30)}", color = textPrimary, fontSize = 14.sp, maxLines = 1)
+                                        Text(email.subject, color = textSecondary, fontSize = 13.sp, maxLines = 1)
+                                    }
+                                    Text(SimpleDateFormat("dd/MM", Locale.getDefault()).format(email.date), color = textSecondary, fontSize = 11.sp)
+                                }
+                            }
+                            HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
+                        }
+                    }
+                } else {
+                    LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)) {
+                        items(sentGmailEmails, key = { it.id }) { email ->
+                            Surface(modifier = Modifier.fillMaxWidth().clickable {
+                                selectedEmail = email; viewMode = "detail"; fullGmailMessage = null; isLoadingDetail = true
+                                scope.launch { withContext(Dispatchers.IO) { try { fullGmailMessage = GoogleGmailService(accessToken!!).getFullMessage(email.id) } catch (_: Exception) {} }; isLoadingDetail = false }
+                            }, color = Color.Transparent) {
+                                Row(modifier = Modifier.padding(vertical = 12.dp)) {
+                                    Icon(Icons.Filled.Send, "Sent", tint = accent, modifier = Modifier.size(20.dp).padding(top = 2.dp))
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text("Para: ${email.to.take(30)}", color = textPrimary, fontSize = 14.sp, maxLines = 1)
+                                        Text(email.subject, color = textSecondary, fontSize = 13.sp, maxLines = 1)
+                                        Text(email.snippet.take(50), color = textSecondary.copy(alpha = 0.7f), fontSize = 12.sp, maxLines = 1)
+                                    }
+                                    Text(SimpleDateFormat("dd MMM", Locale.getDefault()).format(Date(email.date)), color = textSecondary, fontSize = 11.sp)
+                                }
+                            }
+                            HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
+                        }
                     }
                 }
             } else if (activeSource == "personal") {
@@ -511,6 +675,13 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                             accent = accent, avatarBg = avatarBg, dividerColor = dividerColor,
                             onClick = {
                                 selectedEmail = email; viewMode = "detail"
+                                fullGmailMessage = null; isLoadingDetail = true
+                                scope.launch {
+                                    withContext(Dispatchers.IO) {
+                                        try { fullGmailMessage = GoogleGmailService(accessToken!!).getFullMessage(email.id) } catch (_: Exception) {}
+                                    }
+                                    isLoadingDetail = false
+                                }
                                 if (email.isUnread && accessToken != null) {
                                     scope.launch { withContext(Dispatchers.IO) { try { GoogleGmailService(accessToken).markAsRead(email.id) } catch (_: Exception) {} } }
                                 }
