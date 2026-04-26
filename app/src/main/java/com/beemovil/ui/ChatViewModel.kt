@@ -397,6 +397,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     val activeSystemPrompt = mutableStateOf("")
     val activeAgentConfig = mutableStateOf<com.beemovil.database.AgentConfigEntity?>(null)
 
+    // ── Email Cache (persists across screen navigations) ──
+    val cachedGmailEmails = mutableStateOf<List<com.beemovil.google.GoogleGmailService.EmailMessage>>(emptyList())
+    val cachedImapEmails = mutableStateOf<List<com.beemovil.email.EmailService.EmailMessage>>(emptyList())
+    val cachedGmailUnread = mutableStateOf(0)
+    val cachedImapUnread = mutableStateOf(0)
+    val emailLastFetchTime = mutableStateOf(0L)
+    private val EMAIL_CACHE_TTL_MS = 300_000L // 5 minutes
+
     // --- HERMES TUNNEL Y A2A ROUTING ---
     val isHermesConnected = mutableStateOf(false)
     val showHermesDialog = mutableStateOf(false)

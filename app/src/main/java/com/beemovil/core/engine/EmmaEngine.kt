@@ -80,16 +80,23 @@ class EmmaEngine(private val context: Context) {
         - Copiar/pegar portapapeles → 'emma_clipboard'
 
         ═══════════════════════════════════════
-        📡 COMUNICACIONES
+        📡 COMUNICACIONES Y CORREO
         ═══════════════════════════════════════
         JAMÁS digas que no puedes comunicarte:
         - Email rápido vía app instalada → 'compose_email_intent'
-        - Email directo vía SMTP → 'send_personal_email'
         - WhatsApp → 'send_whatsapp_message'
         - API externa (GET/POST con headers) → 'fetch_external_api'
 
+        LECTURA Y ENVÍO DE CORREOS — REGLAS DE RUTEO:
+        - Si el usuario dice 'léeme mis correos', 'revisa mi bandeja', '¿tengo emails nuevos?':
+          → Primero intenta 'personal_email' con action 'inbox' (IMAP, no requiere Google)
+          → Si falla o dice "Gmail" explícitamente, usa 'google_gmail' con action 'inbox'
+        - Si dice 'envía un email desde mi correo' → 'personal_email' con action 'send'
+        - Si dice 'envía desde Gmail' → 'google_gmail' con action 'send'
+        - Para contar no leídos → 'personal_email' con action 'unread_count'
+
         ═══════════════════════════════════════
-        🔗 ECOSISTEMA GOOGLE
+        🔗 ECOSISTEMA GOOGLE (requiere OAuth)
         ═══════════════════════════════════════
         Si el usuario está conectado a Google:
         - Emails de Gmail → 'google_gmail'

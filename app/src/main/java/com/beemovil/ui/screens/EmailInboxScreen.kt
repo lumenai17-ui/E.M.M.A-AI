@@ -72,9 +72,11 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
     // View mode: "list" | "detail" | "compose"
     var viewMode by remember { mutableStateOf("list") }
 
-    var emails by remember { mutableStateOf<List<GoogleGmailService.EmailMessage>>(emptyList()) }
-    var imapEmails by remember { mutableStateOf<List<com.beemovil.email.EmailService.EmailMessage>>(emptyList()) }
-    var unreadCount by remember { mutableStateOf(0) }
+    var emails by remember { mutableStateOf(viewModel.cachedGmailEmails.value) }
+    var imapEmails by remember { mutableStateOf(viewModel.cachedImapEmails.value) }
+    var unreadCount by remember { mutableStateOf(
+        if (activeSource == "google") viewModel.cachedGmailUnread.value else viewModel.cachedImapUnread.value
+    ) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
     var selectedEmail by remember { mutableStateOf<GoogleGmailService.EmailMessage?>(null) }
@@ -87,42 +89,54 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
     var isSending by remember { mutableStateOf(false) }
     var sendResult by remember { mutableStateOf<String?>(null) }
 
-    // Load Google emails
-    LaunchedEffect(accessToken, activeSource) {
-        if (accessToken != null && activeSource == "google") {
-            isLoading = true
-            errorMsg = null
+    // Helper: force network refresh
+    fun forceRefresh() {
+        scope.launch {
+            isLoading = true; errorMsg = null
             withContext(Dispatchers.IO) {
                 try {
-                    val service = GoogleGmailService(accessToken)
-                    emails = service.listInbox(maxResults = 25)
-                    unreadCount = service.getUnreadCount()
-                } catch (e: Exception) {
-                    errorMsg = e.message
-                }
+                    if (activeSource == "google" && accessToken != null) {
+                        val service = GoogleGmailService(accessToken)
+                        val fetched = service.listInbox(maxResults = 25)
+                        val count = service.getUnreadCount()
+                        emails = fetched
+                        unreadCount = count
+                        viewModel.cachedGmailEmails.value = fetched
+                        viewModel.cachedGmailUnread.value = count
+                    } else if (activeSource == "personal" && hasImapConfig) {
+                        val emailService = com.beemovil.email.EmailService(context)
+                        val config = com.beemovil.email.EmailService.EmailConfig(imapHost, imapPort, smtpHost, smtpPort)
+                        val fetched = emailService.fetchInbox(imapEmail, imapPassword, config, limit = 25)
+                        val count = fetched.count { !it.isRead }
+                        imapEmails = fetched
+                        unreadCount = count
+                        viewModel.cachedImapEmails.value = fetched
+                        viewModel.cachedImapUnread.value = count
+                    }
+                    viewModel.emailLastFetchTime.value = System.currentTimeMillis()
+                } catch (e: Exception) { errorMsg = e.message }
             }
             isLoading = false
         }
     }
 
-    // Load IMAP personal emails 
-    LaunchedEffect(activeSource) {
-        if (hasImapConfig && activeSource == "personal") {
-            isLoading = true
-            errorMsg = null
-            withContext(Dispatchers.IO) {
-                try {
-                    val emailService = com.beemovil.email.EmailService(context)
-                    val config = com.beemovil.email.EmailService.EmailConfig(
-                        imapHost, imapPort, smtpHost, smtpPort
-                    )
-                    imapEmails = emailService.fetchInbox(imapEmail, imapPassword, config, limit = 25)
-                    unreadCount = imapEmails.count { !it.isRead }
-                } catch (e: Exception) {
-                    errorMsg = e.message
-                }
+    // Load emails: from cache if fresh, else from network
+    LaunchedEffect(accessToken, activeSource) {
+        val cacheAge = System.currentTimeMillis() - viewModel.emailLastFetchTime.value
+        val hasCachedData = if (activeSource == "google") viewModel.cachedGmailEmails.value.isNotEmpty()
+                            else viewModel.cachedImapEmails.value.isNotEmpty()
+
+        if (hasCachedData && cacheAge < 300_000L) {
+            // Use cache — no network call
+            if (activeSource == "google") {
+                emails = viewModel.cachedGmailEmails.value
+                unreadCount = viewModel.cachedGmailUnread.value
+            } else {
+                imapEmails = viewModel.cachedImapEmails.value
+                unreadCount = viewModel.cachedImapUnread.value
             }
-            isLoading = false
+        } else if ((activeSource == "google" && accessToken != null) || (activeSource == "personal" && hasImapConfig)) {
+            forceRefresh()
         }
     }
 
@@ -164,26 +178,9 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                     when (viewMode) {
                         "list" -> {
                             if (accessToken != null || hasImapConfig) {
-                                IconButton(onClick = {
-                                    scope.launch {
-                                        isLoading = true; errorMsg = null
-                                        withContext(Dispatchers.IO) {
-                                            try {
-                                                if (activeSource == "google" && accessToken != null) {
-                                                    val service = GoogleGmailService(accessToken)
-                                                    emails = service.listInbox(maxResults = 25)
-                                                    unreadCount = service.getUnreadCount()
-                                                } else if (activeSource == "personal" && hasImapConfig) {
-                                                    val emailService = com.beemovil.email.EmailService(context)
-                                                    val config = com.beemovil.email.EmailService.EmailConfig(imapHost, imapPort, smtpHost, smtpPort)
-                                                    imapEmails = emailService.fetchInbox(imapEmail, imapPassword, config, limit = 25)
-                                                    unreadCount = imapEmails.count { !it.isRead }
-                                                }
-                                            } catch (e: Exception) { errorMsg = e.message }
-                                        }
-                                        isLoading = false
-                                    }
-                                }) { Icon(Icons.Filled.Refresh, "Actualizar", tint = accent) }
+                                IconButton(onClick = { forceRefresh() }) {
+                                    Icon(Icons.Filled.Refresh, "Actualizar", tint = accent)
+                                }
                             }
                         }
                         "compose" -> {
