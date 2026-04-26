@@ -97,10 +97,9 @@ class WakeWordService : Service() {
         isRunning = true
     }
 
-    /** Called when "Hello Emma" is detected — launch app and restart listening */
+    /** Called when "Hello Emma" is detected — start background conversation or launch app */
     private fun onWakeDetected() {
-        // M-04: de-bounce. If the engine fires twice within WAKE_DEBOUNCE_MS,
-        // we ignore the second one to avoid double notifications / double launches.
+        // M-04: de-bounce
         val now = System.currentTimeMillis()
         if (now - lastWakeAtMs < WAKE_DEBOUNCE_MS) {
             Log.d(TAG, "Wake word debounced (within ${WAKE_DEBOUNCE_MS} ms)")
@@ -108,16 +107,38 @@ class WakeWordService : Service() {
         }
         lastWakeAtMs = now
 
-        Log.i(TAG, "🎯 WAKE WORD DETECTED — launching conversation")
-        updateNotification("¡Hello Emma detectado! Abriendo...")
+        Log.i(TAG, "🎯 WAKE WORD DETECTED — starting conversation")
+        updateNotification("¡Hello Emma detectado! Iniciando...")
 
-        // M-04: Hold a single tracked wake lock and release the previous one if any.
+        // Stop wake word detection (BCS will resume it when conversation ends)
+        wakeEngine?.stop()
+
+        // ══════════════════════════════════════════════════════════════
+        //  V7.2: PRIMARY PATH — Start BackgroundConversationService
+        //  This is the ONLY reliable way to handle wake on Android 10+.
+        //  Service-to-service start always works, unlike startActivity.
+        // ══════════════════════════════════════════════════════════════
         try {
-            lastWakeLock?.takeIf { it.isHeld }?.release()
+            val bcsIntent = Intent(applicationContext, BackgroundConversationService::class.java).apply {
+                action = BackgroundConversationService.ACTION_START
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(bcsIntent)
+            } else {
+                startService(bcsIntent)
+            }
+            Log.i(TAG, "BackgroundConversationService started successfully")
         } catch (e: Exception) {
-            Log.w(TAG, "Releasing previous wake lock failed: ${e.message}")
+            Log.e(TAG, "Failed to start BCS: ${e.message}")
         }
+
+        // ══════════════════════════════════════════════════════════════
+        //  SECONDARY PATH — Also try to bring UI forward via notification
+        //  (for cases where user wants to see the screen)
+        // ══════════════════════════════════════════════════════════════
         try {
+            // M-04: Hold a wake lock to keep CPU alive during transition
+            lastWakeLock?.takeIf { it.isHeld }?.release()
             val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
             val wakeLock = pm.newWakeLock(
                 android.os.PowerManager.FULL_WAKE_LOCK or
@@ -125,42 +146,29 @@ class WakeWordService : Service() {
                 android.os.PowerManager.ON_AFTER_RELEASE,
                 "emma:wakeword"
             )
-            wakeLock.acquire(5000) // 5 second wake
+            wakeLock.acquire(5000)
             lastWakeLock = wakeLock
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to acquire wake lock: ${e.message}")
+            Log.w(TAG, "WakeLock failed: ${e.message}")
         }
 
-        // Build launch intent
-        val launchIntent = Intent(applicationContext, MainActivity::class.java).apply {
-            action = ACTION_WAKE_DETECTED
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
-            putExtra("auto_start", true)
-        }
-
-        // Try direct launch first (works when app is in foreground)
+        // Fire notification so user can optionally open the app
         try {
-            startActivity(launchIntent)
-            Log.i(TAG, "Direct startActivity succeeded")
-        } catch (e: Exception) {
-            Log.w(TAG, "Direct startActivity failed: ${e.message}")
-        }
-
-        // Also fire a high-priority notification to bring app forward (Android 10+ background restriction workaround)
-        try {
+            val launchIntent = Intent(applicationContext, MainActivity::class.java).apply {
+                action = ACTION_WAKE_DETECTED
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra("auto_start", true)
+            }
             val pendingIntent = PendingIntent.getActivity(
                 applicationContext, 42, launchIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
-            // M-05: DND bypass + full-screen intent are opt-in. Default is off
-            // so a false detection (ambient noise) does NOT wake the user during DND.
             val prefs = applicationContext.getSharedPreferences("beemovil", Context.MODE_PRIVATE)
             val bypassDnd = prefs.getBoolean("wake_word_bypass_dnd", false)
-            val fullScreen = prefs.getBoolean("wake_word_full_screen_intent", false)
+            val fullScreen = prefs.getBoolean("wake_word_full_screen_intent", true)
 
             val alertChannel = "emma_wake_alert"
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -179,35 +187,28 @@ class WakeWordService : Service() {
             val alertBuilder = NotificationCompat.Builder(this, alertChannel)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle("E.M.M.A. Voice")
-                .setContentText("Hello Emma detectado — toca para abrir")
+                .setContentText("Conversación activa — toca para abrir")
                 .setPriority(if (bypassDnd) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
                 .setAutoCancel(true)
                 .setContentIntent(pendingIntent)
-                .setTimeoutAfter(10000)
+                .setTimeoutAfter(15000)
             if (fullScreen) {
                 alertBuilder
                     .setCategory(NotificationCompat.CATEGORY_CALL)
                     .setFullScreenIntent(pendingIntent, true)
             }
+
             val alertNotification = alertBuilder.build()
 
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.notify(4243, alertNotification)
-            Log.i(TAG, "Full-screen notification fired")
+            Log.i(TAG, "Alert notification fired")
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to fire alert notification: ${e.message}")
+            Log.w(TAG, "Alert notification failed: ${e.message}")
         }
 
-        // Re-start listening after a delay (conversation will claim mic via arbiter)
-        android.os.Handler(mainLooper).postDelayed({
-            if (isRunning) {
-                updateNotification("Escuchando \"Hello Emma\"...")
-                wakeEngine?.start(
-                    onWakeWordDetected = { onWakeDetected() },
-                    onError = { err -> Log.w(TAG, "Wake re-start error: $err") }
-                )
-            }
-        }, 20000) // 20s delay for greeting + conversation to start
+        // NOTE: WakeWordService does NOT re-start itself here.
+        // BackgroundConversationService will resume it when conversation ends.
     }
 
     private fun stopWakeWordDetection() {

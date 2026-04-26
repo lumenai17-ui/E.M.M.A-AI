@@ -64,6 +64,15 @@ fun ConversationScreen(
     val bg = if (isDark) BeeBlack else LightBackground
     val cardBg = if (isDark) Color(0xFF161622) else LightSurface
 
+    // V7.2: Keep screen on during voice conversation (driving mode)
+    val activity = context as? android.app.Activity
+    DisposableEffect(Unit) {
+        activity?.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        onDispose {
+            activity?.window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
     // V5: Haptic & visual feedback manager
     val feedbackManager = remember { VoiceFeedbackManager(context) }
 

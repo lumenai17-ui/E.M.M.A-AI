@@ -137,6 +137,24 @@
             android:exported="false"
             android:foregroundServiceType="microphone" />
 
+        <!-- V7.2: Background Conversation Service (voice with screen off) -->
+        <service
+            android:name=".service.BackgroundConversationService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
+        <!-- V7.2: Boot Receiver (auto-start WakeWord after reboot) -->
+        <receiver
+            android:name=".service.BootReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
         <!-- LifeStream: Notification Listener (captures system notifications) -->
         <service
             android:name=".lifestream.EmmaNotificationListener"
