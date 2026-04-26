@@ -256,8 +256,21 @@ fun ConversationScreen(
         }
     }
 
-    // Fix: Pause WakeWordService when conversation is open (avoids SpeechRecognizer conflict)
+    // Fix: Pause WakeWordService AND stop BCS when conversation is open (avoids mic conflict)
     DisposableEffect(Unit) {
+        // Stop BCS if it's running (user opened app while background conversation was active)
+        if (com.beemovil.service.BackgroundConversationService.isRunning) {
+            try {
+                val stopBcs = android.content.Intent(context, com.beemovil.service.BackgroundConversationService::class.java).apply {
+                    action = com.beemovil.service.BackgroundConversationService.ACTION_STOP
+                }
+                context.startService(stopBcs)
+                android.util.Log.i("ConversationScreen", "Stopped BackgroundConversationService (handoff to in-app)")
+            } catch (e: Exception) {
+                android.util.Log.w("ConversationScreen", "Failed to stop BCS: ${e.message}")
+            }
+        }
+
         // Stop wake word to free the SpeechRecognizer for conversation
         val wasWakeWordRunning = com.beemovil.service.WakeWordService.isRunning
         if (wasWakeWordRunning) {

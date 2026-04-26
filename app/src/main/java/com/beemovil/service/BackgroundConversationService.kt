@@ -7,7 +7,6 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.media.AudioManager
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
@@ -65,6 +64,7 @@ class BackgroundConversationService : Service() {
     private var state = BCSState.IDLE
     private var turnCount = 0
     private var sessionStartMs = 0L
+    private var engineReady = false
 
     // --- Dependencies ---
     private var emmaEngine: EmmaEngine? = null
@@ -79,12 +79,11 @@ class BackgroundConversationService : Service() {
 
     // --- Session ---
     private var threadId = ""
-    private var lastResponseText = ""
 
     // --- Standby timer ---
     private var silenceStartMs = 0L
-    private val STANDBY_TIMEOUT_MS = 60_000L  // 60s silence → standby
-    private val AUTO_STOP_TIMEOUT_MS = 300_000L // 5min standby → stop
+    private val STANDBY_TIMEOUT_MS = 60_000L
+    private val AUTO_STOP_TIMEOUT_MS = 300_000L
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -135,6 +134,7 @@ class BackgroundConversationService : Service() {
         isRunning = true
         sessionStartMs = System.currentTimeMillis()
         turnCount = 0
+        engineReady = false
 
         // Generate thread ID for this session
         val sdf = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
@@ -152,29 +152,29 @@ class BackgroundConversationService : Service() {
             Log.w(TAG, "WakeLock acquire failed: ${e.message}")
         }
 
-        // Acquire mic
-        MicrophoneArbiter.requestMic(MicrophoneArbiter.MicOwner.CONVERSATION, "BgConvService")
-
-        // Show notification
+        // Show notification FIRST (required for foreground service)
         val notification = buildNotification("🎙️ Iniciando conversación...")
         startForeground(NOTIFICATION_ID, notification)
 
-        // Initialize EmmaEngine if needed
+        // Initialize EmmaEngine in background, then greet
         serviceScope.launch {
             try {
-                if (emmaEngine?.plugins?.isEmpty() == true) {
+                withContext(Dispatchers.IO) {
                     emmaEngine?.initialize()
+                    Log.i(TAG, "EmmaEngine initialized with ${emmaEngine?.plugins?.size ?: 0} plugins")
                 }
+                engineReady = true
             } catch (e: Exception) {
-                Log.w(TAG, "Engine init: ${e.message}")
+                Log.e(TAG, "Engine init failed: ${e.message}")
             }
 
-            // Greet user
+            // Now greet and start listening
             greetAndStartListening()
         }
     }
 
     private fun greetAndStartListening() {
+        if (!isRunning) return
         state = BCSState.GREETING
 
         val greetings = listOf(
@@ -187,20 +187,55 @@ class BackgroundConversationService : Service() {
 
         // Save greeting to history
         persistMessage(greeting, "assistant")
-
         updateNotification("🔊 $greeting")
 
         voiceManager?.speak(
             text = greeting,
             language = Locale.getDefault().language,
             onDone = {
-                beginListening()
+                // Small delay to ensure TTS audio finishes before mic opens
+                serviceScope.launch {
+                    delay(300)
+                    acquireMicAndListen()
+                }
             },
             onError = { _ ->
-                // Even if TTS fails, start listening
-                beginListening()
+                serviceScope.launch {
+                    delay(300)
+                    acquireMicAndListen()
+                }
             }
         )
+    }
+
+    // ═══════════════════════════════════════════
+    //  MIC ACQUISITION (prevents conflicts)
+    // ═══════════════════════════════════════════
+
+    private fun acquireMicAndListen() {
+        if (!isRunning || state == BCSState.PAUSED) return
+
+        // Release any previous mic hold first
+        MicrophoneArbiter.releaseMic(MicrophoneArbiter.MicOwner.CONVERSATION)
+
+        // Try to acquire mic
+        val acquired = MicrophoneArbiter.requestMic(
+            MicrophoneArbiter.MicOwner.CONVERSATION,
+            "BgConvService"
+        )
+
+        if (acquired) {
+            beginListening()
+        } else {
+            Log.w(TAG, "Mic denied by arbiter — retrying in 2s")
+            updateNotification("⏳ Esperando micrófono...")
+            serviceScope.launch {
+                delay(2000)
+                if (isRunning && state != BCSState.PAUSED) {
+                    acquireMicAndListen()
+                }
+            }
+        }
     }
 
     // ═══════════════════════════════════════════
@@ -218,57 +253,80 @@ class BackgroundConversationService : Service() {
 
         if (dgKey.isNotBlank() && deepgramSTT != null) {
             // Use Deepgram STT (AudioRecord-based, works with screen off)
-            deepgramSTT?.startListening(
-                apiKey = dgKey,
-                language = Locale.getDefault().language.substringBefore("-"),
-                onPartial = { partial ->
-                    if (partial.isNotBlank()) {
-                        silenceStartMs = System.currentTimeMillis() // Reset silence timer
-                        updateNotification("🎤 \"$partial...\"")
-                    }
-                },
-                onResult = { transcript ->
-                    if (transcript.isNotBlank()) {
-                        Log.i(TAG, "Transcript: ${transcript.take(80)}")
-                        processTranscript(transcript)
-                    } else {
-                        checkStandbyTimeout()
-                        beginListening() // Empty result, try again
-                    }
-                },
-                onErrorCb = { error ->
-                    Log.w(TAG, "STT error: $error — retrying in 1s")
-                    serviceScope.launch {
-                        delay(1000)
-                        if (isRunning && state != BCSState.PAUSED) {
-                            beginListening()
+            try {
+                deepgramSTT?.startListening(
+                    apiKey = dgKey,
+                    language = Locale.getDefault().language.substringBefore("-"),
+                    onPartial = { partial ->
+                        if (partial.isNotBlank()) {
+                            silenceStartMs = System.currentTimeMillis()
+                            serviceScope.launch(Dispatchers.Main) {
+                                updateNotification("🎤 \"${partial.take(40)}...\"")
+                            }
                         }
-                    }
-                },
-                onState = null
-            )
+                    },
+                    onResult = { transcript ->
+                        // Release mic immediately after getting result
+                        MicrophoneArbiter.releaseMic(MicrophoneArbiter.MicOwner.CONVERSATION)
+
+                        if (transcript.isNotBlank()) {
+                            Log.i(TAG, "Transcript: ${transcript.take(80)}")
+                            serviceScope.launch(Dispatchers.Main) {
+                                processTranscript(transcript)
+                            }
+                        } else {
+                            serviceScope.launch(Dispatchers.Main) {
+                                checkStandbyTimeout()
+                                // Re-acquire mic and listen again
+                                delay(500)
+                                acquireMicAndListen()
+                            }
+                        }
+                    },
+                    onErrorCb = { error ->
+                        Log.w(TAG, "STT error: $error")
+                        MicrophoneArbiter.releaseMic(MicrophoneArbiter.MicOwner.CONVERSATION)
+                        serviceScope.launch(Dispatchers.Main) {
+                            delay(2000)
+                            if (isRunning && state != BCSState.PAUSED) {
+                                acquireMicAndListen()
+                            }
+                        }
+                    },
+                    onState = null
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "DeepgramSTT startListening crashed: ${e.message}")
+                MicrophoneArbiter.releaseMic(MicrophoneArbiter.MicOwner.CONVERSATION)
+                serviceScope.launch {
+                    delay(2000)
+                    if (isRunning) acquireMicAndListen()
+                }
+            }
         } else {
             // No Deepgram key — use native SpeechRecognizer as fallback
-            // Note: This won't work reliably with screen off
-            Log.w(TAG, "No Deepgram API key — using native STT (limited background support)")
+            Log.w(TAG, "No Deepgram API key — falling back to native STT")
             voiceManager?.startListening(
                 language = Locale.getDefault().toLanguageTag(),
                 onResult = { transcript ->
+                    MicrophoneArbiter.releaseMic(MicrophoneArbiter.MicOwner.CONVERSATION)
                     if (transcript.isNotBlank()) {
-                        processTranscript(transcript)
+                        serviceScope.launch(Dispatchers.Main) {
+                            processTranscript(transcript)
+                        }
                     } else {
-                        checkStandbyTimeout()
-                        serviceScope.launch {
+                        serviceScope.launch(Dispatchers.Main) {
                             delay(500)
-                            beginListening()
+                            acquireMicAndListen()
                         }
                     }
                 },
                 onError = { error ->
                     Log.w(TAG, "Native STT error: $error")
-                    serviceScope.launch {
-                        delay(1000)
-                        if (isRunning) beginListening()
+                    MicrophoneArbiter.releaseMic(MicrophoneArbiter.MicOwner.CONVERSATION)
+                    serviceScope.launch(Dispatchers.Main) {
+                        delay(2000)
+                        if (isRunning) acquireMicAndListen()
                     }
                 },
                 micOwner = MicrophoneArbiter.MicOwner.CONVERSATION,
@@ -289,11 +347,11 @@ class BackgroundConversationService : Service() {
         // Check for stop commands
         val lower = transcript.lowercase().trim()
         if (lower in listOf("ya terminamos", "ya terminé", "terminar conversación",
-                "para emma", "adiós emma", "bye emma", "stop")) {
+                "para emma", "adiós emma", "bye emma", "stop", "ya emma")) {
             farewell()
             return
         }
-        if (lower in listOf("pausa", "pause", "espera emma")) {
+        if (lower in listOf("pausa", "pause", "espera emma", "espera")) {
             pauseConversation()
             return
         }
@@ -301,8 +359,12 @@ class BackgroundConversationService : Service() {
         // Save user message
         persistMessage(transcript, "user")
 
-        // Inject tool reminder for self-awareness
-        val toolReminder = buildToolReminder()
+        // Check engine is ready
+        if (!engineReady || emmaEngine == null) {
+            Log.e(TAG, "EmmaEngine not ready — speaking error")
+            speakResponse("Disculpa, aún estoy inicializando. Intenta de nuevo en unos segundos.")
+            return
+        }
 
         conversationJob = serviceScope.launch {
             try {
@@ -311,8 +373,10 @@ class BackgroundConversationService : Service() {
                     val provider = prefs.getString("selected_provider", "openrouter") ?: "openrouter"
                     val model = prefs.getString("selected_model", "") ?: ""
 
-                    // Prepend tool reminder to transcript
+                    val toolReminder = buildToolReminder()
                     val enrichedMessage = "$toolReminder\n\nUsuario dice: $transcript"
+
+                    Log.d(TAG, "Calling EmmaEngine (provider=$provider, model=${model.take(20)})")
 
                     emmaEngine?.processUserMessage(
                         message = enrichedMessage,
@@ -323,19 +387,21 @@ class BackgroundConversationService : Service() {
                     ) ?: "No pude procesar tu mensaje"
                 }
 
+                if (!isRunning) return@launch // Service was stopped while processing
+
                 if (response.isNotBlank()) {
-                    lastResponseText = response
                     persistMessage(response, "assistant")
                     speakResponse(response)
                 } else {
-                    beginListening()
+                    speakResponse("No recibí respuesta del modelo")
                 }
             } catch (e: CancellationException) {
                 Log.d(TAG, "Processing cancelled")
             } catch (e: Exception) {
-                Log.e(TAG, "Processing error: ${e.message}")
-                val errorMsg = "Hubo un error procesando tu mensaje"
-                speakResponse(errorMsg)
+                Log.e(TAG, "Processing error: ${e.message}", e)
+                if (isRunning) {
+                    speakResponse("Hubo un error: ${e.message?.take(50) ?: "desconocido"}")
+                }
             }
         }
     }
@@ -345,6 +411,7 @@ class BackgroundConversationService : Service() {
     // ═══════════════════════════════════════════
 
     private fun speakResponse(text: String) {
+        if (!isRunning) return
         state = BCSState.SPEAKING
         val displayText = text.take(60).replace("\n", " ")
         updateNotification("🔊 \"$displayText...\"")
@@ -353,15 +420,18 @@ class BackgroundConversationService : Service() {
             text = text,
             language = Locale.getDefault().language,
             onDone = {
-                // THE LOOP: TTS done → listen again
-                if (isRunning && state == BCSState.SPEAKING) {
-                    beginListening()
+                // THE LOOP: TTS done → delay → listen again
+                serviceScope.launch {
+                    delay(500) // Let audio pipeline settle
+                    if (isRunning && state == BCSState.SPEAKING) {
+                        acquireMicAndListen()
+                    }
                 }
             },
             onError = { _ ->
-                // Even if TTS fails, continue listening
-                if (isRunning) {
-                    beginListening()
+                serviceScope.launch {
+                    delay(500)
+                    if (isRunning) acquireMicAndListen()
                 }
             }
         )
@@ -411,30 +481,45 @@ class BackgroundConversationService : Service() {
         deepgramSTT?.stopListening()
         voiceManager?.stopListening()
         voiceManager?.stopSpeaking()
+        MicrophoneArbiter.releaseMic(MicrophoneArbiter.MicOwner.CONVERSATION)
         updateNotification("⏸️ Emma pausada — toca ▶️ para continuar")
     }
 
     private fun resumeConversation() {
         if (state == BCSState.PAUSED) {
+            state = BCSState.GREETING
             voiceManager?.speak(
                 text = "Aquí sigo, dime.",
                 language = Locale.getDefault().language,
-                onDone = { beginListening() },
-                onError = { beginListening() }
+                onDone = {
+                    serviceScope.launch {
+                        delay(300)
+                        acquireMicAndListen()
+                    }
+                },
+                onError = {
+                    serviceScope.launch {
+                        delay(300)
+                        acquireMicAndListen()
+                    }
+                }
             )
         }
     }
 
     private fun stopConversation() {
+        if (!isRunning && state == BCSState.IDLE) return // Already stopped
         Log.i(TAG, "🛑 Stopping background conversation (turns=$turnCount)")
         isRunning = false
         state = BCSState.IDLE
         conversationJob?.cancel()
 
-        deepgramSTT?.stopListening()
-        voiceManager?.stopListening()
-        voiceManager?.stopSpeaking()
+        // Stop all audio
+        try { deepgramSTT?.stopListening() } catch (_: Exception) {}
+        try { voiceManager?.stopListening() } catch (_: Exception) {}
+        try { voiceManager?.stopSpeaking() } catch (_: Exception) {}
 
+        // Release mic
         MicrophoneArbiter.releaseMic(MicrophoneArbiter.MicOwner.CONVERSATION)
 
         // Release wake lock
@@ -470,7 +555,14 @@ class BackgroundConversationService : Service() {
     }
 
     override fun onDestroy() {
-        stopConversation()
+        isRunning = false
+        state = BCSState.IDLE
+        conversationJob?.cancel()
+        try { deepgramSTT?.stopListening() } catch (_: Exception) {}
+        try { voiceManager?.stopListening() } catch (_: Exception) {}
+        try { voiceManager?.stopSpeaking() } catch (_: Exception) {}
+        MicrophoneArbiter.releaseMic(MicrophoneArbiter.MicOwner.CONVERSATION)
+        try { wakeLock?.takeIf { it.isHeld }?.release() } catch (_: Exception) {}
         serviceScope.cancel()
         super.onDestroy()
     }
