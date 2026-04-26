@@ -177,12 +177,18 @@ class VisionCaptureLoop(private val context: Context) {
                             val bitmapCopy = bitmap.copy(bitmap.config ?: android.graphics.Bitmap.Config.ARGB_8888, false)
                             onFrameCaptured?.invoke(bitmapCopy)
 
-                            // FR-1: Barcode scan in parallel for Shopping mode
+                            // FR-1: Barcode scan in parallel for Shopping mode.
+                            // M-02: this callback is the CameraX executor, not a coroutine
+                            // context. We still need barcodeContext synchronously to inject
+                            // it into the prompt, so we block — but on Dispatchers.IO so
+                            // the ML Kit suspend body (which itself uses suspendCancellableCoroutine
+                            // + IO HTTP lookups) doesn't run on the camera worker thread.
+                            // Future: refactor captureAndAnalyze to suspend so we can drop runBlocking.
                             var barcodeContext = ""
                             if (barcodeScanEnabled) {
                                 try {
                                     val scanCopy = bitmap.copy(bitmap.config ?: android.graphics.Bitmap.Config.ARGB_8888, false)
-                                    val results = kotlinx.coroutines.runBlocking {
+                                    val results = kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
                                         BarcodeScanner.scan(scanCopy)
                                     }
                                     scanCopy.recycle()

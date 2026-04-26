@@ -15,10 +15,6 @@ import com.beemovil.MainActivity
 import com.beemovil.R
 import com.beemovil.voice.NativeWakeWordEngine
 import com.beemovil.voice.WakeWordEngine
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /**
  * WakeWordService — Voice Intelligence Phase V4
@@ -53,6 +49,12 @@ class WakeWordService : Service() {
     }
 
     private var wakeEngine: WakeWordEngine? = null
+
+    // M-04: track the last wake-up so the activity can release it on destroy
+    // and so we de-bounce repeated "Hello Emma" detections within 3 seconds.
+    private var lastWakeLock: android.os.PowerManager.WakeLock? = null
+    private var lastWakeAtMs: Long = 0L
+    private val WAKE_DEBOUNCE_MS = 3_000L
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -95,31 +97,26 @@ class WakeWordService : Service() {
         isRunning = true
     }
 
-    /** Called when "Hello Emma" is detected — greet, listen, respond (headless if screen off) */
+    /** Called when "Hello Emma" is detected — launch app and restart listening */
     private fun onWakeDetected() {
-        Log.i(TAG, "🎯 WAKE WORD DETECTED — launching conversation")
-        updateNotification("¡Hello Emma detectado! Respondiendo...")
-
-        // ★ CRITICAL: Fully destroy the wake engine to release the microphone.
-        // The wake engine's SpeechRecognizer holds the mic — we must destroy it
-        // BEFORE creating a new SpeechRecognizer for headless listening.
-        try {
-            wakeEngine?.destroy()
-            wakeEngine = null
-            Log.i(TAG, "Wake engine destroyed — mic released for headless listening")
-        } catch (e: Exception) {
-            Log.w(TAG, "Error destroying wake engine: ${e.message}")
+        // M-04: de-bounce. If the engine fires twice within WAKE_DEBOUNCE_MS,
+        // we ignore the second one to avoid double notifications / double launches.
+        val now = System.currentTimeMillis()
+        if (now - lastWakeAtMs < WAKE_DEBOUNCE_MS) {
+            Log.d(TAG, "Wake word debounced (within ${WAKE_DEBOUNCE_MS} ms)")
+            return
         }
+        lastWakeAtMs = now
 
-        // Small delay to let the mic fully release
-        android.os.Handler(mainLooper).postDelayed({
-            proceedAfterWakeDetected()
-        }, 300)
-    }
+        Log.i(TAG, "🎯 WAKE WORD DETECTED — launching conversation")
+        updateNotification("¡Hello Emma detectado! Abriendo...")
 
-    /** Continue after wake engine is destroyed and mic is released */
-    private fun proceedAfterWakeDetected() {
-        // 1. Wake screen if locked/off
+        // M-04: Hold a single tracked wake lock and release the previous one if any.
+        try {
+            lastWakeLock?.takeIf { it.isHeld }?.release()
+        } catch (e: Exception) {
+            Log.w(TAG, "Releasing previous wake lock failed: ${e.message}")
+        }
         try {
             val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
             val wakeLock = pm.newWakeLock(
@@ -128,60 +125,13 @@ class WakeWordService : Service() {
                 android.os.PowerManager.ON_AFTER_RELEASE,
                 "emma:wakeword"
             )
-            wakeLock.acquire(30000) // 30 seconds — enough for greeting + listen + LLM + response
+            wakeLock.acquire(5000) // 5 second wake
+            lastWakeLock = wakeLock
         } catch (e: Exception) {
             Log.w(TAG, "Failed to acquire wake lock: ${e.message}")
         }
 
-        // 2. Greet the user via TTS — wait for TTS engine to fully initialize
-        val greetings = listOf("Hola, te escucho", "Dime", "¿Sí? Te escucho", "Aquí estoy")
-        val greeting = greetings.random()
-        try {
-            var ttsReady = false
-            val tts = android.speech.tts.TextToSpeech(applicationContext) { status ->
-                if (status == android.speech.tts.TextToSpeech.SUCCESS) {
-                    ttsReady = true
-                    Log.i(TAG, "TTS engine ready — speaking greeting")
-                } else {
-                    Log.e(TAG, "TTS init failed with status=$status")
-                    // Even if TTS fails, start headless listening
-                    startHeadlessListening(null)
-                }
-            }
-
-            // Wait for TTS init, then speak
-            android.os.Handler(mainLooper).postDelayed({
-                if (ttsReady) {
-                    tts.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
-                        override fun onStart(utteranceId: String?) {
-                            Log.d(TAG, "Greeting started speaking")
-                        }
-                        override fun onDone(utteranceId: String?) {
-                            Log.d(TAG, "Greeting finished — starting headless listening")
-                            // Small delay after TTS to let audio output flush
-                            android.os.Handler(mainLooper).postDelayed({
-                                startHeadlessListening(tts)
-                            }, 500)
-                        }
-                        @Deprecated("Deprecated in Java")
-                        override fun onError(utteranceId: String?) {
-                            Log.w(TAG, "Greeting TTS error — starting headless listening anyway")
-                            startHeadlessListening(tts)
-                        }
-                    })
-                    tts.speak(greeting, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "wake_greeting")
-                    Log.i(TAG, "Greeting queued: '$greeting'")
-                } else {
-                    Log.w(TAG, "TTS not ready after 800ms — starting listening without greeting")
-                    startHeadlessListening(tts)
-                }
-            }, 800) // Give TTS 800ms to initialize
-        } catch (e: Exception) {
-            Log.e(TAG, "Headless TTS failed: ${e.message}")
-            startHeadlessListening(null)
-        }
-
-        // 5. Also try to launch Activity (will work if screen is on)
+        // Build launch intent
         val launchIntent = Intent(applicationContext, MainActivity::class.java).apply {
             action = ACTION_WAKE_DETECTED
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or
@@ -191,45 +141,55 @@ class WakeWordService : Service() {
             putExtra("auto_start", true)
         }
 
+        // Try direct launch first (works when app is in foreground)
         try {
             startActivity(launchIntent)
             Log.i(TAG, "Direct startActivity succeeded")
         } catch (e: Exception) {
-            Log.w(TAG, "Direct startActivity failed (screen likely off): ${e.message}")
+            Log.w(TAG, "Direct startActivity failed: ${e.message}")
         }
 
-        // 6. Fire full-screen notification as backup
+        // Also fire a high-priority notification to bring app forward (Android 10+ background restriction workaround)
         try {
             val pendingIntent = PendingIntent.getActivity(
                 applicationContext, 42, launchIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
+            // M-05: DND bypass + full-screen intent are opt-in. Default is off
+            // so a false detection (ambient noise) does NOT wake the user during DND.
+            val prefs = applicationContext.getSharedPreferences("beemovil", Context.MODE_PRIVATE)
+            val bypassDnd = prefs.getBoolean("wake_word_bypass_dnd", false)
+            val fullScreen = prefs.getBoolean("wake_word_full_screen_intent", false)
+
             val alertChannel = "emma_wake_alert"
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val channel = NotificationChannel(
                     alertChannel, "Wake Word Alert",
-                    NotificationManager.IMPORTANCE_HIGH
+                    if (bypassDnd) NotificationManager.IMPORTANCE_HIGH else NotificationManager.IMPORTANCE_DEFAULT
                 ).apply {
                     description = "Alerta cuando Hello Emma es detectado"
-                    setBypassDnd(true)
+                    setBypassDnd(bypassDnd)
                     lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                 }
                 val manager = getSystemService(NotificationManager::class.java)
                 manager.createNotificationChannel(channel)
             }
 
-            val alertNotification = NotificationCompat.Builder(this, alertChannel)
+            val alertBuilder = NotificationCompat.Builder(this, alertChannel)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle("E.M.M.A. Voice")
                 .setContentText("Hello Emma detectado — toca para abrir")
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setCategory(NotificationCompat.CATEGORY_CALL)
+                .setPriority(if (bypassDnd) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
                 .setAutoCancel(true)
                 .setContentIntent(pendingIntent)
-                .setFullScreenIntent(pendingIntent, true)
                 .setTimeoutAfter(10000)
-                .build()
+            if (fullScreen) {
+                alertBuilder
+                    .setCategory(NotificationCompat.CATEGORY_CALL)
+                    .setFullScreenIntent(pendingIntent, true)
+            }
+            val alertNotification = alertBuilder.build()
 
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.notify(4243, alertNotification)
@@ -237,114 +197,8 @@ class WakeWordService : Service() {
         } catch (e: Exception) {
             Log.w(TAG, "Failed to fire alert notification: ${e.message}")
         }
-    }
 
-    /**
-     * Headless conversation: Listen via native STT → process with EmmaEngine → speak response.
-     * Works entirely in the service — no Activity needed. Perfect for screen-off scenarios.
-     */
-    private fun startHeadlessListening(tts: android.speech.tts.TextToSpeech?) {
-        Log.i(TAG, "Starting headless listening (screen-off mode)")
-        updateNotification("🎤 Escuchando tu pregunta...")
-
-        if (!android.speech.SpeechRecognizer.isRecognitionAvailable(applicationContext)) {
-            Log.e(TAG, "SpeechRecognizer not available for headless mode")
-            restartWakeWordAfterDelay(tts)
-            return
-        }
-
-        android.os.Handler(mainLooper).post {
-            val recognizer = android.speech.SpeechRecognizer.createSpeechRecognizer(applicationContext)
-            val intent = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, java.util.Locale.getDefault().toLanguageTag())
-                putExtra(android.speech.RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-                putExtra(android.speech.RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 3000L)
-            }
-
-            recognizer.setRecognitionListener(object : android.speech.RecognitionListener {
-                override fun onReadyForSpeech(params: android.os.Bundle?) {
-                    Log.d(TAG, "Headless: Ready for speech")
-                }
-                override fun onBeginningOfSpeech() {}
-                override fun onRmsChanged(rmsdB: Float) {}
-                override fun onBufferReceived(buffer: ByteArray?) {}
-                override fun onEndOfSpeech() {
-                    updateNotification("🧠 Procesando...")
-                }
-                override fun onError(error: Int) {
-                    Log.w(TAG, "Headless STT error: $error")
-                    recognizer.destroy()
-                    restartWakeWordAfterDelay(tts)
-                }
-                override fun onResults(results: android.os.Bundle?) {
-                    val matches = results?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)
-                    val userText = matches?.firstOrNull() ?: ""
-                    recognizer.destroy()
-
-                    if (userText.isBlank()) {
-                        Log.w(TAG, "Headless: No speech detected")
-                        restartWakeWordAfterDelay(tts)
-                        return
-                    }
-
-                    Log.i(TAG, "Headless user said: '$userText'")
-                    updateNotification("🧠 Pensando: \"${userText.take(30)}...\"")
-
-                    // Process with EmmaEngine on background thread
-                    CoroutineScope(Dispatchers.IO).launch {
-                        try {
-                            val app = applicationContext as? com.beemovil.BeeMovilApp
-                            val engine = app?.emmaEngine
-                            val response = if (engine != null) {
-                                engine.processUserMessage(
-                                    userText,
-                                    threadId = "conversation",
-                                    senderId = "conversation"
-                                )
-                            } else {
-                                "Lo siento, no pude procesar tu mensaje."
-                            }
-
-                            Log.i(TAG, "Headless response: '${response.take(80)}...'")
-
-                            // Speak response via TTS
-                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                updateNotification("🔊 Respondiendo...")
-                                val cleanResponse = response
-                                    .replace(Regex("[\\p{So}\\p{Cn}]"), "")
-                                    .replace(Regex("[*_#`]"), "")
-                                    .take(500)
-                                tts?.speak(cleanResponse, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "wake_response")
-                                tts?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
-                                    override fun onStart(utteranceId: String?) {}
-                                    override fun onDone(utteranceId: String?) {
-                                        restartWakeWordAfterDelay(tts)
-                                    }
-                                    @Deprecated("Deprecated in Java")
-                                    override fun onError(utteranceId: String?) {
-                                        restartWakeWordAfterDelay(tts)
-                                    }
-                                })
-                            }
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Headless processing failed: ${e.message}")
-                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                restartWakeWordAfterDelay(tts)
-                            }
-                        }
-                    }
-                }
-                override fun onPartialResults(partialResults: android.os.Bundle?) {}
-                override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
-            })
-            recognizer.startListening(intent)
-        }
-    }
-
-    /** Restart wake word detection after headless conversation completes */
-    private fun restartWakeWordAfterDelay(tts: android.speech.tts.TextToSpeech?) {
-        try { tts?.shutdown() } catch (_: Exception) {}
+        // Re-start listening after a delay (conversation will claim mic via arbiter)
         android.os.Handler(mainLooper).postDelayed({
             if (isRunning) {
                 updateNotification("Escuchando \"Hello Emma\"...")
@@ -353,7 +207,7 @@ class WakeWordService : Service() {
                     onError = { err -> Log.w(TAG, "Wake re-start error: $err") }
                 )
             }
-        }, 3000) // 3s cooldown before re-listening for wake word
+        }, 20000) // 20s delay for greeting + conversation to start
     }
 
     private fun stopWakeWordDetection() {
@@ -365,6 +219,13 @@ class WakeWordService : Service() {
 
     override fun onDestroy() {
         stopWakeWordDetection()
+        // M-04: release wake lock if still held instead of relying on the timeout.
+        try {
+            lastWakeLock?.takeIf { it.isHeld }?.release()
+        } catch (e: Exception) {
+            Log.w(TAG, "onDestroy wake lock release failed: ${e.message}")
+        }
+        lastWakeLock = null
         super.onDestroy()
     }
 

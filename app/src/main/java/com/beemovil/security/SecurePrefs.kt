@@ -12,10 +12,14 @@ import androidx.security.crypto.MasterKey
  * Uses Android Keystore-backed AES-256 encryption via EncryptedSharedPreferences.
  * On first access, automatically migrates plain-text keys from the old SharedPreferences.
  *
- * Usage:
- *   val secure = SecurePrefs.get(context)
- *   val apiKey = secure.getString("openrouter_api_key", "") ?: ""
- *   secure.edit().putString("openrouter_api_key", newKey).apply()
+ * C-06 fix: previously, if EncryptedSharedPreferences failed to open, the code
+ * silently
+ *   1) deleted the existing encrypted prefs file (losing the user's keys), and
+ *   2) fell back to a plain SharedPreferences file `${SECURE_PREFS_NAME}_fallback`.
+ * The user was never told. Now:
+ *   - The file is NOT deleted automatically.
+ *   - If everything fails, we expose `isUsingInsecureFallback()` so the UI can warn.
+ *   - A SharedPrefs flag is set so any caller can check "are my keys actually encrypted?".
  */
 object SecurePrefs {
 
@@ -23,6 +27,7 @@ object SecurePrefs {
     private const val SECURE_PREFS_NAME = "beemovil_secure"
     private const val PLAIN_PREFS_NAME = "beemovil"
     private const val MIGRATION_DONE_KEY = "__migration_done_v1"
+    private const val INSECURE_FALLBACK_FLAG = "__insecure_fallback_active"
 
     /** Keys that contain sensitive data and must be encrypted. */
     val SENSITIVE_KEYS = setOf(
@@ -34,12 +39,16 @@ object SecurePrefs {
         "email_address",
         "telegram_owner_username",
         "deepgram_api_key",
+        "google_ai_key",
         "elevenlabs_api_key",
         "elevenlabs_voice_id"
     )
 
     @Volatile
     private var instance: SharedPreferences? = null
+
+    @Volatile
+    private var insecureFallback: Boolean = false
 
     /**
      * Get the encrypted SharedPreferences instance.
@@ -54,6 +63,12 @@ object SecurePrefs {
         }
     }
 
+    /**
+     * True if the current backing prefs are NOT encrypted (because the Keystore
+     * could not be initialized). The UI should display a prominent warning if true.
+     */
+    fun isUsingInsecureFallback(): Boolean = insecureFallback
+
     private fun createSecurePrefs(context: Context): SharedPreferences {
         return try {
             val masterKey = MasterKey.Builder(context)
@@ -66,16 +81,17 @@ object SecurePrefs {
                 masterKey,
                 EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-            )
+            ).also {
+                // Successful encrypted open: clear any insecure-fallback flag from a previous run.
+                insecureFallback = false
+                it.edit().remove(INSECURE_FALLBACK_FLAG).apply()
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "EncryptedSharedPreferences failed: ${e.message}")
-            // Try deleting corrupted prefs file and retrying (common after reinstall)
+            // C-06: do NOT delete the existing encrypted prefs file. The keys may still
+            // be recoverable on a future run (e.g., after the device finishes setup).
+            Log.e(TAG, "EncryptedSharedPreferences failed: ${e.javaClass.simpleName}: ${e.message}", e)
             try {
-                val prefsFile = java.io.File(context.applicationInfo.dataDir, "shared_prefs/${SECURE_PREFS_NAME}.xml")
-                if (prefsFile.exists()) {
-                    prefsFile.delete()
-                    Log.i(TAG, "Deleted corrupted prefs file, retrying...")
-                }
+                // Try once more without touching anything on disk.
                 val masterKey = MasterKey.Builder(context)
                     .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
                     .build()
@@ -87,8 +103,15 @@ object SecurePrefs {
                     EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
                 )
             } catch (e2: Exception) {
-                Log.e(TAG, "Retry also failed, using fallback: ${e2.message}")
-                context.getSharedPreferences("${SECURE_PREFS_NAME}_fallback", Context.MODE_PRIVATE)
+                Log.e(TAG, "Encrypted retry failed: ${e2.javaClass.simpleName}: ${e2.message}", e2)
+                Log.e(TAG, "⚠️ FALLING BACK TO PLAIN SHARED-PREFERENCES — credentials will NOT be encrypted at rest.")
+                insecureFallback = true
+                val fallback = context.getSharedPreferences(
+                    "${SECURE_PREFS_NAME}_fallback",
+                    Context.MODE_PRIVATE
+                )
+                fallback.edit().putBoolean(INSECURE_FALLBACK_FLAG, true).apply()
+                fallback
             }
         }
     }

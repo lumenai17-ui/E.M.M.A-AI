@@ -150,6 +150,18 @@ object LlmFactory {
         models = ModelRegistry.getModelOptions("local")
     )
 
+    val GOOGLE_AI = ProviderConfig(
+        id = "google_ai",
+        name = "Google AI (Gemini)",
+        baseUrl = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        apiKey = "",
+        supportsTools = true,
+        models = listOf(
+            ModelOption("gemini-2.0-flash", "Gemini 2.0 Flash", free = true),
+            ModelOption("gemini-1.5-flash", "Gemini 1.5 Flash", free = true),
+            ModelOption("gemini-1.5-pro", "Gemini 1.5 Pro", free = true)
+        )
+    )
 
     // Vision models — dynamically from registry
     val VISION_MODELS: List<ModelOption>
@@ -183,6 +195,13 @@ object LlmFactory {
                     modelName = LOCAL.models.find { it.id == model }?.name ?: model
                 )
             }
+            "google_ai" -> OpenAiCompatibleProvider(
+                apiKey = apiKey,
+                model = model,
+                baseUrl = GOOGLE_AI.baseUrl,
+                providerName = "Google AI",
+                supportsTools = true
+            )
             else -> OpenAiCompatibleProvider(
                 apiKey = apiKey,
                 model = model,

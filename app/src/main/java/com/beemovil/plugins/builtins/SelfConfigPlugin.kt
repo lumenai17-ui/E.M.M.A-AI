@@ -127,7 +127,7 @@ class SelfConfigPlugin(private val context: Context) : EmmaPlugin {
                 appendLine("  Soporta Vision: ${modelEntry.hasVision}")
                 appendLine("  Soporta Tools: ${modelEntry.hasTools}")
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) { android.util.Log.w("EmmaSwallowed", "ignored exception: ${e.message}") }
     }
 
     private fun getApiKeysStatus(): String = buildString {

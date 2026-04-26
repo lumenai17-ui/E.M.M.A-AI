@@ -415,7 +415,7 @@ class EmmaTaskService : Service() {
         try {
             val nm = getSystemService(NotificationManager::class.java)
             nm.notify(NOTIFICATION_ID, buildProgressNotification(text))
-        } catch (_: Exception) {}
+        } catch (e: Exception) { android.util.Log.w("EmmaSwallowed", "ignored exception: ${e.message}") }
     }
 
     private fun getLaunchPendingIntent(): PendingIntent? {
