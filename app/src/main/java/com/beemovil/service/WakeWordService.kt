@@ -112,14 +112,8 @@ class WakeWordService : Service() {
         // Stop wake word engine (conversation will claim mic)
         wakeEngine?.stop()
 
-        // Detect if app is in foreground
-        val isAppForeground = try {
-            val am = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
-            val tasks = am.getRunningTasks(1)
-            if (tasks.isNotEmpty()) {
-                tasks[0].topActivity?.packageName == packageName
-            } else false
-        } catch (_: Exception) { false }
+        // Detect if app is in foreground — use reliable Activity lifecycle flag
+        val isAppForeground = MainActivity.isVisible
 
         if (isAppForeground) {
             // ═══════════════════════════════════════════════════════

@@ -24,6 +24,14 @@ import com.beemovil.ui.theme.*
 
 class MainActivity : ComponentActivity() {
 
+    companion object {
+        /** Reliable foreground flag — set in onResume, cleared in onPause.
+         *  WakeWordService reads this to decide PATH A vs PATH B. */
+        @Volatile
+        var isVisible = false
+            private set
+    }
+
     private val viewModel: ChatViewModel by viewModels()
 
     private val requestPermissionLauncher = registerForActivityResult(
@@ -212,6 +220,21 @@ class MainActivity : ComponentActivity() {
                 viewModel.sendMessage(sharedText)
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        isVisible = true
+    }
+
+    override fun onPause() {
+        super.onPause()
+        isVisible = false
+    }
+
+    override fun onStop() {
+        super.onStop()
+        isVisible = false
     }
 
     override fun onNewIntent(intent: Intent) {
