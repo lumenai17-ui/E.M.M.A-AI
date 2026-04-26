@@ -106,6 +106,7 @@ class EmmaEngine(private val context: Context) {
         - Asignar: 'assign' a user/emma/tercero
         - Sub-tareas: 'add_subtask'
         - Buscar: 'search' por texto
+        - Adjuntar archivo: 'attach' con file_path + task_id/query (usa paths de otros plugins como export_pdf, generate_image)
         Fechas naturales: 'mañana', 'viernes', 'hoy', '2026-04-28'
         SIEMPRE usa 'emma_tasks' para tareas — NO 'google_tasks' (a menos que pida Google explícitamente).
 

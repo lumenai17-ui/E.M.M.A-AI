@@ -6,6 +6,7 @@ import com.beemovil.llm.ToolDefinition
 import com.beemovil.plugins.EmmaPlugin
 import com.beemovil.tasks.EmmaTask
 import com.beemovil.tasks.EmmaSubtask
+import com.beemovil.tasks.TaskAttachment
 import com.beemovil.tasks.EmmaTaskDB
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -40,7 +41,7 @@ class EmmaTaskPlugin(private val context: Context) : EmmaPlugin {
                         put("enum", JSONArray()
                             .put("create").put("list").put("complete")
                             .put("update").put("delete").put("assign")
-                            .put("add_subtask").put("search"))
+                            .put("add_subtask").put("search").put("attach"))
                         put("description", "Acción a ejecutar sobre las tareas.")
                     })
                     put("title", JSONObject().apply {
@@ -102,6 +103,14 @@ class EmmaTaskPlugin(private val context: Context) : EmmaPlugin {
                         put("type", "string")
                         put("description", "Origen de la tarea: 'chat', 'voice', 'vision', 'email'. Auto-detectado si no se especifica.")
                     })
+                    put("file_path", JSONObject().apply {
+                        put("type", "string")
+                        put("description", "Path absoluto del archivo a adjuntar (para action='attach'). Usa el path devuelto por otros plugins como export_pdf, generate_image, etc.")
+                    })
+                    put("file_name", JSONObject().apply {
+                        put("type", "string")
+                        put("description", "Nombre legible del archivo (opcional, se extrae del path si no se da).")
+                    })
                 })
                 put("required", JSONArray().put("action"))
             }
@@ -121,7 +130,8 @@ class EmmaTaskPlugin(private val context: Context) : EmmaPlugin {
                     "assign" -> assignTask(args)
                     "add_subtask" -> addSubtask(args)
                     "search" -> searchTasks(args)
-                    else -> "Acción '$action' no reconocida. Usa: create, list, complete, update, delete, assign, add_subtask, search."
+                    "attach" -> attachFile(args)
+                    else -> "Acción '$action' no reconocida. Usa: create, list, complete, update, delete, assign, add_subtask, search, attach."
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Task plugin error: ${e.message}", e)
@@ -385,6 +395,49 @@ class EmmaTaskPlugin(private val context: Context) : EmmaPlugin {
         val results = dao.searchTasks(query)
         if (results.isEmpty()) return "🔍 No encontré tareas con \"$query\"."
         return formatTaskList(results, "search: $query")
+    }
+
+    // ═══════════════════════════════════════
+    //  ATTACH FILE
+    // ═══════════════════════════════════════
+
+    private suspend fun attachFile(args: Map<String, Any>): String {
+        val filePath = args["file_path"] as? String ?: return "❌ Falta el file_path del archivo a adjuntar."
+        val taskId = args["task_id"] as? String
+        val query = args["query"] as? String ?: args["title"] as? String
+
+        val task = if (taskId != null) {
+            dao.getTaskById(taskId)
+        } else if (query != null) {
+            dao.searchTasks(query).firstOrNull()
+        } else {
+            return "❌ Necesito el ID o título de la tarea donde adjuntar."
+        }
+        if (task == null) return "❌ No encontré esa tarea."
+
+        val file = java.io.File(filePath)
+        val fileName = args["file_name"] as? String ?: file.name
+        val mimeType = when {
+            filePath.endsWith(".pdf") -> "application/pdf"
+            filePath.endsWith(".png") -> "image/png"
+            filePath.endsWith(".jpg") || filePath.endsWith(".jpeg") -> "image/jpeg"
+            filePath.endsWith(".csv") -> "text/csv"
+            filePath.endsWith(".html") -> "text/html"
+            else -> "application/octet-stream"
+        }
+        val sizeBytes = if (file.exists()) file.length() else null
+
+        dao.insertAttachment(TaskAttachment(
+            taskId = task.id,
+            filePath = filePath,
+            fileName = fileName,
+            mimeType = mimeType,
+            sizeBytes = sizeBytes,
+            source = "emma_generated"
+        ))
+
+        val sizeLabel = if (sizeBytes != null) " (${sizeBytes / 1024} KB)" else ""
+        return "✅ Archivo \"$fileName\"$sizeLabel adjuntado a tarea \"${task.title}\""
     }
 
     // ═══════════════════════════════════════
