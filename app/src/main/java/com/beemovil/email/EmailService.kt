@@ -329,10 +329,20 @@ class EmailService(private val context: Context) {
     private fun parseMessage(msg: Message, folder: Folder, downloadAttachments: Boolean = false): EmailMessage {
         val from = msg.from?.firstOrNull()
         val fromAddr = (from as? InternetAddress)
-        val uid = (folder as? UIDFolder)?.getUID(msg) ?: 0L
+        val uid = try { (folder as? UIDFolder)?.getUID(msg) ?: 0L } catch (_: Exception) { 0L }
 
         val attachments = mutableListOf<EmailAttachment>()
-        val rawBody = getTextContent(msg, attachments, downloadAttachments)
+        // B3b: granular body fallback
+        val rawBody = try {
+            getTextContent(msg, attachments, downloadAttachments)
+        } catch (e: Exception) {
+            Log.e(TAG, "getTextContent failed, trying raw: ${e.message}")
+            try {
+                msg.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText().take(10000) }
+            } catch (_: Exception) {
+                "(Error cargando contenido del correo)"
+            }
+        }
 
         // Separate HTML from plain text
         val isHtml = rawBody.trimStart().startsWith("<") || rawBody.contains("<html", ignoreCase = true) || rawBody.contains("<div", ignoreCase = true)
@@ -343,54 +353,105 @@ class EmailService(private val context: Context) {
             uid = uid,
             from = fromAddr?.personal ?: fromAddr?.address ?: "Desconocido",
             fromEmail = fromAddr?.address ?: "",
-            to = msg.getRecipients(Message.RecipientType.TO)?.joinToString(", ") { it.toString() } ?: "",
-            subject = msg.subject ?: "(Sin asunto)",
+            to = try { msg.getRecipients(Message.RecipientType.TO)?.joinToString(", ") { it.toString() } ?: "" } catch (_: Exception) { "" },
+            subject = try { msg.subject ?: "(Sin asunto)" } catch (_: Exception) { "(Sin asunto)" },
             body = plainBody,
             htmlBody = htmlBody,
-            date = msg.sentDate ?: Date(),
-            isRead = msg.flags.contains(Flags.Flag.SEEN),
-            isStarred = msg.flags.contains(Flags.Flag.FLAGGED),
+            date = try { msg.sentDate ?: Date() } catch (_: Exception) { Date() },
+            isRead = try { msg.flags.contains(Flags.Flag.SEEN) } catch (_: Exception) { true },
+            isStarred = try { msg.flags.contains(Flags.Flag.FLAGGED) } catch (_: Exception) { false },
             hasAttachments = attachments.isNotEmpty(),
             attachments = attachments
         )
     }
 
     private fun getTextContent(part: Part, attachments: MutableList<EmailAttachment>, download: Boolean): String {
-        return when {
-            part.isMimeType("text/plain") -> {
-                readPartContent(part)
-            }
-            part.isMimeType("text/html") -> {
-                readPartContent(part)
-            }
-            part.isMimeType("multipart/*") -> {
-                val mp = part.content as Multipart
-                val sb = StringBuilder()
-                for (i in 0 until mp.count) {
-                    val bodyPart = mp.getBodyPart(i)
-                    val disposition = bodyPart.disposition
+        return try {
+            when {
+                part.isMimeType("text/plain") -> {
+                    readPartContent(part)
+                }
+                part.isMimeType("text/html") -> {
+                    readPartContent(part)
+                }
+                part.isMimeType("multipart/*") -> {
+                    try {
+                        val mp = part.content as Multipart
+                        var htmlResult: String? = null
+                        var plainResult: String? = null
+                        val sb = StringBuilder()
 
-                    if (disposition != null && (disposition.equals(Part.ATTACHMENT, true) || disposition.equals(Part.INLINE, true))) {
-                        val att = EmailAttachment(
-                            name = bodyPart.fileName ?: "attachment_$i",
-                            size = bodyPart.size.toLong(),
-                            mimeType = bodyPart.contentType.split(";")[0]
-                        )
-                        if (download) {
-                            val file = File(attachmentDir, att.name)
-                            bodyPart.inputStream.use { input ->
-                                file.outputStream().use { output -> input.copyTo(output) }
+                        for (i in 0 until mp.count) {
+                            try {
+                                val bodyPart = mp.getBodyPart(i)
+                                val disposition = bodyPart.disposition
+                                val fileName = try { bodyPart.fileName } catch (_: Exception) { null }
+
+                                if (disposition != null && (disposition.equals(Part.ATTACHMENT, true) || (disposition.equals(Part.INLINE, true) && fileName != null))) {
+                                    val att = EmailAttachment(
+                                        name = fileName ?: "attachment_$i",
+                                        size = try { bodyPart.size.toLong() } catch (_: Exception) { 0L },
+                                        mimeType = bodyPart.contentType.split(";")[0].trim()
+                                    )
+                                    if (download) {
+                                        try {
+                                            val file = File(attachmentDir, att.name)
+                                            bodyPart.inputStream.use { input ->
+                                                file.outputStream().use { output -> input.copyTo(output) }
+                                            }
+                                            att.localPath = file.absolutePath
+                                        } catch (e: Exception) {
+                                            Log.e(TAG, "Attachment download error: ${e.message}")
+                                        }
+                                    }
+                                    attachments.add(att)
+                                } else if (fileName != null && !bodyPart.isMimeType("text/*")) {
+                                    // B3c: has filename but no disposition -> inline attachment
+                                    val att = EmailAttachment(
+                                        name = fileName,
+                                        size = try { bodyPart.size.toLong() } catch (_: Exception) { 0L },
+                                        mimeType = bodyPart.contentType.split(";")[0].trim()
+                                    )
+                                    if (download) {
+                                        try {
+                                            val file = File(attachmentDir, att.name)
+                                            bodyPart.inputStream.use { input ->
+                                                file.outputStream().use { output -> input.copyTo(output) }
+                                            }
+                                            att.localPath = file.absolutePath
+                                        } catch (e: Exception) {
+                                            Log.e(TAG, "Inline attachment download error: ${e.message}")
+                                        }
+                                    }
+                                    attachments.add(att)
+                                } else {
+                                    val content = getTextContent(bodyPart, attachments, download)
+                                    if (bodyPart.isMimeType("text/html")) {
+                                        htmlResult = content
+                                    } else if (bodyPart.isMimeType("text/plain")) {
+                                        plainResult = content
+                                    } else {
+                                        sb.append(content)
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Error parsing body part $i: ${e.message}")
                             }
-                            att.localPath = file.absolutePath
                         }
-                        attachments.add(att)
-                    } else {
-                        sb.append(getTextContent(bodyPart, attachments, download))
+
+                        // Prefer HTML over plain text for multipart/alternative
+                        htmlResult ?: plainResult ?: sb.toString()
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Multipart parse error: ${e.message}")
+                        try { part.inputStream.bufferedReader().use { it.readText().take(5000) } }
+                        catch (_: Exception) { "" }
                     }
                 }
-                sb.toString()
+                else -> ""
             }
-            else -> ""
+        } catch (e: Exception) {
+            Log.e(TAG, "getTextContent top-level error: ${e.message}")
+            ""
         }
     }
 

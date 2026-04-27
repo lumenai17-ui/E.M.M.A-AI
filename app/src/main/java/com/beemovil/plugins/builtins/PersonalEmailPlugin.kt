@@ -100,11 +100,21 @@ class PersonalEmailPlugin(private val context: Context) : EmmaPlugin {
                         val body = args["body"] as? String ?: ""
                         val attachPaths = (args["attachment_paths"] as? String)
                             ?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
-                        val ok = emailService.sendEmail(email, password, config, to, subject, body, attachmentPaths = attachPaths)
-                        if (ok) {
-                            val attLabel = if (attachPaths.isNotEmpty()) " con ${attachPaths.size} adjunto(s)" else ""
-                            "✅ Email enviado desde $email a $to$attLabel"
-                        } else "❌ Error enviando el email."
+                        try {
+                            val ok = emailService.sendEmail(email, password, config, to, subject, body, attachmentPaths = attachPaths)
+                            if (ok) {
+                                val attLabel = if (attachPaths.isNotEmpty()) " con ${attachPaths.size} adjunto(s)" else ""
+                                "✅ Email enviado desde $email a $to$attLabel"
+                            } else "❌ Error enviando el email. Verifica tu App Password y configuración SMTP en Settings."
+                        } catch (e: Exception) {
+                            val hint = when {
+                                e.message?.contains("Authentication", true) == true -> " Verifica tu App Password."
+                                e.message?.contains("Connection", true) == true -> " Verifica tu conexión y host SMTP."
+                                e.message?.contains("timeout", true) == true -> " Timeout de conexión. Intenta de nuevo."
+                                else -> ""
+                            }
+                            "❌ Error SMTP: ${e.message}.$hint"
+                        }
                     }
                     else -> "Acción '$action' no reconocida."
                 }

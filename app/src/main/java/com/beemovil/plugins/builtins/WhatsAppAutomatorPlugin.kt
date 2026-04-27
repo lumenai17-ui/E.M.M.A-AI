@@ -56,19 +56,44 @@ class WhatsAppAutomatorPlugin(private val context: Context) : EmmaPlugin {
             try {
                 // U-05 fix: Si hay archivo adjunto, usar ACTION_SEND con EXTRA_STREAM
                 if (filePath != null && File(filePath).exists()) {
+                    val file = File(filePath)
                     val fileUri = FileProvider.getUriForFile(
-                        context, "${context.packageName}.fileprovider", File(filePath)
+                        context, "${context.packageName}.fileprovider", file
                     )
+                    // B1 fix: detect real MIME type
+                    val mimeType = when (file.extension.lowercase()) {
+                        "pdf" -> "application/pdf"
+                        "jpg", "jpeg" -> "image/jpeg"
+                        "png" -> "image/png"
+                        "gif" -> "image/gif"
+                        "mp4" -> "video/mp4"
+                        "mp3", "m4a" -> "audio/mpeg"
+                        "doc", "docx" -> "application/msword"
+                        "xls", "xlsx" -> "application/vnd.ms-excel"
+                        "csv" -> "text/csv"
+                        "html" -> "text/html"
+                        "txt" -> "text/plain"
+                        else -> "application/octet-stream"
+                    }
+                    // B1 fix: auto-detect WhatsApp (regular or Business)
+                    val installed = listOf("com.whatsapp", "com.whatsapp.w4b").filter { pkg ->
+                        try { context.packageManager.getPackageInfo(pkg, 0); true } catch (_: Exception) { false }
+                    }
                     val intent = Intent(Intent.ACTION_SEND).apply {
-                        setPackage("com.whatsapp")
-                        type = "*/*"
+                        type = mimeType
+                        if (installed.size == 1) setPackage(installed.first()) // Direct if only one
+                        // If 2 installed → no setPackage → Android chooser between both
+                        // If 0 installed → no setPackage → generic chooser
                         putExtra(Intent.EXTRA_TEXT, message)
                         putExtra(Intent.EXTRA_STREAM, fileUri)
-                        putExtra("jid", "$cleanNumber@s.whatsapp.net")
+                        if (installed.isNotEmpty()) putExtra("jid", "$cleanNumber@s.whatsapp.net")
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
                     }
-                    context.startActivity(intent)
-                    "El mensaje con archivo adjunto para '+${cleanNumber}' está listo en WhatsApp. Solo envíalo."
+                    context.startActivity(Intent.createChooser(intent, "Enviar por...").apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    })
+                    val waLabel = when { installed.size == 1 && installed.first() == "com.whatsapp.w4b" -> "WhatsApp Business"; installed.size == 1 -> "WhatsApp"; else -> "la app seleccionada" }
+                    "El archivo '${file.name}' con mensaje para '+${cleanNumber}' está listo en $waLabel. Solo envíalo."
                 } else {
                     // Sin adjunto: link directo clásico
                     val intent = Intent(Intent.ACTION_VIEW).apply {
@@ -79,8 +104,8 @@ class WhatsAppAutomatorPlugin(private val context: Context) : EmmaPlugin {
                     "El mensaje final de WhatsApp hacia '+${cleanNumber}' está precargado en la pantalla de chat. Tíralo cuando quieras."
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error invadiendo WA", e)
-                "Crash abriendo WhatsApp directo: ${e.message}"
+                Log.e(TAG, "Error abriendo WhatsApp", e)
+                "❌ Error abriendo WhatsApp: ${e.message}"
             }
         }
     }
