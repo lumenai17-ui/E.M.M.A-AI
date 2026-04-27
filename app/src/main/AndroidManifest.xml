@@ -46,6 +46,9 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.WRITE_SETTINGS" tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    
+    <!-- Floating Assistant (Phase 3) -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <!-- Telemetry & Sensors (Phase 7) -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
@@ -139,6 +142,15 @@
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="microphone" />
+
+        <!-- Phase 3: Floating Assistant Service -->
+        <service
+            android:name=".service.FloatingEmmaService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Floating AI Assistant overlay that needs to be visible across other apps."/>
+        </service>
 
         <!-- V7.2: Background Conversation Service (voice with screen off) -->
         <service

@@ -126,6 +126,14 @@ enum class BeePermission(
         description = "Necesario para ejecutar cronómetros y recordatorios en el milisegundo exacto.",
         reason = "Desde Android 12, Google restringe alarmas exactas para ahorrar batería. E.M.M.A. necesita esta excepción para no llegar tarde a tus recordatorios.",
         color = Color(0xFFFF3B30)
+    ),
+    DISPLAY_OVER_APPS(
+        androidPermission = Manifest.permission.SYSTEM_ALERT_WINDOW,
+        icon = Icons.Filled.PictureInPicture,
+        title = "Aparecer Encima",
+        description = "Necesario para crear la Burbuja Flotante de E.M.M.A.",
+        reason = "Permite que E.M.M.A. se muestre como un asistente flotante sobre otras aplicaciones como Chrome o YouTube.",
+        color = Color(0xFF00C7BE)
     )
 }
 
@@ -288,6 +296,12 @@ fun PermissionDialog(
                                 onGranted()
                             } else if (permission == BeePermission.EXACT_ALARMS && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                                 val intent = android.content.Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                                    data = android.net.Uri.parse("package:${context.packageName}")
+                                }
+                                context.startActivity(intent)
+                                onGranted()
+                            } else if (permission == BeePermission.DISPLAY_OVER_APPS && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                                val intent = android.content.Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
                                     data = android.net.Uri.parse("package:${context.packageName}")
                                 }
                                 context.startActivity(intent)
