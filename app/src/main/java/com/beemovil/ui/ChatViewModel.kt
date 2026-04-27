@@ -380,6 +380,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     val telegramBotName = mutableStateOf("")
     val telegramBotMessages = mutableStateOf(0)
     
+    // Permission Gate State (Just-In-Time Permissions)
+    val pendingPermissionRequest = mutableStateOf<com.beemovil.ui.components.BeePermission?>(null)
+    
     // UI states
     val dashboardInsight = mutableStateOf("Sistema base reiniciado. Esperando motor Koog...")
     val dashboardInsightLoading = mutableStateOf(false)
@@ -822,6 +825,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 messages.add(ChatUiMessage(feedback, false))
                 if (!isMuted.value) {
                     voiceManager.speak(feedback, language = Locale.getDefault().language)
+                }
+            } else if (response.startsWith("TOOL_CALL::request_permission::")) {
+                val permName = response.removePrefix("TOOL_CALL::request_permission::")
+                try {
+                    val requiredPerm = com.beemovil.ui.components.BeePermission.valueOf(permName)
+                    pendingPermissionRequest.value = requiredPerm
+                    // Agregamos un mensaje para que no quede vacio el chat
+                    val feedback = "Necesito tu autorización para acceder a ${requiredPerm.title} y completar esta tarea."
+                    messages.add(ChatUiMessage(feedback, false))
+                    if (!isMuted.value) voiceManager.speak(feedback, language = Locale.getDefault().language)
+                } catch (e: Exception) {
+                    messages.add(ChatUiMessage("Error solicitando permiso: $permName", false, isError = true))
                 }
             } else if (response.startsWith("TOOL_CALL::file_generated::")) {
                 val filePath = response.removePrefix("TOOL_CALL::file_generated::")

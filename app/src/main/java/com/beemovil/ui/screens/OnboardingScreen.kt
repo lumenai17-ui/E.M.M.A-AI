@@ -190,10 +190,14 @@ fun OnboardingScreen(onComplete: () -> Unit) {
                         onNext = {
                             if (userName.isNotBlank()) {
                                 // Save name immediately
-                                val memDb = try {
-                                    com.beemovil.memory.BeeMemoryDB(context)
+                                val personaManager = try {
+                                    com.beemovil.memory.PersonaManager(context)
                                 } catch (_: Exception) { null }
-                                memDb?.setSoul("name", userName.trim())
+                                if (personaManager != null) {
+                                    kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+                                        personaManager.updateUserFact("preferences", "name", userName.trim())
+                                    }
+                                }
                                 currentStep = 1
                             }
                         }

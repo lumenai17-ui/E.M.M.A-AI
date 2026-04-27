@@ -20,7 +20,7 @@ class VisionMemoryManager(private val context: Context) {
     }
 
     private val offlineCache = OfflineContextCache.getInstance(context)
-    private val memoryDB = com.beemovil.memory.BeeMemoryDB(context)
+    private val personaManager = com.beemovil.memory.PersonaManager(context)
     val placeProfileManager = PlaceProfileManager(context) // V8: expose for lifecycle
 
     // Track what we've already injected to avoid repeats
@@ -59,21 +59,7 @@ class VisionMemoryManager(private val context: Context) {
             parts.add(crossMode.take(150))
         }
 
-        // 3. BeeMemoryDB keyword search (user's saved memories)
-        val allMemories = memoryDB.getAllMemories()
-        // Simple keyword match from location address
-        val addressKey = offlineCache.get(lat, lng, type = "geocode").take(50).lowercase()
-        if (addressKey.isNotBlank()) {
-            val relevant = allMemories.filter { memory ->
-                val memLower = memory.lowercase()
-                addressKey.split(" ").any { word ->
-                    word.length > 4 && memLower.contains(word)
-                }
-            }
-            if (relevant.isNotEmpty()) {
-                parts.add(relevant.takeLast(2).joinToString("; "))
-            }
-        }
+        // 3. (Removido: Búsqueda legacy de BeeMemoryDB)
 
         val result = parts.joinToString("\n").take(MAX_MEMORY_CONTEXT)
         lastInjectedMemory = result
@@ -114,7 +100,9 @@ class VisionMemoryManager(private val context: Context) {
                 append(result.take(150))
                 append(" [${mode.name}]")
             }
-            memoryDB.saveMemory(memoryFragment)
+            kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+                personaManager.addHeartMilestone(memoryFragment)
+            }
             Log.i(TAG, "Saved notable memory: ${memoryFragment.take(60)}...")
         }
     }
@@ -153,22 +141,22 @@ class VisionMemoryManager(private val context: Context) {
     /** Get stats for UI display */
     fun getStats(): String {
         val cacheCount = offlineCache.entryCount()
-        val memCount = memoryDB.getMemoryCount()
-        return "$cacheCount cached | $memCount memories"
+        return "$cacheCount cached"
     }
 
     /** V9: Get stats as map for dashboard */
     fun getStatsMap(): Map<String, Int> {
         return mapOf(
-            "cached" to offlineCache.entryCount(),
-            "memories" to memoryDB.getMemoryCount()
+            "cached" to offlineCache.entryCount()
         )
     }
 
-    /** V9: Save a vision note to BeeMemoryDB (for chat integration) */
+    /** V9: Save a vision note to PersonaManager (for chat integration) */
     fun saveVisionNote(note: String) {
         if (note.isBlank()) return
-        memoryDB.saveMemory(note.take(300))
+        kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+            personaManager.addHeartMilestone(note.take(300))
+        }
         Log.i(TAG, "Vision note saved: ${note.take(50)}...")
     }
 }

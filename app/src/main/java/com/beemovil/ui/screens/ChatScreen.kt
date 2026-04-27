@@ -275,6 +275,20 @@ fun ChatScreen(
         Box(
             modifier = Modifier.fillMaxSize().padding(padding).background(bg)
         ) {
+            val pendingPerm = viewModel.pendingPermissionRequest.value
+            if (pendingPerm != null) {
+                com.beemovil.ui.components.PermissionDialog(
+                    permission = pendingPerm,
+                    onGranted = { 
+                        viewModel.pendingPermissionRequest.value = null
+                        // Automáticamente decirle a Emma que ya tiene el permiso
+                        viewModel.sendMessage("Ya te he dado el permiso, inténtalo de nuevo.")
+                    },
+                    onDenied = { viewModel.pendingPermissionRequest.value = null },
+                    onDismiss = { viewModel.pendingPermissionRequest.value = null }
+                )
+            }
+            
             val listState = rememberLazyListState()
             val displayMessages = if (viewModel.isSearchMode.value) viewModel.searchResults else viewModel.messages
             

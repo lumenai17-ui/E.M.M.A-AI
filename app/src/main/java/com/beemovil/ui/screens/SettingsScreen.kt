@@ -1725,13 +1725,9 @@ fun SettingsScreen(
                                         googleError = null
                                         // Auto-populate soul
                                         try {
-                                            val memDb = com.beemovil.memory.BeeMemoryDB(context)
-                                            if (memDb.getSoul("name").isNullOrBlank()) {
-                                                memDb.setSoul("name", user.displayName)
-                                            }
-                                            if (memDb.getSoul("email").isNullOrBlank()) {
-                                                memDb.setSoul("email", user.email)
-                                            }
+                                            val personaManager = com.beemovil.memory.PersonaManager(context)
+                                            personaManager.updateUserFact("preferences", "name", user.displayName)
+                                            personaManager.updateUserFact("preferences", "email", user.email)
                                         } catch (_: Exception) {}
                                         
                                         // Request OAuth2 scopes

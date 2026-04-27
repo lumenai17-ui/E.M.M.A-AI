@@ -74,6 +74,7 @@ abstract class ChatHistoryDB : RoomDatabase() {
                     "emma_chat_history_db"
                 )
                 .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .fallbackToDestructiveMigration()
                 .build()
                 INSTANCE = instance
                 instance

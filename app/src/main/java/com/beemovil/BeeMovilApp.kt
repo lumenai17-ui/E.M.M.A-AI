@@ -70,6 +70,21 @@ class BeeMovilApp : Application() {
             telemetryWork
         )
 
+        // Fase 2.2: Rutina de Limpieza (Garbage Collection) cada 24 horas
+        val storageConstraints = Constraints.Builder()
+            .setRequiresDeviceIdle(true) // Preferiblemente cuando no se usa el teléfono
+            .setRequiresBatteryNotLow(true)
+            .build()
+        val storageWork = PeriodicWorkRequestBuilder<com.beemovil.service.StorageOptimizerWorker>(24, TimeUnit.HOURS)
+            .setConstraints(storageConstraints)
+            .build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "StorageOptimizerWork",
+            ExistingPeriodicWorkPolicy.KEEP,
+            storageWork
+        )
+
         // LifeStream: Auto-start signal collector if enabled
         if (com.beemovil.lifestream.LifeStreamManager.isEnabled(this)) {
             com.beemovil.lifestream.LifeSignalCollector.schedule(this)

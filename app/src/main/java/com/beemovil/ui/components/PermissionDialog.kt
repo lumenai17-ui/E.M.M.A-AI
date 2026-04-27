@@ -78,6 +78,22 @@ enum class BeePermission(
         description = "Necesario para adjuntar fotos, PDFs, documentos y guardar archivos generados.",
         reason = "Permite al agente leer y guardar archivos, adjuntar documentos al chat y generar reportes.",
         color = Color(0xFF5AC8FA)
+    ),
+    CONTACTS(
+        androidPermission = Manifest.permission.READ_CONTACTS,
+        icon = Icons.Filled.Contacts,
+        title = "Contactos",
+        description = "Necesario para que Emma pueda buscar números en tu agenda y enviar mensajes.",
+        reason = "Permite que el agente encuentre automáticamente a tus contactos al usar WhatsApp o Email.",
+        color = Color(0xFFFF2D55)
+    ),
+    CALENDAR(
+        androidPermission = Manifest.permission.READ_CALENDAR,
+        icon = Icons.Filled.CalendarMonth,
+        title = "Calendario",
+        description = "Necesario para agendar eventos y revisar tu disponibilidad.",
+        reason = "Permite que el agente lea y escriba en tu calendario de Android.",
+        color = Color(0xFF00C7BE)
     )
 }
 

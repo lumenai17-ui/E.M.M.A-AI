@@ -192,7 +192,7 @@ class EmmaEngine(private val context: Context) {
         Desarrolla el texto completo y profesionalmente sin pedir permiso.
     """.trimIndent()
 
-    private var memoryDB: com.beemovil.memory.BeeMemoryDB? = null
+    private var personaManager: com.beemovil.memory.PersonaManager? = null
 
     val plugins = mutableMapOf<String, com.beemovil.plugins.EmmaPlugin>()
 
@@ -203,12 +203,12 @@ class EmmaEngine(private val context: Context) {
     suspend fun initialize() {
         Log.i(TAG, "Inicializando motor Multi-Agente LlmFactory...")
         
-        memoryDB = com.beemovil.memory.BeeMemoryDB(context)
+        personaManager = com.beemovil.memory.PersonaManager(context)
         
         // Registrar plugins base
         registerPlugin(com.beemovil.plugins.builtins.DateTimePlugin())
         registerPlugin(com.beemovil.plugins.builtins.WebSearchPlugin())
-        registerPlugin(com.beemovil.plugins.builtins.MemoryPlugin(memoryDB!!))
+        registerPlugin(com.beemovil.plugins.builtins.PersonaPlugin(personaManager!!))
         
         // Registrar hardware Tools (Phase 7 Telemetry/God Mode)
         registerPlugin(com.beemovil.plugins.builtins.FlashlightPlugin(context))
@@ -230,6 +230,7 @@ class EmmaEngine(private val context: Context) {
         registerPlugin(com.beemovil.plugins.builtins.HTMLForgePlugin(context))
         
         // Registrar Operators (Phase 10.4)
+        registerPlugin(com.beemovil.plugins.builtins.AddressBookPlugin(context))
         registerPlugin(com.beemovil.plugins.builtins.ContactManagerPlugin(context))
         registerPlugin(com.beemovil.plugins.builtins.CalendarOperatorPlugin(context))
         registerPlugin(com.beemovil.plugins.builtins.SystemGodModePlugin(context))
@@ -287,8 +288,8 @@ class EmmaEngine(private val context: Context) {
         
         try {
             if (messagesHistory.isEmpty()) {
-                val pastMemories = memoryDB?.getAllMemories()?.joinToString("\n") ?: ""
-                val memoryInjection = if (pastMemories.isNotBlank()) "\nMEMORIAS PREVIAS DEL USUARIO:\n$pastMemories\n" else ""
+                val soulJson = personaManager?.readSoul() ?: ""
+                val soulInjection = if (soulJson.isNotBlank() && soulJson != "{}") "\nDIRECTIVAS CORE (SOUL):\n$soulJson\n" else ""
                 
                 // Inject available agents list for A2A delegation
                 val agentInjection = try {
@@ -311,7 +312,7 @@ class EmmaEngine(private val context: Context) {
                     ""
                 }
                 
-                messagesHistory.add(ChatMessage("system", EMMA_SUPERVISOR_PROMPT + memoryInjection + agentInjection + crossContextInjection))
+                messagesHistory.add(ChatMessage("system", EMMA_SUPERVISOR_PROMPT + soulInjection + agentInjection + crossContextInjection))
             }
             delay(500)
         } catch (e: Exception) {
@@ -323,10 +324,10 @@ class EmmaEngine(private val context: Context) {
         Log.d(TAG, "Clearing volatile context...")
         historyMutex.withLock {
             messagesHistory.clear()
-            val pastMemories = memoryDB?.getAllMemories()?.joinToString("\n") ?: ""
-            val memoryInjection = if (pastMemories.isNotBlank()) "\nMEMORIAS PREVIAS DEL USUARIO:\n$pastMemories\n" else ""
+            val soulJson = personaManager?.readSoul() ?: ""
+            val soulInjection = if (soulJson.isNotBlank() && soulJson != "{}") "\nDIRECTIVAS CORE (SOUL):\n$soulJson\n" else ""
             val basePrompt = customSystemPrompt?.takeIf { it.isNotBlank() } ?: EMMA_SUPERVISOR_PROMPT
-            messagesHistory.add(ChatMessage("system", basePrompt + memoryInjection))
+            messagesHistory.add(ChatMessage("system", basePrompt + soulInjection))
         }
     }
 

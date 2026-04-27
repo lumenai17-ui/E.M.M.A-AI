@@ -4,7 +4,8 @@ import android.content.Context
 import android.util.Log
 import com.beemovil.llm.ChatMessage
 import com.beemovil.llm.LlmFactory
-import com.beemovil.memory.BeeMemoryDB
+import com.beemovil.memory.PersonaManager
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -80,9 +81,11 @@ class SessionSummaryGenerator(private val context: Context) {
      */
     fun persist(summary: SessionSummary, lat: Double, lng: Double) {
         try {
-            // 1. BeeMemoryDB (cross-app, shown to main E.M.M.A. chat)
-            val memoryDB = BeeMemoryDB(context)
-            memoryDB.saveMemory("Vision (${summary.mode.name}): ${summary.text}")
+            // 1. PersonaManager (cross-app, shown to main E.M.M.A. chat)
+            val personaManager = PersonaManager(context)
+            runBlocking(Dispatchers.IO) {
+                personaManager.addHeartMilestone("Vision (${summary.mode.name}): ${summary.text}")
+            }
 
             // 2. OfflineContextCache (GPS-indexed, 90 days)
             val cache = OfflineContextCache.getInstance(context)
