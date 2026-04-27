@@ -184,13 +184,13 @@ fun DashboardScreen(
             )
             MainModuleCard(
                 title = "Tareas",
-                subtitle = "Tus pendientes de Google Tasks",
+                subtitle = "Gestiona tus pendientes y recordatorios",
                 icon = Icons.Filled.TaskAlt,
                 onClick = { viewModel.currentScreen.value = "tasks" }
             )
             MainModuleCard(
                 title = "Correo",
-                subtitle = "Tu bandeja de Gmail",
+                subtitle = "Revisa tu bandeja de entrada",
                 icon = Icons.Filled.Email,
                 onClick = { viewModel.currentScreen.value = "email_inbox" }
             )
