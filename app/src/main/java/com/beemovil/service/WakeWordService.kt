@@ -175,9 +175,25 @@ class WakeWordService : Service() {
                 Log.e(TAG, "Failed to start BCS: ${e.message}")
             }
 
-            // Also try wake lock + full-screen notification to optionally show UI
-            try {
-                lastWakeLock?.takeIf { it.isHeld }?.release()
+            // Phase 3.4: Try to launch the Floating Assistant instead of annoying notification
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && android.provider.Settings.canDrawOverlays(applicationContext)) {
+                try {
+                    val floatIntent = Intent(applicationContext, FloatingEmmaService::class.java).apply {
+                        action = FloatingEmmaService.ACTION_START
+                    }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        startForegroundService(floatIntent)
+                    } else {
+                        startService(floatIntent)
+                    }
+                    Log.i(TAG, "Floating Assistant started successfully from Wake Word")
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to start FloatingEmmaService: ${e.message}")
+                }
+            } else {
+                // Also try wake lock + full-screen notification to optionally show UI if no overlay permission
+                try {
+                    lastWakeLock?.takeIf { it.isHeld }?.release()
                 val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
                 val wakeLock = pm.newWakeLock(
                     android.os.PowerManager.FULL_WAKE_LOCK or
@@ -236,6 +252,7 @@ class WakeWordService : Service() {
             } catch (e: Exception) {
                 Log.w(TAG, "Alert notification failed: ${e.message}")
             }
+            } // Close the Phase 3.4 else block
 
             // NOTE: BCS will resume WakeWordService when conversation ends
         }

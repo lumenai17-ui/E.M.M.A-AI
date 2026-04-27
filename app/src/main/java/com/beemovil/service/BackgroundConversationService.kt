@@ -57,11 +57,18 @@ class BackgroundConversationService : Service() {
         @Volatile
         var isRunning = false
             private set
+            
+        val stateFlow = kotlinx.coroutines.flow.MutableStateFlow(BCSState.IDLE)
     }
 
     // --- State ---
-    private enum class BCSState { IDLE, GREETING, LISTENING, PROCESSING, SPEAKING, PAUSED, STANDBY }
-    private var state = BCSState.IDLE
+    enum class BCSState { IDLE, GREETING, LISTENING, PROCESSING, SPEAKING, PAUSED, STANDBY }
+    
+
+
+    private var state: BCSState
+        get() = stateFlow.value
+        set(value) { stateFlow.value = value }
     private var turnCount = 0
     private var sessionStartMs = 0L
     private var engineReady = false

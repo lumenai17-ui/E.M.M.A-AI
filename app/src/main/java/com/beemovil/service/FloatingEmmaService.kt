@@ -18,6 +18,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -26,6 +32,8 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
@@ -117,9 +125,25 @@ class FloatingEmmaService : Service() {
                     val screenWidth = resources.displayMetrics.widthPixels
                     val bubbleSizePx = 60 * resources.displayMetrics.density
 
+                    val bcsState by BackgroundConversationService.stateFlow.collectAsState()
+
+                    // Expand bubble when active
+                    val size by androidx.compose.animation.core.animateDpAsState(
+                        targetValue = if (bcsState != BackgroundConversationService.BCSState.IDLE) 80.dp else 60.dp
+                    )
+                    
+                    val color by androidx.compose.animation.animateColorAsState(
+                        targetValue = when (bcsState) {
+                            BackgroundConversationService.BCSState.LISTENING -> Color(0xFFFF3B30) // Red
+                            BackgroundConversationService.BCSState.PROCESSING -> Color(0xFFFF9500) // Orange
+                            BackgroundConversationService.BCSState.SPEAKING -> Color(0xFF34C759) // Green
+                            else -> Color(0xFF5AC8FA) // Blue (Idle)
+                        }
+                    )
+
                     Box(
                         modifier = Modifier
-                            .size(60.dp)
+                            .size(size)
                             .pointerInput(Unit) {
                                 detectDragGestures(
                                     onDragEnd = {
@@ -147,17 +171,30 @@ class FloatingEmmaService : Service() {
                                 }
                             }
                             .background(
-                                color = Color(0xFF5AC8FA),
+                                color = color,
                                 shape = CircleShape
                             ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = "E",
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 24.sp
-                        )
+                        when (bcsState) {
+                            BackgroundConversationService.BCSState.LISTENING -> {
+                                Icon(Icons.Filled.Mic, contentDescription = "Listening", tint = Color.White)
+                            }
+                            BackgroundConversationService.BCSState.PROCESSING -> {
+                                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                            }
+                            BackgroundConversationService.BCSState.SPEAKING -> {
+                                Icon(Icons.Filled.GraphicEq, contentDescription = "Speaking", tint = Color.White)
+                            }
+                            else -> {
+                                Text(
+                                    text = "E",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 24.sp
+                                )
+                            }
+                        }
                     }
                 }
             }
