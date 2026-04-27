@@ -29,6 +29,12 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.animation.core.Animatable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 
 class FloatingEmmaService : Service() {
 
@@ -102,12 +108,44 @@ class FloatingEmmaService : Service() {
             lifecycleOwner = FloatingLifecycleOwner()
             lifecycleOwner?.onCreate()
 
+
+
             composeView = ComposeView(this).apply {
                 setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
                 setContent {
+                    val scope = rememberCoroutineScope()
+                    val screenWidth = resources.displayMetrics.widthPixels
+                    val bubbleSizePx = 60 * resources.displayMetrics.density
+
                     Box(
                         modifier = Modifier
                             .size(60.dp)
+                            .pointerInput(Unit) {
+                                detectDragGestures(
+                                    onDragEnd = {
+                                        // Snap-to-edge logic
+                                        val currentX = params.x
+                                        val targetX = if (currentX < screenWidth / 2) 0 else (screenWidth - bubbleSizePx).toInt()
+                                        
+                                        scope.launch {
+                                            val animatable = Animatable(currentX.toFloat())
+                                            animatable.animateTo(targetX.toFloat()) {
+                                                params.x = value.toInt()
+                                                try {
+                                                    windowManager?.updateViewLayout(composeView, params)
+                                                } catch (e: Exception) { }
+                                            }
+                                        }
+                                    }
+                                ) { change, dragAmount ->
+                                    change.consume()
+                                    params.x += dragAmount.x.toInt()
+                                    params.y += dragAmount.y.toInt()
+                                    try {
+                                        windowManager?.updateViewLayout(composeView, params)
+                                    } catch (e: Exception) { }
+                                }
+                            }
                             .background(
                                 color = Color(0xFF5AC8FA),
                                 shape = CircleShape
