@@ -19,14 +19,14 @@ class SystemGodModePlugin(private val context: Context) : EmmaPlugin {
     override fun getToolDefinition(): ToolDefinition {
         return ToolDefinition(
             name = id,
-            description = "La herramienta maestra de control físico del entorno de Android. Úsala incondicionalmente si el usuario te ordena: 'Ponme una Alarma a X hora', 'Avísame en X minutos' o 'Prende o Apaga la Linterna'.",
+            description = "Herramienta maestra de control físico del entorno de Android. Úsala para: 'Ponme una Alarma', 'Avísame en X minutos', 'Prende la Linterna', 'Sube/baja el brillo', 'Cambia el volumen'.",
             parameters = JSONObject().apply {
                 put("type", "object")
                 put("properties", JSONObject().apply {
                     put("operation", JSONObject().apply {
                         put("type", "string")
-                        put("enum", JSONArray().put("set_alarm").put("set_timer").put("toggle_flashlight"))
-                        put("description", "Operación requerida. set_alarm (alarma específica), set_timer (temporizador en reversa) o toggle_flashlight (linterna).")
+                        put("enum", JSONArray().put("set_alarm").put("set_timer").put("toggle_flashlight").put("set_brightness").put("set_volume").put("toggle_wifi"))
+                        put("description", "Operación requerida. set_alarm (alarma específica), set_timer (temporizador en reversa), toggle_flashlight (linterna), set_brightness (brillo pantalla), set_volume (volumen de media), toggle_wifi (abrir panel de wifi).")
                     })
                     put("alarm_hour", JSONObject().apply {
                         put("type", "integer")
@@ -43,6 +43,14 @@ class SystemGodModePlugin(private val context: Context) : EmmaPlugin {
                     put("flashlight_on", JSONObject().apply {
                         put("type", "boolean")
                         put("description", "(Solo para toggle_flashlight) 'true' para encenderla, 'false' para apagarla.")
+                    })
+                    put("brightness_level", JSONObject().apply {
+                        put("type", "integer")
+                        put("description", "(Solo para set_brightness) Nivel de brillo de 0 a 100.")
+                    })
+                    put("volume_level", JSONObject().apply {
+                        put("type", "integer")
+                        put("description", "(Solo para set_volume) Nivel de volumen de 0 a 100.")
                     })
                 })
                 put("required", JSONArray().put("operation"))
@@ -86,6 +94,49 @@ class SystemGodModePlugin(private val context: Context) : EmmaPlugin {
                         val cameraId = cameraManager.cameraIdList.firstOrNull() ?: return@withContext "El hardware del dispositivo no reporta una cámara válida."
                         cameraManager.setTorchMode(cameraId, turnOn)
                         "Linterna de poder físico " + (if (turnOn) "ENCENDIDA." else "APAGADA.")
+                    }
+                    "set_brightness" -> {
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M && !android.provider.Settings.System.canWrite(context)) {
+                            return@withContext "TOOL_CALL::request_permission::SYSTEM_SETTINGS"
+                        }
+                        val level = (args["brightness_level"] as? Number)?.toInt() ?: 50
+                        // Convert 0-100 to 0-255
+                        val sysLevel = (level.coerceIn(0, 100) * 255) / 100
+                        android.provider.Settings.System.putInt(
+                            context.contentResolver,
+                            android.provider.Settings.System.SCREEN_BRIGHTNESS_MODE,
+                            android.provider.Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL
+                        )
+                        android.provider.Settings.System.putInt(
+                            context.contentResolver,
+                            android.provider.Settings.System.SCREEN_BRIGHTNESS,
+                            sysLevel
+                        )
+                        "Brillo de pantalla ajustado al $level%."
+                    }
+                    "set_volume" -> {
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M && !android.provider.Settings.System.canWrite(context)) {
+                            return@withContext "TOOL_CALL::request_permission::SYSTEM_SETTINGS"
+                        }
+                        val level = (args["volume_level"] as? Number)?.toInt() ?: 50
+                        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+                        val maxVolume = audioManager.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
+                        val sysVolume = (level.coerceIn(0, 100) * maxVolume) / 100
+                        audioManager.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, sysVolume, android.media.AudioManager.FLAG_SHOW_UI)
+                        "Volumen multimedia ajustado al $level%."
+                    }
+                    "toggle_wifi" -> {
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                            val panelIntent = Intent(android.provider.Settings.Panel.ACTION_WIFI)
+                            panelIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                            context.startActivity(panelIntent)
+                            "El panel de WiFi se ha desplegado para que el usuario pueda interactuar con la red."
+                        } else {
+                            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as android.net.wifi.WifiManager
+                            val newState = if (wifiManager.isWifiEnabled) false else true
+                            wifiManager.isWifiEnabled = newState
+                            "WiFi físico ha sido " + (if (newState) "ENCENDIDO." else "APAGADO.")
+                        }
                     }
                     else -> "Operación desconocida: $operation"
                 }

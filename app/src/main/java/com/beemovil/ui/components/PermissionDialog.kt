@@ -102,6 +102,22 @@ enum class BeePermission(
         description = "Necesario para agendar eventos y revisar tu disponibilidad.",
         reason = "Permite que el agente lea y escriba en tu calendario de Android.",
         color = Color(0xFF00C7BE)
+    ),
+    SYSTEM_SETTINGS(
+        androidPermission = Manifest.permission.WRITE_SETTINGS,
+        icon = Icons.Filled.SettingsSystemDaydream,
+        title = "Ajustes del Sistema",
+        description = "Necesario para controlar el brillo, volumen y conexiones de red directamente.",
+        reason = "Otorga a E.M.M.A. la capacidad de actuar físicamente sobre los ajustes de tu teléfono sin que tengas que abrir menús.",
+        color = Color(0xFFFF9500)
+    ),
+    EXACT_ALARMS(
+        androidPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Manifest.permission.SCHEDULE_EXACT_ALARM else "android.permission.SET_ALARM",
+        icon = Icons.Filled.AccessAlarms,
+        title = "Alarmas Precisas",
+        description = "Necesario para ejecutar cronómetros y recordatorios en el milisegundo exacto.",
+        reason = "Desde Android 12, Google restringe alarmas exactas para ahorrar batería. E.M.M.A. necesita esta excepción para no llegar tarde a tus recordatorios.",
+        color = Color(0xFFFF3B30)
     )
 }
 
@@ -252,6 +268,18 @@ fun PermissionDialog(
                         onClick = {
                             if (permission == BeePermission.STORAGE_ALL_FILES && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                                 val intent = android.content.Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                                    data = android.net.Uri.parse("package:${context.packageName}")
+                                }
+                                context.startActivity(intent)
+                                onGranted()
+                            } else if (permission == BeePermission.SYSTEM_SETTINGS && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                                val intent = android.content.Intent(android.provider.Settings.ACTION_MANAGE_WRITE_SETTINGS).apply {
+                                    data = android.net.Uri.parse("package:${context.packageName}")
+                                }
+                                context.startActivity(intent)
+                                onGranted()
+                            } else if (permission == BeePermission.EXACT_ALARMS && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                val intent = android.content.Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
                                     data = android.net.Uri.parse("package:${context.packageName}")
                                 }
                                 context.startActivity(intent)

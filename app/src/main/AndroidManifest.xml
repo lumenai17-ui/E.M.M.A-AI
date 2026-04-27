@@ -43,6 +43,8 @@
     <uses-permission android:name="android.permission.SET_ALARM" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
 
     <!-- Telemetry & Sensors (Phase 7) -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
