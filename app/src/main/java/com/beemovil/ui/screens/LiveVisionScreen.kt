@@ -156,6 +156,9 @@ fun LiveVisionScreen(
     // R3-8: Session exit summary
     var showExitSummary by remember { mutableStateOf(false) }
     var exitSummaryText by remember { mutableStateOf("") }
+    // V11: Proactivity Heartbeat
+    var lastUserSpeechTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var lastProactiveTime by remember { mutableLongStateOf(0L) }
 
     // V6: Wire offline cache to context provider
     LaunchedEffect(Unit) {
@@ -244,10 +247,12 @@ fun LiveVisionScreen(
                 speedKmh = currentGpsData.speedKmh
             )
 
-            if (assessment.shouldNarrate) {
-                voiceController.narrate(result)
-                visionAssessor.markNarrated()
-            }
+            // V11 Phase 1: Mute the camera loop. It is now a silent observer.
+            // The Voice Engine (Boss) will handle conversation and proactive narration.
+            // if (assessment.shouldNarrate) {
+            //    voiceController.narrate(result)
+            //    visionAssessor.markNarrated()
+            // }
 
             // V7: Memory — save if notable
             if (assessment.shouldSave) {
@@ -397,7 +402,10 @@ fun LiveVisionScreen(
                 provider = provider,
                 systemPrompt = systemPrompt,
                 userPrompt = if (userQ != null) userQ else customPrompt,
-                mySessionId = mySessionId
+                mySessionId = mySessionId,
+                mode = selectedMode,
+                gpsContext = currentGpsData.address,
+                speedKmh = currentGpsData.speedKmh
             )
         }
     }
@@ -417,6 +425,68 @@ fun LiveVisionScreen(
         }
     }
 
+    // V11 Phase 3: The Proactivity Loop (Silence Heartbeat)
+    LaunchedEffect(isLiveActive) {
+        if (!isLiveActive) return@LaunchedEffect
+        while (isLiveActive) {
+            kotlinx.coroutines.delay(5_000L) // Pulse check every 5 seconds
+            if (!isLiveActive) break
+            
+            if (isMuted) continue
+
+            val silenceDuration = System.currentTimeMillis() - lastUserSpeechTime
+            val proactiveSilence = System.currentTimeMillis() - lastProactiveTime
+
+            // Trigger if user silent for 15s AND we haven't spoken proactively in 30s
+            if (silenceDuration > 15_000L && proactiveSilence > 30_000L) {
+                val latestEntry = com.beemovil.vision.VisionContextStream.getLatestEntry()
+                if (latestEntry != null) {
+                    val assessment = visionAssessor.assess(
+                        result = latestEntry.description,
+                        previousResults = conversation.getPreviousResults(),
+                        mode = selectedMode,
+                        speedKmh = latestEntry.speedKmh
+                    )
+                    
+                    if (assessment.shouldNarrate) {
+                        lastProactiveTime = System.currentTimeMillis()
+                        
+                        coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                            try {
+                                val voiceModel = prefs.getString("voice_model", viewModel.currentModel.value) ?: viewModel.currentModel.value
+                                val voiceProviderType = ModelRegistry.findModel(voiceModel)?.provider ?: viewModel.currentProvider.value
+                                val voiceApiKey = getApiKeyForProvider(context, voiceProviderType)
+                                val voiceProvider = LlmFactory.createProvider(voiceProviderType, voiceApiKey, voiceModel)
+                                
+                                val urgencyContext = if (assessment.category == com.beemovil.vision.VisionAssessor.Category.URGENT) "¡URGENTE!" else "Nota interesante:"
+                                val proactivePrompt = "El usuario ha estado en silencio. Tu Vigía de cámara reporta esto: [$urgencyContext ${latestEntry.description}].\nEres E.M.M.A. Advierte o comenta esto PROACTIVAMENTE al usuario en UNA SOLA frase natural. NO saludes. Ve directo al punto. (Ej: 'Cuidado con ese auto' o 'Oye, a tu derecha hay un restaurante'). Mantén el tono del modo: ${selectedMode.name}."
+                                
+                                val messages = listOf(
+                                    ChatMessage("system", proactivePrompt),
+                                    ChatMessage("user", "Dime si hay algo importante.")
+                                )
+                                
+                                val response = voiceProvider.complete(messages, emptyList())
+                                val resultText = response.text ?: ""
+                                
+                                if (resultText.isNotBlank()) {
+                                    conversation.addFrame(resultText)
+                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                        liveResult = "⚡ $resultText"
+                                        voiceController.narrate(resultText)
+                                        visionAssessor.markNarrated()
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                // Silent fail for proactive
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // ── V3: Sync voice controller state ──
     LaunchedEffect(isMuted, isNarrationEnabled) {
         voiceController.setMuted(isMuted)
@@ -430,6 +500,95 @@ fun LiveVisionScreen(
             liveResult = error
         }
         voiceController.onSpeechResult = { spokenText ->
+            // V11 Phase 2: Instant LLM Response Engine (The Boss)
+            val processVoiceQuery: (String) -> Unit = { text ->
+                lastUserSpeechTime = System.currentTimeMillis() // V11 Heartbeat tracking
+                conversation.addUserQuestion(text)
+                sessionState.addUserQuestion(text)
+                coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                    try {
+                        val voiceModel = prefs.getString("voice_model", viewModel.currentModel.value) ?: viewModel.currentModel.value
+                        val voiceProviderType = ModelRegistry.findModel(voiceModel)?.provider ?: viewModel.currentProvider.value
+                        val voiceApiKey = getApiKeyForProvider(context, voiceProviderType)
+                        val voiceProvider = LlmFactory.createProvider(voiceProviderType, voiceApiKey, voiceModel)
+                        
+                        val ctxBlock = contextOrchestrator.buildContextBlock(
+                            gpsData = currentGpsData,
+                            mode = selectedMode,
+                            sessionState = sessionState,
+                            memoryManager = memoryManager,
+                            temporalDetector = temporalDetector,
+                            previousResults = conversation.getPreviousResults(),
+                            intervalSeconds = intervalSeconds,
+                            weatherInfo = weatherInfo
+                        )
+
+                        val systemPrompt = conversation.buildSystemPrompt(
+                            mode = selectedMode,
+                            personality = if (selectedPersonality.id == "default") null else selectedPersonality,
+                            gpsData = currentGpsData,
+                            weatherInfo = weatherInfo,
+                            webContext = webContext.take(500),
+                            navUpdate = navUpdate,
+                            targetLanguage = targetLanguage,
+                            memoryContext = ctxBlock.memoryContext,
+                            temporalAlerts = ctxBlock.temporalContext,
+                            faceHint = currentFaceHint,
+                            sessionContext = ctxBlock.sessionContext,
+                            crossSystemContext = ctxBlock.crossSystemContext
+                        )
+                        
+                        val visionStreamText = com.beemovil.vision.VisionContextStream.buildContextForVoiceEngine()
+                        val snapshotRule = "\nREGLA ESPECIAL V11: Si el usuario te pide detalles visuales específicos que NO están en la bitácora (ej. leer una placa, un cartel pequeño, describir algo detallado), responde ÚNICAMENTE con la palabra: [SNAPSHOT_REQUIRED]."
+                        val finalPrompt = "$systemPrompt\n\n$visionStreamText$snapshotRule"
+                        
+                        val messages = listOf(
+                            ChatMessage("system", finalPrompt),
+                            ChatMessage("user", text)
+                        )
+                        
+                        var response = voiceProvider.complete(messages, emptyList())
+                        var resultText = response.text ?: ""
+                        
+                        if (resultText.contains("[SNAPSHOT_REQUIRED]")) {
+                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                voiceController.narrate("Mmm, a ver...")
+                                liveResult = "📸 Capturando en alta resolución..."
+                            }
+                            
+                            val capture = imageCapture
+                            if (capture != null) {
+                                val b64Image = captureLoop.takeSnapshotBase64(capture, cameraExecutor)
+                                if (b64Image != null) {
+                                    val snapMessages = listOf(
+                                        ChatMessage("system", "Eres E.M.M.A. El usuario te acaba de hacer una pregunta. Responde EXCLUSIVAMENTE basándote en la foto de alta resolución adjunta, que fue tomada en este preciso instante."),
+                                        ChatMessage("user", text, images = listOf(b64Image))
+                                    )
+                                    response = voiceProvider.complete(snapMessages, emptyList())
+                                    resultText = response.text ?: ""
+                                } else {
+                                    resultText = "Perdón, tuve un problema enfocando la cámara."
+                                }
+                            } else {
+                                resultText = "La cámara no está disponible en este momento."
+                            }
+                        }
+                        
+                        if (resultText.isNotBlank()) {
+                            conversation.addFrame(resultText)
+                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                liveResult = resultText
+                                voiceController.narrate(resultText)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            liveResult = "Error de voz: ${e.message}"
+                        }
+                    }
+                }
+            }
+
             // R3-1: voiceState auto-transitions via onStateChange -> PROCESSING
             // V4: Intent detection
             val intent = intentDetector.detect(spokenText)
@@ -460,8 +619,7 @@ fun LiveVisionScreen(
                     }
                 }
                 VisionIntentDetector.IntentType.POI_SEARCH -> {
-                    conversation.addUserQuestion(spokenText)
-                    sessionState.addUserQuestion(spokenText)
+                    processVoiceQuery(spokenText)
                 }
                 // V7: Action intents → VisionBridge
                 VisionIntentDetector.IntentType.ACTION -> {
@@ -479,13 +637,11 @@ fun LiveVisionScreen(
                             liveResult = bridgeResult
                         }
                     } else {
-                        conversation.addUserQuestion(spokenText)
-                        sessionState.addUserQuestion(spokenText)
+                        processVoiceQuery(spokenText)
                     }
                 }
                 VisionIntentDetector.IntentType.QUESTION -> {
-                    conversation.addUserQuestion(spokenText)
-                    sessionState.addUserQuestion(spokenText)
+                    processVoiceQuery(spokenText)
                 }
             }
         }
@@ -592,6 +748,8 @@ fun LiveVisionScreen(
                 },
                 modifier = Modifier.fillMaxSize()
             )
+            // V11: Dim overlay to emphasize Voice-First UI
+            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.75f)))
         } else {
             // Pocket mode: dark placeholder, camera off
             Box(
@@ -651,9 +809,9 @@ fun LiveVisionScreen(
                     Icon(Icons.Filled.ArrowBack, "Back", tint = Color.White, modifier = Modifier.size(22.dp))
                 }
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Live Vision", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 15.sp)
+                    Text("E.M.M.A. Vision", fontWeight = FontWeight.Black, color = Color.White, fontSize = 16.sp)
                     val modelName = ModelRegistry.findModel(selectedModel)?.name ?: selectedModel
-                    Text(modelName, fontSize = 10.sp, color = Color.White.copy(alpha = 0.7f),
+                    Text("Vigía: $modelName | Jefe: Voz Activa", fontSize = 10.sp, color = Color(0xFF00E676).copy(alpha = 0.9f),
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 // Status badge (compact)
@@ -1104,44 +1262,43 @@ fun LiveVisionScreen(
             }
         }
 
-        // ── Result overlay (glassmorphism, above controls) ── BUG-1 FIX: maxHeight + proper padding
+        // ── V11 Voice-First Result Overlay ──
         if (liveResult.isNotBlank()) {
             Box(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
+                    .align(Alignment.Center)
                     .fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, bottom = 160.dp)  // BUG-1 FIX: Raised above controls + mode chip
+                    .padding(horizontal = 24.dp)
             ) {
                 Surface(
-                    color = Color.Black.copy(alpha = 0.65f),
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth()
-                        .heightIn(max = 140.dp)  // BUG-1 FIX: Constrain height
+                    color = Color.Black.copy(alpha = 0.4f),
+                    shape = RoundedCornerShape(24.dp),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp, max = 300.dp)
                 ) {
                     Column(
                         modifier = Modifier
-                            .padding(14.dp)
-                            .verticalScroll(rememberScrollState())  // BUG-1 FIX: Scroll if content overflows
+                            .padding(24.dp)
+                            .verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.AutoAwesome, "AI", tint = Color(0xFFF5A623), modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("E.M.M.A.", fontSize = 11.sp, color = Color(0xFFF5A623), fontWeight = FontWeight.Bold)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                            Icon(Icons.Filled.AutoAwesome, "AI", tint = Color(0xFFF5A623), modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("E.M.M.A. Voz", fontSize = 13.sp, color = Color(0xFFF5A623), fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                             if (selectedPersonality.id != "default") {
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("${selectedPersonality.emoji} ${selectedPersonality.name}", fontSize = 10.sp, color = Color.White.copy(alpha = 0.5f))
-                            }
-                            Spacer(modifier = Modifier.weight(1f))
-                            if (isMuted) {
-                                Icon(Icons.Filled.VolumeOff, "Muted", tint = Color.Gray, modifier = Modifier.size(14.dp))
+                                Text("${selectedPersonality.emoji} ${selectedPersonality.name}", fontSize = 12.sp, color = Color.White.copy(alpha = 0.5f))
                             }
                         }
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             liveResult,
-                            fontSize = 13.sp,
+                            fontSize = 18.sp,
                             color = Color.White,
-                            lineHeight = 19.sp
+                            textAlign = TextAlign.Center,
+                            lineHeight = 26.sp,
+                            fontWeight = FontWeight.Medium
                         )
                     }
                 }

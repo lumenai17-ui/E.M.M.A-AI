@@ -125,7 +125,10 @@ class VisionCaptureLoop(private val context: Context) {
         provider: LlmProvider,
         systemPrompt: String,
         userPrompt: String,
-        mySessionId: Long
+        mySessionId: Long,
+        mode: VisionMode = VisionMode.GENERAL,
+        gpsContext: String = "",
+        speedKmh: Float = 0f
     ) {
         if (sessionId.get() != mySessionId) return
         if (isProcessing.get()) return
@@ -146,11 +149,6 @@ class VisionCaptureLoop(private val context: Context) {
                     imageProxy.close() // Release camera immediately
 
                     // V11: Apply sensor rotation correction
-                    // Android camera sensors are physically mounted in landscape.
-                    // Without this, all bitmaps arrive rotated 90° causing:
-                    // - LLM narrates wrong left/right directions
-                    // - Timelapse videos render sideways
-                    // - Scanner captures are rotated
                     val bitmap = if (rotationDegrees != 0) {
                         val matrix = android.graphics.Matrix()
                         matrix.postRotate(rotationDegrees.toFloat())
@@ -177,13 +175,6 @@ class VisionCaptureLoop(private val context: Context) {
                             val bitmapCopy = bitmap.copy(bitmap.config ?: android.graphics.Bitmap.Config.ARGB_8888, false)
                             onFrameCaptured?.invoke(bitmapCopy)
 
-                            // FR-1: Barcode scan in parallel for Shopping mode.
-                            // M-02: this callback is the CameraX executor, not a coroutine
-                            // context. We still need barcodeContext synchronously to inject
-                            // it into the prompt, so we block — but on Dispatchers.IO so
-                            // the ML Kit suspend body (which itself uses suspendCancellableCoroutine
-                            // + IO HTTP lookups) doesn't run on the camera worker thread.
-                            // Future: refactor captureAndAnalyze to suspend so we can drop runBlocking.
                             var barcodeContext = ""
                             if (barcodeScanEnabled) {
                                 try {
@@ -204,7 +195,6 @@ class VisionCaptureLoop(private val context: Context) {
 
                             val b64 = resizeAndEncode(bitmap)
 
-                            // FR-1: Inject barcode product info into prompt
                             val enrichedPrompt = if (barcodeContext.isNotBlank()) {
                                 "$userPrompt\n\n$barcodeContext"
                             } else userPrompt
@@ -226,6 +216,15 @@ class VisionCaptureLoop(private val context: Context) {
                                 lastFrameHash = result
                                 lastResult = result
                                 onResult?.invoke(result)
+                                
+                                // V11: Push to Memory Tube
+                                VisionContextStream.addVisionEntry(
+                                    mode = mode,
+                                    description = result,
+                                    gpsContext = gpsContext,
+                                    speedKmh = speedKmh
+                                )
+
                                 // V10: Reset error count on success
                                 if (consecutiveErrors > 0) {
                                     Log.i(TAG, "Recovered after $consecutiveErrors errors")
@@ -275,7 +274,55 @@ class VisionCaptureLoop(private val context: Context) {
     }
 
     /**
-     * Resize bitmap to 512px max and encode to base64 JPEG.
+     * V11: On-Demand Snapshot for the Voice Engine.
+     * Takes a single high-res picture and returns it as a Base64 string.
+     */
+    suspend fun takeSnapshotBase64(imageCapture: ImageCapture, executor: Executor): String? = kotlinx.coroutines.suspendCancellableCoroutine { cont ->
+        imageCapture.takePicture(executor, object : ImageCapture.OnImageCapturedCallback() {
+            override fun onCaptureSuccess(imageProxy: ImageProxy) {
+                try {
+                    val rawBitmap = imageProxy.toBitmap()
+                    val rotationDegrees = imageProxy.imageInfo.rotationDegrees
+                    imageProxy.close()
+
+                    val bitmap = if (rotationDegrees != 0) {
+                        val matrix = android.graphics.Matrix()
+                        matrix.postRotate(rotationDegrees.toFloat())
+                        val rotated = Bitmap.createBitmap(rawBitmap, 0, 0, rawBitmap.width, rawBitmap.height, matrix, true)
+                        rawBitmap.recycle()
+                        rotated
+                    } else rawBitmap
+
+                    // Resize and encode synchronously inside the callback thread
+                    val maxDim = 1024 // V11 Snapshot is higher res than the loop (768)
+                    val scale = minOf(maxDim.toFloat() / bitmap.width, maxDim.toFloat() / bitmap.height, 1f)
+                    val resized = Bitmap.createScaledBitmap(
+                        bitmap,
+                        maxOf(1, (bitmap.width * scale).toInt()),
+                        maxOf(1, (bitmap.height * scale).toInt()),
+                        true
+                    )
+                    bitmap.recycle()
+
+                    val baos = ByteArrayOutputStream()
+                    resized.compress(Bitmap.CompressFormat.JPEG, 85, baos)
+                    val b64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
+                    resized.recycle()
+
+                    cont.resumeWith(Result.success(b64))
+                } catch (e: Exception) {
+                    cont.resumeWith(Result.success(null))
+                }
+            }
+
+            override fun onError(exception: ImageCaptureException) {
+                cont.resumeWith(Result.success(null))
+            }
+        })
+    }
+
+    /**
+     * Resize bitmap to 768px max and encode to base64 JPEG.
      * Recycles the original bitmap immediately.
      */
     private fun resizeAndEncode(bitmap: Bitmap): String {
