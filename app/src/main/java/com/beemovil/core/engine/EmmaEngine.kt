@@ -232,6 +232,7 @@ class EmmaEngine(private val context: Context) {
         // Registrar Operators (Phase 10.4)
         registerPlugin(com.beemovil.plugins.builtins.AddressBookPlugin(context))
         registerPlugin(com.beemovil.plugins.builtins.ContactManagerPlugin(context))
+        registerPlugin(com.beemovil.plugins.builtins.CallLogPlugin(context))
         registerPlugin(com.beemovil.plugins.builtins.CalendarOperatorPlugin(context))
         registerPlugin(com.beemovil.plugins.builtins.SystemGodModePlugin(context))
 

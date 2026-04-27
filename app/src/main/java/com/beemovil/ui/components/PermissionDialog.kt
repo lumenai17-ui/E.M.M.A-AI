@@ -95,6 +95,14 @@ enum class BeePermission(
         reason = "Permite que el agente encuentre automáticamente a tus contactos al usar WhatsApp o Email.",
         color = Color(0xFFFF2D55)
     ),
+    CALL_LOGS(
+        androidPermission = Manifest.permission.READ_CALL_LOG,
+        icon = Icons.Filled.RecentActors,
+        title = "Registro de Llamadas",
+        description = "Necesario para revisar llamadas perdidas y recientes.",
+        reason = "Permite a E.M.M.A. informarte quién te ha llamado mientras estabas ocupado.",
+        color = Color(0xFF5856D6)
+    ),
     CALENDAR(
         androidPermission = Manifest.permission.READ_CALENDAR,
         icon = Icons.Filled.CalendarMonth,
