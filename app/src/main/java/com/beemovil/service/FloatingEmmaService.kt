@@ -13,6 +13,22 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.beemovil.MainActivity
 import com.beemovil.R
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeViewModelStoreOwner
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 
 class FloatingEmmaService : Service() {
 
@@ -46,6 +62,10 @@ class FloatingEmmaService : Service() {
         return START_STICKY
     }
 
+    private var windowManager: android.view.WindowManager? = null
+    private var composeView: ComposeView? = null
+    private var lifecycleOwner: FloatingLifecycleOwner? = null
+
     private fun startFloatingAssistant() {
         if (isRunning) return
         
@@ -54,12 +74,84 @@ class FloatingEmmaService : Service() {
         startForeground(NOTIFICATION_ID, notification)
         
         isRunning = true
-        // TODO: Sub-Fase 3.2 - Aquí inyectaremos el WindowManager y Jetpack Compose View
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !android.provider.Settings.canDrawOverlays(this)) {
+            Log.e(TAG, "No overlay permission. Cannot draw bubble.")
+            return
+        }
+
+        try {
+            windowManager = getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager
+            
+            val params = android.view.WindowManager.LayoutParams(
+                android.view.WindowManager.LayoutParams.WRAP_CONTENT,
+                android.view.WindowManager.LayoutParams.WRAP_CONTENT,
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) 
+                    android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY 
+                else 
+                    android.view.WindowManager.LayoutParams.TYPE_PHONE,
+                android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or 
+                android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                android.graphics.PixelFormat.TRANSLUCENT
+            )
+            
+            params.gravity = android.view.Gravity.TOP or android.view.Gravity.START
+            params.x = 0
+            params.y = 200
+
+            lifecycleOwner = FloatingLifecycleOwner()
+            lifecycleOwner?.onCreate()
+
+            composeView = ComposeView(this).apply {
+                setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+                setContent {
+                    Box(
+                        modifier = Modifier
+                            .size(60.dp)
+                            .background(
+                                color = Color(0xFF5AC8FA),
+                                shape = CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "E",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 24.sp
+                        )
+                    }
+                }
+            }
+
+            composeView!!.setViewTreeLifecycleOwner(lifecycleOwner)
+            composeView!!.setViewTreeViewModelStoreOwner(lifecycleOwner)
+            composeView!!.setViewTreeSavedStateRegistryOwner(lifecycleOwner)
+
+            windowManager?.addView(composeView, params)
+            lifecycleOwner?.onResume()
+            Log.i(TAG, "Burbuja de Compose inyectada exitosamente en WindowManager.")
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error inyectando burbuja: ${e.message}")
+        }
     }
 
     private fun stopFloatingAssistant() {
         Log.i(TAG, "Deteniendo Asistente Flotante")
-        // TODO: Sub-Fase 3.2 - Remover vista del WindowManager aquí
+        try {
+            lifecycleOwner?.onPause()
+            lifecycleOwner?.onDestroy()
+            if (composeView != null && windowManager != null) {
+                windowManager?.removeView(composeView)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error removiendo burbuja: ${e.message}")
+        } finally {
+            composeView = null
+            windowManager = null
+            lifecycleOwner = null
+        }
         
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
