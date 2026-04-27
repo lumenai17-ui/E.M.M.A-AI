@@ -112,7 +112,7 @@ class MainActivity : ComponentActivity() {
                         containerColor = if (isDark) BeeBlack else LightBackground,
                         bottomBar = {
                             val screen = viewModel.currentScreen.value
-                            if (screen in listOf("dashboard", "conversations", "tasks", "email_inbox", "settings")) {
+                            if (screen in listOf("dashboard", "conversations", "tasks", "settings")) {
                                 PremiumBottomNav(
                                     currentScreen = screen,
                                     onNavigate = { viewModel.currentScreen.value = it }
