@@ -43,6 +43,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
+import androidx.lifecycle.lifecycleScope
 
 class FloatingEmmaService : Service() {
 
@@ -115,6 +116,20 @@ class FloatingEmmaService : Service() {
 
             lifecycleOwner = FloatingLifecycleOwner()
             lifecycleOwner?.onCreate()
+
+            // Ghost Mode Auto-Destruct
+            lifecycleOwner?.lifecycleScope?.launch {
+                BackgroundConversationService.stateFlow.collect { state ->
+                    if (state == BackgroundConversationService.BCSState.IDLE) {
+                        // When conversation stops, wait 2 seconds and vanish (Ghost mode)
+                        kotlinx.coroutines.delay(2000)
+                        if (BackgroundConversationService.stateFlow.value == BackgroundConversationService.BCSState.IDLE) {
+                            Log.i(TAG, "Ghost Mode: Conversation IDLE. Auto-destroying bubble.")
+                            stopFloatingAssistant()
+                        }
+                    }
+                }
+            }
 
 
 
