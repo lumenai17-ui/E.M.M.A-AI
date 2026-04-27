@@ -241,10 +241,7 @@ class EmmaEngine(private val context: Context) {
         registerPlugin(com.beemovil.plugins.builtins.WebApiFetcherPlugin())
 
         // Registrar Google Ecosystem (Sprint 4)
-        registerPlugin(com.beemovil.plugins.builtins.GmailPlugin(context))
         registerPlugin(com.beemovil.plugins.builtins.PersonalEmailPlugin(context))
-        registerPlugin(com.beemovil.plugins.builtins.GoogleCalendarPlugin(context))
-        registerPlugin(com.beemovil.plugins.builtins.GoogleTasksPlugin(context))
 
         // Registrar Image Generation (Sprint 6)
         registerPlugin(com.beemovil.plugins.builtins.ImageGenerationPlugin(context))

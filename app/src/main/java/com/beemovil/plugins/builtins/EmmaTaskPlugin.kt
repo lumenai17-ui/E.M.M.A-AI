@@ -569,33 +569,47 @@ class EmmaTaskPlugin(private val context: Context) : EmmaPlugin {
             if (f.exists()) f.absolutePath else null
         }
 
-        val emailService = com.beemovil.email.EmailService(context)
         val subject = "📋 Tarea: ${task.title}"
 
         try {
-            emailService.sendEmail(to, subject, body)
-            val attLabel = if (attachPaths.isNotEmpty()) " con ${attachPaths.size} adjunto(s)" else ""
-            return "✅ Tarea '${task.title}' enviada por email a $to$attLabel."
-        } catch (e: Exception) {
-            // Try with full config and attachments
-            try {
-                val securePrefs = com.beemovil.security.SecurePrefs.get(context)
-                val prefs = context.getSharedPreferences("beemovil", android.content.Context.MODE_PRIVATE)
-                val email = securePrefs.getString("email_address", "") ?: ""
-                val password = securePrefs.getString("email_password", "") ?: ""
-                val config = com.beemovil.email.EmailService.EmailConfig(
-                    prefs.getString("email_imap_host", "") ?: "",
-                    prefs.getInt("email_imap_port", 993),
-                    prefs.getString("email_smtp_host", "") ?: "",
-                    prefs.getInt("email_smtp_port", 587)
-                )
-                val ok = emailService.sendEmail(email, password, config, to, subject, body, attachmentPaths = attachPaths)
-                if (ok) {
-                    val attLabel = if (attachPaths.isNotEmpty()) " con ${attachPaths.size} adjunto(s)" else ""
-                    return "✅ Tarea '${task.title}' enviada por email a $to$attLabel."
+            val intent = android.content.Intent(if (attachPaths.size > 1) android.content.Intent.ACTION_SEND_MULTIPLE else android.content.Intent.ACTION_SEND).apply {
+                type = "message/rfc822"
+                putExtra(android.content.Intent.EXTRA_EMAIL, arrayOf(to))
+                putExtra(android.content.Intent.EXTRA_SUBJECT, subject)
+                putExtra(android.content.Intent.EXTRA_TEXT, body)
+                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                
+                if (attachPaths.isNotEmpty()) {
+                    if (attachPaths.size == 1) {
+                        val uri = androidx.core.content.FileProvider.getUriForFile(
+                            context,
+                            "${context.packageName}.fileprovider",
+                            java.io.File(attachPaths.first())
+                        )
+                        putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                    } else {
+                        val uris = attachPaths.map { path ->
+                            androidx.core.content.FileProvider.getUriForFile(
+                                context,
+                                "${context.packageName}.fileprovider",
+                                java.io.File(path)
+                            )
+                        }
+                        putParcelableArrayListExtra(android.content.Intent.EXTRA_STREAM, java.util.ArrayList(uris))
+                    }
+                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
-            } catch (_: Exception) {}
-            return "❌ Error enviando tarea por email: ${e.message}"
+            }
+
+            if (intent.resolveActivity(context.packageManager) != null) {
+                context.startActivity(intent)
+                val attLabel = if (attachPaths.isNotEmpty()) " con ${attachPaths.size} adjunto(s)" else ""
+                return "✅ He preparado el correo para $to$attLabel. Por favor revisa y envía."
+            } else {
+                return "❌ Error: No se encontró una aplicación de correo electrónico instalada."
+            }
+        } catch (e: Exception) {
+            return "❌ Error preparando el correo: ${e.message}"
         }
     }
 }

@@ -3,10 +3,6 @@ package com.beemovil.vision
 import android.content.Context
 import android.util.Log
 import com.beemovil.database.ChatHistoryDB
-import com.beemovil.google.GoogleAuthManager
-import com.beemovil.google.GoogleCalendarService
-import com.beemovil.google.GoogleGmailService
-import com.beemovil.google.GoogleTasksService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -230,115 +226,16 @@ class CrossContextEngine(private val context: Context) {
     // ═══════════════════════════════════════════════════════
 
     private fun refreshTasksIfNeeded(now: Long) {
-        if (now - cachedTasksTime < CACHE_TTL_TASKS) return
-        try {
-            val auth = GoogleAuthManager(context)
-            val token = auth.getAccessToken() ?: return
-            val service = GoogleTasksService(token)
-            val tasks = service.listTasks(showCompleted = false, maxResults = 10)
-            cachedTasks = tasks.map { task ->
-                val isDueSoon = task.dueDate?.let { (it - now) < INSTRUCTION_EXPIRY } ?: false
-                TaskSignal(
-                    title = task.title,
-                    notes = task.notes.take(50),
-                    dueDate = task.dueDate,
-                    isDueSoon = isDueSoon
-                )
-            }
-            cachedTasksTime = now
-            Log.d(TAG, "Tasks refreshed: ${cachedTasks.size}")
-        } catch (e: Exception) {
-            Log.w(TAG, "Tasks refresh failed: ${e.message}")
-        }
+        // Disabled: App is now completely decoupled from Google Workspace/IMAP
     }
 
     private fun refreshEmailsIfNeeded(now: Long) {
-        if (now - cachedEmailsTime < CACHE_TTL_EMAIL) return
-
-        val emails = mutableListOf<EmailSignal>()
-
-        // Source 1: Gmail
-        try {
-            val auth = GoogleAuthManager(context)
-            val token = auth.getAccessToken()
-            if (token != null) {
-                val gmail = GoogleGmailService(token)
-                val inbox = gmail.listInbox(maxResults = 5, query = "is:unread in:inbox")
-                inbox.forEach { msg ->
-                    val ageMs = now - msg.date
-                    emails.add(EmailSignal(
-                        from = msg.from.take(30),
-                        subject = msg.subject.take(50),
-                        isUnread = msg.isUnread,
-                        ageHours = (ageMs / 3_600_000).toInt(),
-                        source = "gmail"
-                    ))
-                }
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Gmail refresh failed: ${e.message}")
-        }
-
-        // Source 2: Personal IMAP
-        try {
-            val securePrefs = com.beemovil.security.SecurePrefs.get(context)
-            val prefs = context.getSharedPreferences("beemovil", Context.MODE_PRIVATE)
-            val emailAddr = securePrefs.getString("email_address", "") ?: ""
-            val password = securePrefs.getString("email_password", "") ?: ""
-            val imapHost = prefs.getString("email_imap_host", "") ?: ""
-
-            if (emailAddr.isNotBlank() && password.isNotBlank() && imapHost.isNotBlank()) {
-                val config = com.beemovil.email.EmailService.EmailConfig(
-                    imapHost = imapHost,
-                    imapPort = prefs.getInt("email_imap_port", 993),
-                    smtpHost = prefs.getString("email_smtp_host", "") ?: "",
-                    smtpPort = prefs.getInt("email_smtp_port", 587)
-                )
-                val service = com.beemovil.email.EmailService(context)
-                val inbox = service.fetchInbox(emailAddr, password, config, limit = 5, unreadOnly = true)
-                inbox.forEach { msg ->
-                    val ageMs = now - msg.date.time
-                    emails.add(EmailSignal(
-                        from = msg.from.take(30),
-                        subject = msg.subject.take(50),
-                        isUnread = !msg.isRead,
-                        ageHours = (ageMs / 3_600_000).toInt(),
-                        source = "personal"
-                    ))
-                }
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Personal email refresh failed: ${e.message}")
-        }
-
-        cachedEmails = emails
-        cachedEmailsTime = now
-        Log.d(TAG, "Emails refreshed: ${emails.size} (gmail + personal)")
+        // Disabled: App is now completely decoupled from Google Workspace/IMAP
     }
 
     private fun refreshCalendarIfNeeded(now: Long) {
-        if (now - cachedEventsTime < CACHE_TTL_CALENDAR) return
-        try {
-            val auth = GoogleAuthManager(context)
-            val token = auth.getAccessToken() ?: return
-            val service = GoogleCalendarService(token)
-            val events = service.listUpcomingEvents(maxResults = 5, daysAhead = 2)
-            val sdf = java.text.SimpleDateFormat("EEE HH:mm", java.util.Locale.getDefault())
-            cachedEvents = events.map { event ->
-                val isWithin24h = (event.startTime - now) < INSTRUCTION_EXPIRY
-                EventSignal(
-                    title = event.title,
-                    location = event.location,
-                    startTime = event.startTime,
-                    isWithin24h = isWithin24h,
-                    formattedTime = sdf.format(java.util.Date(event.startTime))
-                )
-            }
-            cachedEventsTime = now
-            Log.d(TAG, "Calendar refreshed: ${cachedEvents.size} events")
-        } catch (e: Exception) {
-            Log.w(TAG, "Calendar refresh failed: ${e.message}")
-        }
+        // Disabled: App is now completely decoupled from Google Workspace/IMAP
+        // Future: Use Android native CalendarProvider via PermissionGate
     }
 
     // ═══════════════════════════════════════════════════════

@@ -152,9 +152,7 @@ class MainActivity : ComponentActivity() {
                                     "tasks" -> com.beemovil.ui.screens.TasksScreen(
                                         viewModel = viewModel
                                     )
-                                    "email_inbox" -> com.beemovil.ui.screens.EmailInboxScreen(
-                                        viewModel = viewModel
-                                    )
+
                                     "settings" -> SettingsScreen(
                                         viewModel = viewModel,
                                         onBack = { viewModel.currentScreen.value = "dashboard" }
