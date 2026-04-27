@@ -41,7 +41,7 @@ class EmmaTaskPlugin(private val context: Context) : EmmaPlugin {
                         put("enum", JSONArray()
                             .put("create").put("list").put("complete")
                             .put("update").put("delete").put("assign")
-                            .put("add_subtask").put("search").put("attach"))
+                            .put("add_subtask").put("search").put("attach").put("email_task"))
                         put("description", "Acción a ejecutar sobre las tareas.")
                     })
                     put("title", JSONObject().apply {
@@ -111,6 +111,10 @@ class EmmaTaskPlugin(private val context: Context) : EmmaPlugin {
                         put("type", "string")
                         put("description", "Nombre legible del archivo (opcional, se extrae del path si no se da).")
                     })
+                    put("to", JSONObject().apply {
+                        put("type", "string")
+                        put("description", "Email del destinatario (para action='email_task'). Requerido para enviar tarea por correo.")
+                    })
                 })
                 put("required", JSONArray().put("action"))
             }
@@ -131,7 +135,8 @@ class EmmaTaskPlugin(private val context: Context) : EmmaPlugin {
                     "add_subtask" -> addSubtask(args)
                     "search" -> searchTasks(args)
                     "attach" -> attachFile(args)
-                    else -> "Acción '$action' no reconocida. Usa: create, list, complete, update, delete, assign, add_subtask, search, attach."
+                    "email_task" -> emailTask(args)
+                    else -> "Acción '$action' no reconocida. Usa: create, list, complete, update, delete, assign, add_subtask, search, attach, email_task."
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Task plugin error: ${e.message}", e)
@@ -522,5 +527,75 @@ class EmmaTaskPlugin(private val context: Context) : EmmaPlugin {
             sb.appendLine("   ID: ${t.id.take(8)}")
         }
         return sb.toString()
+    }
+
+    // ═══════════════════════════════════════
+    // EMAIL TASK
+    // ═══════════════════════════════════════
+    private suspend fun emailTask(args: Map<String, Any>): String {
+        val to = args["to"] as? String ?: return "❌ Falta el email del destinatario (parámetro 'to')."
+        val taskId = args["task_id"] as? String
+        val query = args["query"] as? String ?: args["title"] as? String
+
+        val task = when {
+            taskId != null -> dao.getTaskById(taskId)
+            query != null -> dao.searchTasks(query).firstOrNull()
+            else -> return "❌ Necesito task_id o query para identificar la tarea."
+        } ?: return "❌ No encontré la tarea."
+
+        val subs = dao.getSubtasks(task.id)
+        val attachments = dao.getAttachments(task.id)
+
+        val sdf = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
+        val body = buildString {
+            appendLine("📋 Tarea: ${task.title}")
+            appendLine("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            if (task.notes.isNotBlank()) appendLine("📝 ${task.notes}")
+            appendLine("📅 Estado: ${task.status}")
+            if (task.dueDate != null) appendLine("📅 Vence: ${sdf.format(Date(task.dueDate))}")
+            val aLabel = when (task.assigneeType) { "user" -> "Yo"; "emma" -> "Emma"; else -> task.assignee }
+            appendLine("👤 Asignada a: $aLabel")
+            if (!task.tags.isNullOrBlank()) appendLine("🏷️ Tags: ${task.tags}")
+            if (subs.isNotEmpty()) {
+                appendLine("\n☑ Sub-tareas (${subs.count { it.completed }}/${subs.size}):")
+                subs.forEach { s -> appendLine("  ${if (s.completed) "✅" else "⬜"} ${s.title}") }
+            }
+            if (attachments.isNotEmpty()) appendLine("\n📎 Adjuntos: ${attachments.size} archivo(s)")
+            appendLine("\n— Enviado desde E.M.M.A. AI")
+        }
+
+        val attachPaths = attachments.mapNotNull { att ->
+            val f = java.io.File(att.filePath)
+            if (f.exists()) f.absolutePath else null
+        }
+
+        val emailService = com.beemovil.email.EmailService(context)
+        val subject = "📋 Tarea: ${task.title}"
+
+        try {
+            emailService.sendEmail(to, subject, body)
+            val attLabel = if (attachPaths.isNotEmpty()) " con ${attachPaths.size} adjunto(s)" else ""
+            return "✅ Tarea '${task.title}' enviada por email a $to$attLabel."
+        } catch (e: Exception) {
+            // Try with full config and attachments
+            try {
+                val securePrefs = com.beemovil.security.SecurePrefs.get(context)
+                val prefs = context.getSharedPreferences("beemovil", android.content.Context.MODE_PRIVATE)
+                val email = securePrefs.getString("email_address", "") ?: ""
+                val password = securePrefs.getString("email_password", "") ?: ""
+                val config = com.beemovil.email.EmailService.EmailConfig(
+                    prefs.getString("email_imap_host", "") ?: "",
+                    prefs.getInt("email_imap_port", 993),
+                    prefs.getString("email_smtp_host", "") ?: "",
+                    prefs.getInt("email_smtp_port", 587)
+                )
+                val ok = emailService.sendEmail(email, password, config, to, subject, body, attachmentPaths = attachPaths)
+                if (ok) {
+                    val attLabel = if (attachPaths.isNotEmpty()) " con ${attachPaths.size} adjunto(s)" else ""
+                    return "✅ Tarea '${task.title}' enviada por email a $to$attLabel."
+                }
+            } catch (_: Exception) {}
+            return "❌ Error enviando tarea por email: ${e.message}"
+        }
     }
 }

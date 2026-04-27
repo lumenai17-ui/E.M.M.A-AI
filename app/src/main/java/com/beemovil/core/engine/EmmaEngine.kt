@@ -94,6 +94,10 @@ class EmmaEngine(private val context: Context) {
         - Si dice 'envía un email desde mi correo' → 'personal_email' con action 'send'
         - Si dice 'envía desde Gmail' → 'google_gmail' con action 'send'
         - Para contar no leídos → 'personal_email' con action 'unread_count'
+        - ADJUNTOS EN EMAIL: Puedes adjuntar archivos al enviar emails.
+          → 'personal_email' con action 'send', attachment_paths='ruta1,ruta2'
+          → Usa los paths devueltos por otros plugins (export_pdf, generate_image, etc.)
+          → Ejemplo: si generaste un PDF en /data/.../report.pdf, pásalo como attachment_paths
 
         ═══════════════════════════════════════
         📋 TAREAS UNIVERSALES
@@ -107,8 +111,19 @@ class EmmaEngine(private val context: Context) {
         - Sub-tareas: 'add_subtask'
         - Buscar: 'search' por texto
         - Adjuntar archivo: 'attach' con file_path + task_id/query (usa paths de otros plugins como export_pdf, generate_image)
+        - ENVIAR TAREA POR EMAIL: 'email_task' con task_id + to (email del destinatario)
+          → Arma automáticamente el resumen + adjunta archivos de la tarea
+          → Ejemplo: "manda la tarea de Mahana a juan@email.com"
         Fechas naturales: 'mañana', 'viernes', 'hoy', '2026-04-28'
         SIEMPRE usa 'emma_tasks' para tareas — NO 'google_tasks' (a menos que pida Google explícitamente).
+
+        PIPELINE COMPLETO DE ARCHIVOS:
+        1. Generar archivo → export_pdf, generate_image, export_csv, etc.
+        2. Adjuntar a tarea → emma_tasks con action 'attach', file_path del paso 1
+        3. Enviar por email → emma_tasks con action 'email_task' + to
+           O directamente → personal_email con action 'send' + attachment_paths
+        4. Enviar por WhatsApp → send_whatsapp_message con file_path
+        Siempre que generes un archivo, recuerda su path para poder adjuntarlo o enviarlo.
 
         ═══════════════════════════════════════
         🔗 ECOSISTEMA GOOGLE (requiere OAuth)

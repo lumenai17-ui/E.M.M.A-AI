@@ -1,6 +1,9 @@
 package com.beemovil.ui.screens
 
 import android.content.Intent
+import android.app.DatePickerDialog
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -67,6 +70,40 @@ fun TasksScreen(viewModel: ChatViewModel) {
     var editingTask by remember { mutableStateOf<EmmaTask?>(null) }
     var expandedTaskId by remember { mutableStateOf<String?>(null) }
     var searchQuery by remember { mutableStateOf("") }
+    // File picker for manual attachment
+    var attachToTaskId by remember { mutableStateOf<String?>(null) }
+    val filePickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null && attachToTaskId != null) {
+            scope.launch {
+                withContext(Dispatchers.IO) {
+                    try {
+                        val input = context.contentResolver.openInputStream(uri)
+                        val name = uri.lastPathSegment?.substringAfterLast("/") ?: "archivo"
+                        val dir = java.io.File(context.filesDir, "task_attachments").also { it.mkdirs() }
+                        val file = java.io.File(dir, "${System.currentTimeMillis()}_$name")
+                        input?.use { i -> file.outputStream().use { o -> i.copyTo(o) } }
+                        val mime = context.contentResolver.getType(uri) ?: "*/*"
+                        dao.insertAttachment(TaskAttachment(
+                            taskId = attachToTaskId!!,
+                            fileName = name,
+                            filePath = file.absolutePath,
+                            mimeType = mime,
+                            sizeBytes = file.length()
+                        ))
+                    } catch (_: Exception) {}
+                }
+                attachToTaskId = null
+                // Inline reload (loadTasks defined later)
+                withContext(Dispatchers.IO) {
+                    val loaded = dao.getAllActiveTasks()
+                    val sMap = mutableMapOf<String, List<EmmaSubtask>>()
+                    val aMap = mutableMapOf<String, List<TaskAttachment>>()
+                    loaded.forEach { t -> sMap[t.id] = dao.getSubtasks(t.id); aMap[t.id] = dao.getAttachments(t.id) }
+                    tasks = loaded; subtasksMap = sMap; attachmentsMap = aMap
+                }
+            }
+        }
+    }
 
     // Load tasks
     fun loadTasks() {
@@ -141,12 +178,21 @@ fun TasksScreen(viewModel: ChatViewModel) {
                         colors = OutlinedTextFieldDefaults.colors(focusedTextColor = textPrimary, unfocusedTextColor = textPrimary, focusedBorderColor = accent, unfocusedBorderColor = textSecondary),
                         modifier = Modifier.fillMaxWidth(), maxLines = 3
                     )
-                    OutlinedTextField(
-                        value = dueDateStr, onValueChange = { dueDateStr = it },
-                        label = { Text("Fecha límite (yyyy-MM-dd)", color = textSecondary) },
-                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = textPrimary, unfocusedTextColor = textPrimary, focusedBorderColor = accent, unfocusedBorderColor = textSecondary),
-                        modifier = Modifier.fillMaxWidth(), singleLine = true
-                    )
+                    // Date picker
+                    val cal = Calendar.getInstance()
+                    val dateLabel = if (dueDateStr.isNotBlank()) "📅 $dueDateStr" else "📅 Sin fecha límite"
+                    OutlinedButton(
+                        onClick = {
+                            DatePickerDialog(context, { _, y, m, d ->
+                                dueDateStr = String.format("%04d-%02d-%02d", y, m + 1, d)
+                            }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, textSecondary.copy(alpha = 0.5f))
+                    ) {
+                        Text(dateLabel, color = textPrimary, fontSize = 14.sp)
+                    }
                     // Priority selector
                     Text("Prioridad", color = textSecondary, fontSize = 12.sp)
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -430,18 +476,33 @@ fun TasksScreen(viewModel: ChatViewModel) {
                                         Spacer(Modifier.height(8.dp))
                                         Text("Adjuntos (${attachments.size})", color = textSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                                         attachments.forEach { att ->
-                                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp, top = 2.dp)
-                                                .clickable {
+                                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp, top = 2.dp)) {
+                                                val icon = when { att.mimeType?.startsWith("image") == true -> "🖼️"; att.mimeType?.contains("pdf") == true -> "📄"; else -> "📎" }
+                                                val sizeLabel = if (att.sizeBytes != null) " (${att.sizeBytes / 1024} KB)" else ""
+                                                Text("$icon ${att.fileName}$sizeLabel", color = accent, fontSize = 12.sp, modifier = Modifier.weight(1f)
+                                                    .clickable {
+                                                        try {
+                                                            val file = java.io.File(att.filePath)
+                                                            val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                                                            val intent = Intent(Intent.ACTION_VIEW).apply { setDataAndType(uri, att.mimeType ?: "*/*"); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+                                                            context.startActivity(intent)
+                                                        } catch (_: Exception) {}
+                                                    })
+                                                // Share individual file
+                                                IconButton(onClick = {
                                                     try {
                                                         val file = java.io.File(att.filePath)
                                                         val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-                                                        val intent = Intent(Intent.ACTION_VIEW).apply { setDataAndType(uri, att.mimeType ?: "*/*"); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-                                                        context.startActivity(intent)
+                                                        val intent = Intent(Intent.ACTION_SEND).apply {
+                                                            type = att.mimeType ?: "*/*"
+                                                            putExtra(Intent.EXTRA_STREAM, uri)
+                                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                        }
+                                                        context.startActivity(Intent.createChooser(intent, "Enviar archivo"))
                                                     } catch (_: Exception) {}
-                                                }) {
-                                                val icon = when { att.mimeType?.startsWith("image") == true -> "🖼️"; att.mimeType?.contains("pdf") == true -> "📄"; else -> "📎" }
-                                                val sizeLabel = if (att.sizeBytes != null) " (${att.sizeBytes / 1024} KB)" else ""
-                                                Text("$icon ${att.fileName}$sizeLabel", color = accent, fontSize = 12.sp)
+                                                }, modifier = Modifier.size(28.dp)) {
+                                                    Icon(Icons.Filled.Share, "Share", tint = accent, modifier = Modifier.size(16.dp))
+                                                }
                                             }
                                         }
                                     }
@@ -464,8 +525,25 @@ fun TasksScreen(viewModel: ChatViewModel) {
                                                 if (!task.tags.isNullOrBlank()) appendLine("🏷️ ${task.tags}")
                                                 if (subs.isNotEmpty()) appendLine("☑ Sub-tareas: $subDone/${subs.size}")
                                             }
-                                            val intent = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, shareText) }
-                                            context.startActivity(Intent.createChooser(intent, "Compartir tarea"))
+                                            if (attachments.isNotEmpty()) {
+                                                val uris = ArrayList<android.net.Uri>()
+                                                attachments.forEach { att ->
+                                                    try {
+                                                        val file = java.io.File(att.filePath)
+                                                        if (file.exists()) uris.add(androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file))
+                                                    } catch (_: Exception) {}
+                                                }
+                                                val intent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                                                    type = "*/*"
+                                                    putExtra(Intent.EXTRA_TEXT, shareText)
+                                                    putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+                                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                }
+                                                context.startActivity(Intent.createChooser(intent, "Compartir tarea"))
+                                            } else {
+                                                val intent = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, shareText) }
+                                                context.startActivity(Intent.createChooser(intent, "Compartir tarea"))
+                                            }
                                         }, shape = RoundedCornerShape(8.dp), border = androidx.compose.foundation.BorderStroke(1.dp, accent.copy(alpha = 0.5f)), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)) {
                                             Icon(Icons.Filled.Share, "Share", tint = accent, modifier = Modifier.size(14.dp))
                                             Spacer(Modifier.width(3.dp))
@@ -477,6 +555,17 @@ fun TasksScreen(viewModel: ChatViewModel) {
                                             Icon(Icons.Filled.Delete, "Delete", tint = urgentColor, modifier = Modifier.size(14.dp))
                                             Spacer(Modifier.width(3.dp))
                                             Text("Eliminar", color = urgentColor, fontSize = 11.sp)
+                                        }
+                                    }
+                                    // Second row: Attach file
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
+                                        OutlinedButton(onClick = {
+                                            attachToTaskId = task.id
+                                            filePickerLauncher.launch(arrayOf("*/*"))
+                                        }, shape = RoundedCornerShape(8.dp), border = androidx.compose.foundation.BorderStroke(1.dp, accent.copy(alpha = 0.5f)), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)) {
+                                            Icon(Icons.Filled.AttachFile, "Attach", tint = accent, modifier = Modifier.size(14.dp))
+                                            Spacer(Modifier.width(3.dp))
+                                            Text("Adjuntar", color = accent, fontSize = 11.sp)
                                         }
                                     }
                                 }

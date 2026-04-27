@@ -62,6 +62,10 @@ class PersonalEmailPlugin(private val context: Context) : EmmaPlugin {
                         put("type", "string")
                         put("description", "Cuerpo del correo (solo para action='send').")
                     })
+                    put("attachment_paths", JSONObject().apply {
+                        put("type", "string")
+                        put("description", "Rutas de archivos a adjuntar, separadas por coma (para action='send'). Usa paths de otros plugins: export_pdf, generate_image, etc.")
+                    })
                 })
                 put("required", JSONArray().put("action"))
             }
@@ -94,9 +98,13 @@ class PersonalEmailPlugin(private val context: Context) : EmmaPlugin {
                         val to = args["to"] as? String ?: return@withContext "Falta el destinatario."
                         val subject = args["subject"] as? String ?: "Mensaje de E.M.M.A."
                         val body = args["body"] as? String ?: ""
-                        val ok = emailService.sendEmail(email, password, config, to, subject, body)
-                        if (ok) "✅ Email enviado desde $email a $to"
-                        else "❌ Error enviando el email."
+                        val attachPaths = (args["attachment_paths"] as? String)
+                            ?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
+                        val ok = emailService.sendEmail(email, password, config, to, subject, body, attachmentPaths = attachPaths)
+                        if (ok) {
+                            val attLabel = if (attachPaths.isNotEmpty()) " con ${attachPaths.size} adjunto(s)" else ""
+                            "✅ Email enviado desde $email a $to$attLabel"
+                        } else "❌ Error enviando el email."
                     }
                     else -> "Acción '$action' no reconocida."
                 }
