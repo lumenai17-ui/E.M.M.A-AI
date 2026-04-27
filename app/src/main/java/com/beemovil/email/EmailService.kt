@@ -37,6 +37,7 @@ class EmailService(private val context: Context) {
         val to: String,
         val subject: String,
         val body: String,
+        val htmlBody: String? = null,
         val date: Date,
         val isRead: Boolean,
         val isStarred: Boolean,
@@ -75,7 +76,7 @@ class EmailService(private val context: Context) {
      */
     fun fetchInbox(
         email: String, password: String, config: EmailConfig,
-        limit: Int = 30, unreadOnly: Boolean = false
+        limit: Int = 50, unreadOnly: Boolean = false
     ): List<EmailMessage> {
         val props = imapProperties(config)
         val session = Session.getInstance(props)
@@ -279,7 +280,12 @@ class EmailService(private val context: Context) {
         val uid = (folder as? UIDFolder)?.getUID(msg) ?: 0L
 
         val attachments = mutableListOf<EmailAttachment>()
-        val body = getTextContent(msg, attachments, downloadAttachments)
+        val rawBody = getTextContent(msg, attachments, downloadAttachments)
+
+        // Separate HTML from plain text
+        val isHtml = rawBody.trimStart().startsWith("<") || rawBody.contains("<html", ignoreCase = true) || rawBody.contains("<div", ignoreCase = true)
+        val plainBody = if (isHtml) rawBody.replace(Regex("<[^>]*>"), " ").replace(Regex("\\s+"), " ").trim() else rawBody
+        val htmlBody = if (isHtml) rawBody else null
 
         return EmailMessage(
             uid = uid,
@@ -287,7 +293,8 @@ class EmailService(private val context: Context) {
             fromEmail = fromAddr?.address ?: "",
             to = msg.getRecipients(Message.RecipientType.TO)?.joinToString(", ") { it.toString() } ?: "",
             subject = msg.subject ?: "(Sin asunto)",
-            body = body,
+            body = plainBody,
+            htmlBody = htmlBody,
             date = msg.sentDate ?: Date(),
             isRead = msg.flags.contains(Flags.Flag.SEEN),
             isStarred = msg.flags.contains(Flags.Flag.FLAGGED),
@@ -298,10 +305,11 @@ class EmailService(private val context: Context) {
 
     private fun getTextContent(part: Part, attachments: MutableList<EmailAttachment>, download: Boolean): String {
         return when {
-            part.isMimeType("text/plain") -> part.content.toString()
+            part.isMimeType("text/plain") -> {
+                readPartContent(part)
+            }
             part.isMimeType("text/html") -> {
-                // Strip HTML tags for preview, keep for detail
-                part.content.toString()
+                readPartContent(part)
             }
             part.isMimeType("multipart/*") -> {
                 val mp = part.content as Multipart
@@ -332,6 +340,36 @@ class EmailService(private val context: Context) {
             }
             else -> ""
         }
+    }
+
+    /**
+     * Safely read part content — handles String, InputStream, and QPDecoderStream.
+     */
+    private fun readPartContent(part: Part): String {
+        return try {
+            val content = part.content
+            when (content) {
+                is String -> content
+                is java.io.InputStream -> content.bufferedReader(charset = getCharset(part)).use { it.readText() }
+                else -> content.toString()
+            }
+        } catch (e: Exception) {
+            try {
+                // Fallback: read raw inputStream
+                part.inputStream.bufferedReader().use { it.readText() }
+            } catch (_: Exception) {
+                Log.e(TAG, "Failed to read email part: ${e.message}")
+                ""
+            }
+        }
+    }
+
+    private fun getCharset(part: Part): java.nio.charset.Charset {
+        return try {
+            val ct = part.contentType ?: return Charsets.UTF_8
+            val charset = ct.substringAfter("charset=", "").substringBefore(";").trim().removeSurrounding("\"")
+            if (charset.isNotBlank()) java.nio.charset.Charset.forName(charset) else Charsets.UTF_8
+        } catch (_: Exception) { Charsets.UTF_8 }
     }
 
     private fun extractAttachment(msg: Message, name: String): File? {

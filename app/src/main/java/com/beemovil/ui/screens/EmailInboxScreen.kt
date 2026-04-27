@@ -328,7 +328,7 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                             Spacer(modifier = Modifier.height(16.dp))
 
                             // Body — HTML or plain text
-                            val htmlContent = if (activeSource == "google") fullGmailMessage?.htmlBody else null
+                            val htmlContent = if (activeSource == "google") fullGmailMessage?.htmlBody else selectedImapEmail?.htmlBody
                             if (htmlContent != null) {
                                 AndroidView(
                                     factory = { ctx ->
@@ -685,7 +685,20 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     items(imapEmails) { email ->
                         Surface(modifier = Modifier.fillMaxWidth().clickable {
-                            selectedImapEmail = email; viewMode = "detail"
+                            // Load full IMAP email with attachments
+                            isLoadingDetail = true
+                            scope.launch {
+                                withContext(Dispatchers.IO) {
+                                    try {
+                                        val emailService = com.beemovil.email.EmailService(context)
+                                        val config = com.beemovil.email.EmailService.EmailConfig(imapHost, imapPort, smtpHost, smtpPort)
+                                        val full = emailService.fetchEmail(imapEmail, imapPassword, config, email.uid)
+                                        if (full != null) selectedImapEmail = full else selectedImapEmail = email
+                                    } catch (_: Exception) { selectedImapEmail = email }
+                                }
+                                isLoadingDetail = false
+                                viewMode = "detail"
+                            }
                         }, color = Color.Transparent) {
                             Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                                 Surface(shape = RoundedCornerShape(50), color = avatarBg, modifier = Modifier.size(44.dp)) {
