@@ -102,14 +102,18 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
     var searchQuery by remember { mutableStateOf("") }
 
     // Helper: force network refresh
+    var isRefreshing by remember { mutableStateOf(false) }
     fun forceRefresh() {
         scope.launch {
-            isLoading = true; errorMsg = null
+            // Only show full loading spinner if no data yet
+            val hasData = if (activeSource == "google") emails.isNotEmpty() else imapEmails.isNotEmpty()
+            if (!hasData) isLoading = true
+            isRefreshing = true; errorMsg = null
             withContext(Dispatchers.IO) {
                 try {
                     if (activeSource == "google" && accessToken != null) {
                         val service = GoogleGmailService(accessToken)
-                        val fetched = service.listInbox(maxResults = 25)
+                        val fetched = service.listInbox(maxResults = 50)
                         val count = service.getUnreadCount()
                         emails = fetched
                         unreadCount = count
@@ -118,7 +122,7 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                     } else if (activeSource == "personal" && hasImapConfig) {
                         val emailService = com.beemovil.email.EmailService(context)
                         val config = com.beemovil.email.EmailService.EmailConfig(imapHost, imapPort, smtpHost, smtpPort)
-                        val fetched = emailService.fetchInbox(imapEmail, imapPassword, config, limit = 25)
+                        val fetched = emailService.fetchInbox(imapEmail, imapPassword, config, limit = 50)
                         val count = fetched.count { !it.isRead }
                         imapEmails = fetched
                         unreadCount = count
@@ -128,7 +132,7 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                     viewModel.emailLastFetchTime.value = System.currentTimeMillis()
                 } catch (e: Exception) { errorMsg = e.message }
             }
-            isLoading = false
+            isLoading = false; isRefreshing = false
         }
     }
 
@@ -560,17 +564,17 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                         activeFolder = "sent"
                         if (sentGmailEmails.isEmpty() && sentImapEmails.isEmpty()) {
                             scope.launch {
-                                isLoading = true
+                                isRefreshing = true
                                 withContext(Dispatchers.IO) {
                                     try {
                                         if (activeSource == "google" && accessToken != null) {
-                                            sentGmailEmails = GoogleGmailService(accessToken).listSent(25)
+                                            sentGmailEmails = GoogleGmailService(accessToken).listSent(50)
                                         } else if (activeSource == "personal" && hasImapConfig) {
-                                            sentImapEmails = com.beemovil.email.EmailService(context).fetchSentFolder(imapEmail, imapPassword, com.beemovil.email.EmailService.EmailConfig(imapHost, imapPort, smtpHost, smtpPort), 25)
+                                            sentImapEmails = com.beemovil.email.EmailService(context).fetchSentFolder(imapEmail, imapPassword, com.beemovil.email.EmailService.EmailConfig(imapHost, imapPort, smtpHost, smtpPort), 50)
                                         }
                                     } catch (_: Exception) {}
                                 }
-                                isLoading = false
+                                isRefreshing = false
                             }
                         }
                     },
@@ -581,7 +585,7 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
             }
 
             // Search bar
-            if (!isLoading) {
+            if (!isLoading || isRefreshing) {
                 androidx.compose.foundation.layout.Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -596,6 +600,15 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                 }
             }
 
+            // Subtle progress bar during refresh (doesn't hide list)
+            if (isRefreshing) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    color = accent,
+                    trackColor = accent.copy(alpha = 0.1f)
+                )
+            }
+
             val noSourceConfigured = !hasGoogle && !hasImapConfig
             if (noSourceConfigured) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -608,7 +621,7 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                         }
                     }
                 }
-            } else if (isLoading) {
+            } else if (isLoading && !isRefreshing) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator(color = accent, modifier = Modifier.size(40.dp)); Spacer(modifier = Modifier.height(12.dp))
@@ -692,7 +705,7 @@ fun EmailInboxScreen(viewModel: ChatViewModel) {
                                     try {
                                         val emailService = com.beemovil.email.EmailService(context)
                                         val config = com.beemovil.email.EmailService.EmailConfig(imapHost, imapPort, smtpHost, smtpPort)
-                                        val full = emailService.fetchEmail(imapEmail, imapPassword, config, email.uid)
+                                        val full = emailService.fetchEmail(imapEmail, imapPassword, config, email.uid, subjectHint = email.subject)
                                         if (full != null) selectedImapEmail = full else selectedImapEmail = email
                                     } catch (_: Exception) { selectedImapEmail = email }
                                 }

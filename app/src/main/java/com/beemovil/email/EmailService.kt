@@ -100,7 +100,8 @@ class EmailService(private val context: Context) {
                     parseMessage(msg, inbox)
                 } catch (e: Exception) {
                     Log.e(TAG, "Parse error: ${e.message}")
-                    null
+                    // Fallback: return email with metadata only (no body)
+                    safeParseEnvelope(msg, inbox)
                 }
             }.sortedByDescending { it.date }
 
@@ -113,9 +114,11 @@ class EmailService(private val context: Context) {
 
     /**
      * Fetch a single email by UID with full body and attachments.
+     * Falls back to scanning recent messages if UID lookup fails.
      */
     fun fetchEmail(
-        email: String, password: String, config: EmailConfig, uid: Long
+        email: String, password: String, config: EmailConfig, uid: Long,
+        subjectHint: String? = null
     ): EmailMessage? {
         val props = imapProperties(config)
         val session = Session.getInstance(props)
@@ -123,16 +126,36 @@ class EmailService(private val context: Context) {
         store.connect(config.imapHost, config.imapPort, email, password)
 
         val inbox = store.getFolder("INBOX")
-        inbox.open(Folder.READ_ONLY)
+        try {
+            inbox.open(Folder.READ_ONLY)
 
-        val uidFolder = inbox as? UIDFolder
-        val msg = uidFolder?.getMessageByUID(uid)
+            // Try UID first
+            var msg: Message? = null
+            if (uid > 0) {
+                val uidFolder = inbox as? UIDFolder
+                msg = uidFolder?.getMessageByUID(uid)
+            }
 
-        val result = msg?.let { parseMessage(it, inbox, downloadAttachments = true) }
+            // Fallback: search by subject in recent messages
+            if (msg == null && subjectHint != null) {
+                val total = inbox.messageCount
+                val start = maxOf(1, total - 50 + 1)
+                val recent = inbox.getMessages(start, total)
+                msg = recent.lastOrNull { m ->
+                    try { m.subject?.contains(subjectHint, ignoreCase = true) == true } catch (_: Exception) { false }
+                }
+            }
 
-        inbox.close(false)
-        store.close()
-        return result
+            // Fallback: just get the message by index from the folder (last resort)
+            if (msg == null && uid > 0 && uid.toInt() <= inbox.messageCount) {
+                try { msg = inbox.getMessage(uid.toInt()) } catch (_: Exception) {}
+            }
+
+            return msg?.let { parseMessage(it, inbox, downloadAttachments = true) }
+        } finally {
+            try { inbox.close(false) } catch (_: Exception) {}
+            try { store.close() } catch (_: Exception) {}
+        }
     }
 
     /**
@@ -262,7 +285,7 @@ class EmailService(private val context: Context) {
             val messages = sentFolder.getMessages(start, total)
 
             return messages.mapNotNull { msg ->
-                try { parseMessage(msg, sentFolder) } catch (_: Exception) { null }
+                try { parseMessage(msg, sentFolder) } catch (_: Exception) { safeParseEnvelope(msg, sentFolder) }
             }.sortedByDescending { it.date }.take(limit)
         } finally {
             try { sentFolder.close(false) } catch (_: Exception) {}
@@ -273,6 +296,35 @@ class EmailService(private val context: Context) {
     // ═══════════════════════════════════════
     // INTERNAL
     // ═══════════════════════════════════════
+
+    /**
+     * Safe envelope parser — extracts only headers (from, to, subject, date)
+     * without touching the body. Used as fallback when parseMessage crashes.
+     */
+    private fun safeParseEnvelope(msg: Message, folder: Folder): EmailMessage? {
+        return try {
+            val from = msg.from?.firstOrNull()
+            val fromAddr = (from as? InternetAddress)
+            val uid = try { (folder as? UIDFolder)?.getUID(msg) ?: 0L } catch (_: Exception) { 0L }
+            EmailMessage(
+                uid = uid,
+                from = fromAddr?.personal ?: fromAddr?.address ?: "Desconocido",
+                fromEmail = fromAddr?.address ?: "",
+                to = try { msg.getRecipients(Message.RecipientType.TO)?.joinToString(", ") { it.toString() } ?: "" } catch (_: Exception) { "" },
+                subject = try { msg.subject ?: "(Sin asunto)" } catch (_: Exception) { "(Sin asunto)" },
+                body = "",
+                htmlBody = null,
+                date = try { msg.sentDate ?: Date() } catch (_: Exception) { Date() },
+                isRead = try { msg.flags.contains(Flags.Flag.SEEN) } catch (_: Exception) { true },
+                isStarred = try { msg.flags.contains(Flags.Flag.FLAGGED) } catch (_: Exception) { false },
+                hasAttachments = false,
+                attachments = emptyList()
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Even envelope parse failed: ${e.message}")
+            null
+        }
+    }
 
     private fun parseMessage(msg: Message, folder: Folder, downloadAttachments: Boolean = false): EmailMessage {
         val from = msg.from?.firstOrNull()
