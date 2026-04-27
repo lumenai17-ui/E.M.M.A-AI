@@ -82,6 +82,10 @@ class FileManagerPlugin(private val context: Context) : EmmaPlugin {
     override suspend fun execute(args: Map<String, Any>): String {
         val operation = args["operation"] as? String ?: return "Falta 'operation'."
 
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
+            return "TOOL_CALL::request_permission::STORAGE_ALL_FILES"
+        }
+
         return withContext(Dispatchers.IO) {
             try {
                 when (operation) {

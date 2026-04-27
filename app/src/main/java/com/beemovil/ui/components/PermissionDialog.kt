@@ -74,10 +74,18 @@ enum class BeePermission(
         androidPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
             Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE,
         icon = Icons.Filled.Folder,
-        title = "Archivos",
-        description = "Necesario para adjuntar fotos, PDFs, documentos y guardar archivos generados.",
-        reason = "Permite al agente leer y guardar archivos, adjuntar documentos al chat y generar reportes.",
+        title = "Archivos (Básico)",
+        description = "Necesario para adjuntar fotos y documentos.",
+        reason = "Permite al agente leer y adjuntar medios al chat.",
         color = Color(0xFF5AC8FA)
+    ),
+    STORAGE_ALL_FILES(
+        androidPermission = Manifest.permission.MANAGE_EXTERNAL_STORAGE,
+        icon = Icons.Filled.FolderSpecial,
+        title = "Control Total de Archivos",
+        description = "Necesario para explorar directorios completos, ver tamaños de carpetas y buscar archivos en todo el dispositivo.",
+        reason = "Debido a restricciones de Android 11+, E.M.M.A. necesita el permiso 'All Files Access' para actuar como tu gestor de archivos personal.",
+        color = Color(0xFF007AFF)
     ),
     CONTACTS(
         androidPermission = Manifest.permission.READ_CONTACTS,
@@ -242,7 +250,15 @@ fun PermissionDialog(
                     // Approve
                     Button(
                         onClick = {
-                            launcher.launch(permission.androidPermission)
+                            if (permission == BeePermission.STORAGE_ALL_FILES && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                val intent = android.content.Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                                    data = android.net.Uri.parse("package:${context.packageName}")
+                                }
+                                context.startActivity(intent)
+                                onGranted()
+                            } else {
+                                launcher.launch(permission.androidPermission)
+                            }
                             onDismiss()
                         },
                         modifier = Modifier.weight(1f),

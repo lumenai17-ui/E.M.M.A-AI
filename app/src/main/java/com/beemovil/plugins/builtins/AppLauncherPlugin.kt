@@ -33,11 +33,11 @@ class AppLauncherPlugin(private val context: Context) : EmmaPlugin {
                 put("properties", JSONObject().apply {
                     put("operation", JSONObject().apply {
                         put("type", "string")
-                        put("enum", JSONArray().put("list_apps").put("open_app").put("open_settings"))
+                        put("enum", JSONArray().put("list_apps").put("open_app").put("open_settings").put("open_app_settings"))
                     })
                     put("app_name", JSONObject().apply {
                         put("type", "string")
-                        put("description", "(open_app) Nombre de la app.")
+                        put("description", "(open_app, open_app_settings) Nombre de la app (ej: 'E.M.M.A.', 'WhatsApp').")
                     })
                     put("settings_page", JSONObject().apply {
                         put("type", "string")
@@ -55,6 +55,7 @@ class AppLauncherPlugin(private val context: Context) : EmmaPlugin {
             "list_apps" -> listApps()
             "open_app" -> openApp(args)
             "open_settings" -> openSettings(args)
+            "open_app_settings" -> openAppSettings(args)
             else -> "Operación desconocida: $operation"
         }
     }
@@ -127,6 +128,35 @@ class AppLauncherPlugin(private val context: Context) : EmmaPlugin {
                 context.startActivity(intent)
                 "Abriendo ajustes de $page ✅"
             } catch (e: Exception) { "Error: ${e.message}" }
+        }
+    }
+
+    private suspend fun openAppSettings(args: Map<String, Any>): String {
+        val appName = args["app_name"] as? String ?: return "Falta 'app_name'."
+        val pm = context.packageManager
+        
+        // Find package name
+        val allApps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+        val match = allApps.find { pm.getApplicationLabel(it).toString().equals(appName, ignoreCase = true) }
+            ?: allApps.find { pm.getApplicationLabel(it).toString().contains(appName, ignoreCase = true) }
+            ?: allApps.find { it.packageName.contains(appName, ignoreCase = true) }
+            ?: return "No encontré '$appName'. Usa list_apps para ver las instaladas."
+
+        val label = pm.getApplicationLabel(match).toString()
+        val op = SecurityGate.yellow(id, "open_app_settings", "Abrir Información de la App (Ajustes): $label")
+        if (!SecurityGate.evaluate(op)) return "Cancelado."
+
+        return withContext(Dispatchers.Main) {
+            try {
+                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = android.net.Uri.parse("package:${match.packageName}")
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(intent)
+                "Abriendo pantalla de Ajustes de la Aplicación para $label ✅. Desde aquí el usuario puede gestionar los permisos."
+            } catch (e: Exception) { 
+                "Error al abrir ajustes de la app: ${e.message}" 
+            }
         }
     }
 }
