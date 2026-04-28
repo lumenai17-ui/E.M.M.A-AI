@@ -471,21 +471,14 @@ class TelegramBotService : Service() {
         Log.d(TAG, "Auth check: owner='$ownerUsername' sender='@${update.fromUsername}' userId=${update.fromUserId} chatId=${update.chatId} type=${update.chatType} allowedChats=${allowedChatIds.size} allowedUsers=${allowedUserIds.size}")
 
         // ── Layer 1: First-Contact Rule ──
-        // If no owner is configured, the first user auto-registers as owner
-        // Note: We only check ownerUsername, NOT allowlists — stale data from
-        // previous sessions should not block a fresh owner registration
-        if (ownerUsername.isBlank()) {
+        // If no owner AND no one in any allowlist, the first user that sends /start auto-registers
+        if (ownerUsername.isBlank() && allowedChatIds.isEmpty() && allowedUserIds.isEmpty()) {
             Log.i(TAG, "First-contact: auto-registering owner @${update.fromUsername} (userId=${update.fromUserId}, chatId=${update.chatId})")
             val securePrefs = SecurePrefs.get(this)
             if (update.fromUsername.isNotBlank()) {
                 securePrefs.edit().putString("telegram_owner_username", update.fromUsername.removePrefix("@").trim().lowercase()).apply()
                 ownerUsername = update.fromUsername.removePrefix("@").trim().lowercase()
             }
-            // Clear any stale allowlists and register fresh
-            prefs.edit()
-                .putString(PREF_ALLOWED_CHATS, "")
-                .putString(PREF_ALLOWED_USERS, "")
-                .apply()
             autoRegisterChatId(update.chatId)
             autoRegisterUserId(update.fromUserId)
             return true
