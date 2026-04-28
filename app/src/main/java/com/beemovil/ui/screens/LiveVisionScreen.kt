@@ -11,6 +11,7 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -29,6 +30,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -40,7 +42,7 @@ import com.beemovil.ui.components.VisionModeSelector
 import com.beemovil.ui.components.suggestModeBySpeed
 import com.beemovil.service.PocketVisionService
 import com.beemovil.vision.*
-import com.beemovil.voice.DeepgramVoiceManager
+import com.beemovil.voice.*
 import kotlinx.coroutines.launch
 import java.util.concurrent.Executors
 
@@ -84,7 +86,9 @@ fun LiveVisionScreen(
 
     // ── Vision state ──
     var isLiveActive by remember { mutableStateOf(false) }
-    var isMuted by remember { mutableStateOf(false) }
+    var isMicMuted by remember { mutableStateOf(false) }  // V11: Independent mic mute
+    var isSpeakerMuted by remember { mutableStateOf(false) }  // V11: Independent speaker mute
+    var isMuted by remember { mutableStateOf(false) }  // Legacy compat (mapped to isSpeakerMuted)
     var liveResult by remember { mutableStateOf("") }
     var frameCount by remember { mutableIntStateOf(0) }
     var intervalSeconds by remember { mutableIntStateOf(5) }
@@ -93,12 +97,16 @@ fun LiveVisionScreen(
     var selectedModel by remember {
         mutableStateOf(prefs.getString("vision_model", "") ?: "")
     }
+    // V11 Phase 3: Independent voice model for the Interlocutor
+    var selectedVoiceModel by remember {
+        mutableStateOf(prefs.getString("vision_voice_model", "") ?: "")
+    }
 
-    // -- V3: Voice state -- R3-1 FIX: Single source of truth (no dual isListening)
-    var voiceState by remember { mutableStateOf(VisionVoiceController.VoiceState.IDLE) }
-    val isListening = voiceState == VisionVoiceController.VoiceState.LISTENING
+    // -- V11: ConversationEngine state (replaces VisionVoiceController) --
+    var conversationState by remember { mutableStateOf(ConversationState.IDLE) }
+    val isListening = conversationState == ConversationState.LISTENING
     var selectedPersonality by remember { mutableStateOf(NARRATOR_PERSONALITIES.first()) }
-    var isNarrationEnabled by remember { mutableStateOf(false) }  // BUG-7 FIX: Don't auto-narrate
+    var isNarrationEnabled by remember { mutableStateOf(true) }  // V11: Default ON for voice-first
 
     // ── V4: GPS state ──
     var currentGpsData by remember { mutableStateOf(GpsData()) }
@@ -119,9 +127,20 @@ fun LiveVisionScreen(
 
     // ── Engines ──
     val captureLoop = remember { VisionCaptureLoop(context) }
-    val voiceManager = remember { DeepgramVoiceManager(context).also { it.initialize() } }
-    val voiceController = remember { VisionVoiceController(context, voiceManager) }
+    // V11 FIX: Use viewModel's shared voiceManager & engine (already initialized with keys + STT)
+    // This matches the ConversationScreen pattern exactly — no orphan instances
+    val voiceManager = viewModel.voiceManager
     val conversation = remember { VisionConversation() }
+    // V11: Real ConversationEngine (same as ConversationScreen)
+    val visionBackend = remember { VisionConversationBackend(context, voiceManager, viewModel.engine) }
+    val conversationEngine = remember {
+        ConversationEngine(
+            context = context,
+            voiceManager = voiceManager,
+            engine = viewModel.engine,
+            chatHistoryDB = com.beemovil.database.ChatHistoryDB.getDatabase(context)
+        )
+    }
     val gpsModule = remember { GpsModule(context) }
     val contextProvider = remember { LiveContextProvider(context) }
     val gpsNavigator = remember { GpsNavigator() }
@@ -171,6 +190,13 @@ fun LiveVisionScreen(
         if (selectedModel.isBlank()) {
             selectedModel = autoSelectVisionModel(context, viewModel)
             prefs.edit().putString("vision_model", selectedModel).apply()
+        }
+    }
+    // V11 Phase 3: Auto-select voice model if not set
+    LaunchedEffect(Unit) {
+        if (selectedVoiceModel.isBlank()) {
+            selectedVoiceModel = viewModel.currentModel.value
+            prefs.edit().putString("vision_voice_model", selectedVoiceModel).apply()
         }
     }
 
@@ -425,235 +451,127 @@ fun LiveVisionScreen(
         }
     }
 
-    // V11 Phase 3: The Proactivity Loop (Silence Heartbeat)
-    LaunchedEffect(isLiveActive) {
-        if (!isLiveActive) return@LaunchedEffect
-        while (isLiveActive) {
-            kotlinx.coroutines.delay(5_000L) // Pulse check every 5 seconds
-            if (!isLiveActive) break
-            
-            if (isMuted) continue
-
-            val silenceDuration = System.currentTimeMillis() - lastUserSpeechTime
-            val proactiveSilence = System.currentTimeMillis() - lastProactiveTime
-
-            // Trigger if user silent for 15s AND we haven't spoken proactively in 30s
-            if (silenceDuration > 15_000L && proactiveSilence > 30_000L) {
-                val latestEntry = com.beemovil.vision.VisionContextStream.getLatestEntry()
-                if (latestEntry != null) {
-                    val assessment = visionAssessor.assess(
-                        result = latestEntry.description,
-                        previousResults = conversation.getPreviousResults(),
-                        mode = selectedMode,
-                        speedKmh = latestEntry.speedKmh
-                    )
-                    
-                    if (assessment.shouldNarrate) {
-                        lastProactiveTime = System.currentTimeMillis()
-                        
-                        coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                            try {
-                                val voiceModel = prefs.getString("voice_model", viewModel.currentModel.value) ?: viewModel.currentModel.value
-                                val voiceProviderType = ModelRegistry.findModel(voiceModel)?.provider ?: viewModel.currentProvider.value
-                                val voiceApiKey = getApiKeyForProvider(context, voiceProviderType)
-                                val voiceProvider = LlmFactory.createProvider(voiceProviderType, voiceApiKey, voiceModel)
-                                
-                                val urgencyContext = if (assessment.category == com.beemovil.vision.VisionAssessor.Category.URGENT) "¡URGENTE!" else "Nota interesante:"
-                                val proactivePrompt = "El usuario ha estado en silencio. Tu Vigía de cámara reporta esto: [$urgencyContext ${latestEntry.description}].\nEres E.M.M.A. Advierte o comenta esto PROACTIVAMENTE al usuario en UNA SOLA frase natural. NO saludes. Ve directo al punto. (Ej: 'Cuidado con ese auto' o 'Oye, a tu derecha hay un restaurante'). Mantén el tono del modo: ${selectedMode.name}."
-                                
-                                val messages = listOf(
-                                    ChatMessage("system", proactivePrompt),
-                                    ChatMessage("user", "Dime si hay algo importante.")
-                                )
-                                
-                                val response = voiceProvider.complete(messages, emptyList())
-                                val resultText = response.text ?: ""
-                                
-                                if (resultText.isNotBlank()) {
-                                    conversation.addFrame(resultText)
-                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                        liveResult = "⚡ $resultText"
-                                        voiceController.narrate(resultText)
-                                        visionAssessor.markNarrated()
-                                    }
-                                }
-                            } catch (e: Exception) {
-                                // Silent fail for proactive
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // ── V3: Sync voice controller state ──
-    LaunchedEffect(isMuted, isNarrationEnabled) {
-        voiceController.setMuted(isMuted)
-        voiceController.setNarrationEnabled(isNarrationEnabled)  // BUG-5 FIX: Use method that resets state machine
-    }
+    // V11: Wire ConversationEngine callbacks + inject vision context into backend
     LaunchedEffect(Unit) {
-        voiceController.onStateChange = { state -> voiceState = state }
-        // R3-1 FIX: Error callback resets voiceState (which drives isListening)
-        voiceController.onError = { error ->
-            // voiceState auto-resets via onStateChange -> IDLE
-            liveResult = error
+        // Wire ConversationEngine callbacks (same pattern as ConversationScreen)
+        conversationEngine.onStateChange = { state ->
+            conversationState = state
         }
-        voiceController.onSpeechResult = { spokenText ->
-            // V11 Phase 2: Instant LLM Response Engine (The Boss)
-            val processVoiceQuery: (String) -> Unit = { text ->
-                lastUserSpeechTime = System.currentTimeMillis() // V11 Heartbeat tracking
-                conversation.addUserQuestion(text)
-                sessionState.addUserQuestion(text)
-                coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                    try {
-                        val voiceModel = prefs.getString("voice_model", viewModel.currentModel.value) ?: viewModel.currentModel.value
-                        val voiceProviderType = ModelRegistry.findModel(voiceModel)?.provider ?: viewModel.currentProvider.value
-                        val voiceApiKey = getApiKeyForProvider(context, voiceProviderType)
-                        val voiceProvider = LlmFactory.createProvider(voiceProviderType, voiceApiKey, voiceModel)
-                        
-                        val ctxBlock = contextOrchestrator.buildContextBlock(
-                            gpsData = currentGpsData,
-                            mode = selectedMode,
-                            sessionState = sessionState,
-                            memoryManager = memoryManager,
-                            temporalDetector = temporalDetector,
-                            previousResults = conversation.getPreviousResults(),
-                            intervalSeconds = intervalSeconds,
-                            weatherInfo = weatherInfo
-                        )
+        conversationEngine.onResponse = { response ->
+            liveResult = response
+        }
+        conversationEngine.onTurnComplete = { userText, emmaText ->
+            lastUserSpeechTime = System.currentTimeMillis()
+            liveResult = emmaText
+        }
+        conversationEngine.onError = { error ->
+            liveResult = "Error: $error"
+        }
 
-                        val systemPrompt = conversation.buildSystemPrompt(
-                            mode = selectedMode,
-                            personality = if (selectedPersonality.id == "default") null else selectedPersonality,
-                            gpsData = currentGpsData,
-                            weatherInfo = weatherInfo,
-                            webContext = webContext.take(500),
-                            navUpdate = navUpdate,
-                            targetLanguage = targetLanguage,
-                            memoryContext = ctxBlock.memoryContext,
-                            temporalAlerts = ctxBlock.temporalContext,
-                            faceHint = currentFaceHint,
-                            sessionContext = ctxBlock.sessionContext,
-                            crossSystemContext = ctxBlock.crossSystemContext
-                        )
-                        
-                        val visionStreamText = com.beemovil.vision.VisionContextStream.buildContextForVoiceEngine()
-                        val snapshotRule = "\nREGLA ESPECIAL V11: Si el usuario te pide detalles visuales específicos que NO están en la bitácora (ej. leer una placa, un cartel pequeño, describir algo detallado), responde ÚNICAMENTE con la palabra: [SNAPSHOT_REQUIRED]."
-                        val finalPrompt = "$systemPrompt\n\n$visionStreamText$snapshotRule"
-                        
-                        val messages = listOf(
-                            ChatMessage("system", finalPrompt),
-                            ChatMessage("user", text)
-                        )
-                        
-                        var response = voiceProvider.complete(messages, emptyList())
-                        var resultText = response.text ?: ""
-                        
-                        if (resultText.contains("[SNAPSHOT_REQUIRED]")) {
-                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                voiceController.narrate("Mmm, a ver...")
-                                liveResult = "📸 Capturando en alta resolución..."
-                            }
-                            
-                            val capture = imageCapture
-                            if (capture != null) {
-                                val b64Image = captureLoop.takeSnapshotBase64(capture, cameraExecutor)
-                                if (b64Image != null) {
-                                    val snapMessages = listOf(
-                                        ChatMessage("system", "Eres E.M.M.A. El usuario te acaba de hacer una pregunta. Responde EXCLUSIVAMENTE basándote en la foto de alta resolución adjunta, que fue tomada en este preciso instante."),
-                                        ChatMessage("user", text, images = listOf(b64Image))
-                                    )
-                                    response = voiceProvider.complete(snapMessages, emptyList())
-                                    resultText = response.text ?: ""
-                                } else {
-                                    resultText = "Perdón, tuve un problema enfocando la cámara."
-                                }
-                            } else {
-                                resultText = "La cámara no está disponible en este momento."
-                            }
-                        }
-                        
-                        if (resultText.isNotBlank()) {
-                            conversation.addFrame(resultText)
-                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                liveResult = resultText
-                                voiceController.narrate(resultText)
-                            }
-                        }
-                    } catch (e: Exception) {
-                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                            liveResult = "Error de voz: ${e.message}"
-                        }
-                    }
-                }
-            }
+        // Wire the VisionConversationBackend's context providers
+        visionBackend.conversation = conversation
+        visionBackend.contextOrchestrator = contextOrchestrator
+        visionBackend.sessionState = sessionState
+        visionBackend.memoryManager = memoryManager
+        visionBackend.temporalDetector = temporalDetector
+        visionBackend.captureLoop = captureLoop
+        visionBackend.visionAssessor = visionAssessor // V11-P4: For proactive evaluation
+        visionBackend.onIntermediateResult = { msg -> liveResult = msg }
+    }
 
-            // R3-1: voiceState auto-transitions via onStateChange -> PROCESSING
-            // V4: Intent detection
-            val intent = intentDetector.detect(spokenText)
-            when (intent.type) {
-                VisionIntentDetector.IntentType.STOP_NAV -> {
-                    gpsNavigator.stopNavigation()
-                    navUpdate = null
-                    isNavigating = false
-                    voiceController.narrate("Navegación cancelada.")
-                }
-                VisionIntentDetector.IntentType.NAVIGATION -> {
-                    voiceController.narrate("Buscando ${intent.destination}...")
-                    coroutineScope.launch {
-                        val dest = intentDetector.resolveDestination(
-                            intent.destination,
-                            currentGpsData.latitude,
-                            currentGpsData.longitude
-                        )
-                        if (dest != null) {
-                            gpsNavigator.startNavigation(dest)
-                            val firstUpdate = gpsNavigator.update(currentGpsData)
-                            navUpdate = firstUpdate
-                            isNavigating = true
-                            voiceController.narrate("Navegando a ${dest.name}. ${firstUpdate.instruction}")
-                        } else {
-                            voiceController.narrate("No pude encontrar ${intent.destination}. Intenta con otro nombre.")
-                        }
-                    }
-                }
-                VisionIntentDetector.IntentType.POI_SEARCH -> {
-                    processVoiceQuery(spokenText)
-                }
-                // V7: Action intents → VisionBridge
-                VisionIntentDetector.IntentType.ACTION -> {
-                    val action = visionBridge.parseVoiceAction(spokenText)
-                    if (action != null) {
-                        coroutineScope.launch {
-                            voiceController.narrate("Ejecutando...")
-                            val bridgeResult = visionBridge.execute(
-                                actionType = action.first,
-                                params = action.second,
-                                sessionLog = conversation.getSessionLog(),
-                                lastResult = conversation.lastResult
-                            )
-                            voiceController.narrate(bridgeResult.take(150))
-                            liveResult = bridgeResult
-                        }
-                    } else {
-                        processVoiceQuery(spokenText)
-                    }
-                }
-                VisionIntentDetector.IntentType.QUESTION -> {
-                    processVoiceQuery(spokenText)
-                }
-            }
+    // V11: Keep backend's live state in sync
+    LaunchedEffect(selectedMode, selectedPersonality, currentGpsData, weatherInfo, webContext, navUpdate, targetLanguage, currentFaceHint, intervalSeconds, imageCapture) {
+        visionBackend.selectedMode = selectedMode
+        visionBackend.selectedPersonality = selectedPersonality
+        visionBackend.currentGpsData = currentGpsData
+        visionBackend.weatherInfo = weatherInfo
+        visionBackend.webContext = webContext
+        visionBackend.navUpdate = navUpdate
+        visionBackend.targetLanguage = targetLanguage
+        visionBackend.currentFaceHint = currentFaceHint
+        visionBackend.intervalSeconds = intervalSeconds
+        visionBackend.imageCapture = imageCapture
+        visionBackend.cameraExecutor = cameraExecutor
+    }
+
+    // V11: Start/Stop ConversationEngine when Play button toggles
+    LaunchedEffect(isLiveActive) {
+        if (isLiveActive) {
+            // V11 Phase 3: Use the dedicated voice model, resolved through ModelRegistry
+            val voiceModelId = selectedVoiceModel.ifBlank { viewModel.currentModel.value }
+            val voiceProviderResolved = ModelRegistry.findModel(voiceModelId)?.provider
+                                         ?: viewModel.currentProvider.value
+            val config = ConversationConfig(
+                autoListenAfterTTS = true,
+                language = java.util.Locale.getDefault().toLanguageTag(),
+                speakResponses = !isSpeakerMuted,
+                llmProvider = voiceProviderResolved,
+                llmModel = voiceModelId,
+                threadId = "vision_conversation",
+                agentId = "vision",
+                systemPrompt = "" // VisionConversationBackend builds its own system prompt
+            )
+            conversationEngine.start(visionBackend, config)
+        } else {
+            conversationEngine.stop()
         }
     }
 
-    // ── Cleanup + V8: Session summary on dispose ──
+    // V11 Phase 4: The old Heartbeat LaunchedEffect has been removed.
+    // Proactivity is now handled INSIDE VisionConversationBackend.evaluateProactivity(),
+    // triggered automatically by ConversationEngine's silence detection (3 consecutive
+    // SPEECH_TIMEOUT errors → evaluateProactivity() → serialized TTS through the engine).
+    // This eliminates TTS overlap and provides richer 7-layer context to proactive responses.
+
+    // V11: Pause WakeWordService + Stop BCS when entering Vision (same as ConversationScreen)
     DisposableEffect(Unit) {
+        // Stop BCS if it's running
+        if (com.beemovil.service.BackgroundConversationService.isRunning) {
+            try {
+                val stopBcs = Intent(context, com.beemovil.service.BackgroundConversationService::class.java).apply {
+                    action = com.beemovil.service.BackgroundConversationService.ACTION_STOP
+                }
+                context.startService(stopBcs)
+                android.util.Log.i("LiveVisionScreen", "Stopped BackgroundConversationService (handoff to vision)")
+            } catch (e: Exception) {
+                android.util.Log.w("LiveVisionScreen", "Failed to stop BCS: ${e.message}")
+            }
+        }
+
+        // Stop wake word to free the SpeechRecognizer for conversation
+        val wasWakeWordRunning = com.beemovil.service.WakeWordService.isRunning
+        if (wasWakeWordRunning) {
+            try {
+                val stopIntent = Intent(context, com.beemovil.service.WakeWordService::class.java).apply {
+                    action = com.beemovil.service.WakeWordService.ACTION_STOP
+                }
+                context.startService(stopIntent)
+                android.util.Log.i("LiveVisionScreen", "Paused WakeWordService to free SpeechRecognizer")
+            } catch (e: Exception) {
+                android.util.Log.w("LiveVisionScreen", "Failed to stop wake word: ${e.message}")
+            }
+        }
+
         onDispose {
             isLiveActive = false
             captureLoop.stop()
-            voiceController.stop()
-            voiceManager.destroy()
+            
+            // V11: Stop ConversationEngine cleanly (but don't destroy — shared resources)
+            try {
+                conversationEngine.onStateChange = null
+                conversationEngine.onResponse = null
+                conversationEngine.onError = null
+                conversationEngine.onTurnComplete = null
+                conversationEngine.stop()
+                // NOTE: Don't call destroy() — the scope uses shared viewModel resources
+            } catch (e: Exception) {
+                android.util.Log.w("LiveVisionScreen", "Error cleaning up engine: ${e.message}")
+            }
+            
+            // V11 FIX: Don't destroy voiceManager — it's viewModel's shared instance
+            // Just stop any active TTS/STT
+            voiceManager.stopSpeaking()
+            voiceManager.stopListening()
             gpsModule.stop()
             gpsNavigator.stopNavigation()
             if (visionRecorder.isRecording) visionRecorder.stopRecording()
@@ -667,6 +585,25 @@ fun LiveVisionScreen(
                     action = PocketVisionService.ACTION_STOP
                 }
                 context.startService(stopIntent)
+            }
+
+            // Resume WakeWordService if it was running before
+            if (wasWakeWordRunning) {
+                try {
+                    if (prefs.getBoolean("wake_word_enabled", false)) {
+                        val startIntent = Intent(context, com.beemovil.service.WakeWordService::class.java).apply {
+                            action = com.beemovil.service.WakeWordService.ACTION_START
+                        }
+                        if (Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                            context.startForegroundService(startIntent)
+                        } else {
+                            context.startService(startIntent)
+                        }
+                        android.util.Log.i("LiveVisionScreen", "Resumed WakeWordService")
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("LiveVisionScreen", "Failed to resume wake word: ${e.message}")
+                }
             }
 
             // V8: Generate session summary in background
@@ -749,7 +686,7 @@ fun LiveVisionScreen(
                 modifier = Modifier.fillMaxSize()
             )
             // V11: Dim overlay to emphasize Voice-First UI
-            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.75f)))
+            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.40f)))
         } else {
             // Pocket mode: dark placeholder, camera off
             Box(
@@ -810,9 +747,35 @@ fun LiveVisionScreen(
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text("E.M.M.A. Vision", fontWeight = FontWeight.Black, color = Color.White, fontSize = 16.sp)
-                    val modelName = ModelRegistry.findModel(selectedModel)?.name ?: selectedModel
-                    Text("Vigía: $modelName | Jefe: Voz Activa", fontSize = 10.sp, color = Color(0xFF00E676).copy(alpha = 0.9f),
-                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    val vigiaName = ModelRegistry.findModel(selectedModel)?.name?.take(14) ?: selectedModel.take(14)
+                    val vozName = ModelRegistry.findModel(selectedVoiceModel)?.name?.take(14) ?: selectedVoiceModel.take(14)
+                    // V11 Phase 5: Triad Status Row (Material Icons, no emojis)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Vigía agent
+                        PulsingDot(Color(0xFF00E676), active = isLiveActive)
+                        Spacer(Modifier.width(3.dp))
+                        Icon(Icons.Filled.Visibility, "Vigia", tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(10.dp))
+                        Text(" $vigiaName", fontSize = 9.sp, color = Color.White.copy(alpha = 0.7f), maxLines = 1)
+                        Spacer(Modifier.width(8.dp))
+                        // Interlocutor agent
+                        PulsingDot(
+                            color = when(conversationState) {
+                                ConversationState.LISTENING -> Color(0xFF42A5F5)
+                                ConversationState.PROCESSING -> Color(0xFFAB47BC)
+                                ConversationState.SPEAKING -> Color(0xFFFFA726)
+                                else -> Color.Gray
+                            },
+                            active = conversationState != ConversationState.IDLE
+                        )
+                        Spacer(Modifier.width(3.dp))
+                        Icon(Icons.Filled.RecordVoiceOver, "Voz", tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(10.dp))
+                        Text(" $vozName", fontSize = 9.sp, color = Color.White.copy(alpha = 0.7f), maxLines = 1)
+                        Spacer(Modifier.width(8.dp))
+                        // Heartbeat agent
+                        PulsingDot(Color(0xFFFFD54F), active = liveResult.startsWith("\u26A1"))
+                        Spacer(Modifier.width(3.dp))
+                        Icon(Icons.Filled.FavoriteBorder, "HB", tint = Color.White.copy(alpha = 0.4f), modifier = Modifier.size(9.dp))
+                    }
                 }
                 // Status badge (compact)
                 Surface(
@@ -845,6 +808,49 @@ fun LiveVisionScreen(
                 // R2-3 FIX: Settings gear inside top bar (not absolute positioned)
                 IconButton(onClick = { showSettings = !showSettings }, modifier = Modifier.size(36.dp)) {
                     Icon(Icons.Filled.Settings, "Settings", tint = Color.White.copy(alpha = 0.8f), modifier = Modifier.size(18.dp))
+                }
+            }
+        }
+
+        // V11 Phase 5: Conversation State Banner
+        val bannerVisible = conversationState != ConversationState.IDLE
+        AnimatedVisibility(
+            visible = bannerVisible,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically(),
+            modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 52.dp).fillMaxWidth()
+        ) {
+            val (bannerColor, bannerIcon, bannerLabel) = when(conversationState) {
+                ConversationState.LISTENING -> Triple(Color(0xFF1565C0), Icons.Filled.Mic, "Escuchando...")
+                ConversationState.PROCESSING -> Triple(Color(0xFF7B1FA2), Icons.Filled.Psychology, "Pensando...")
+                ConversationState.SPEAKING -> Triple(Color(0xFFE65100), Icons.Filled.VolumeUp, "Hablando...")
+                else -> Triple(Color.Transparent, Icons.Filled.Pause, "")
+            }
+            Surface(
+                color = bannerColor.copy(alpha = 0.85f),
+                shape = RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(bannerIcon, bannerLabel, tint = Color.White, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(bannerLabel, fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Medium)
+                    Spacer(Modifier.weight(1f))
+                    if (conversationState == ConversationState.LISTENING) {
+                        val infiniteTransition = rememberInfiniteTransition(label = "dots")
+                        (0..2).forEach { i ->
+                            val dotAlpha by infiniteTransition.animateFloat(
+                                initialValue = 0.3f, targetValue = 1f,
+                                animationSpec = infiniteRepeatable(
+                                    tween(600, delayMillis = i * 200), RepeatMode.Reverse
+                                ), label = "dot$i"
+                            )
+                            Box(Modifier.size(5.dp).clip(CircleShape).background(Color.White.copy(alpha = dotAlpha)))
+                            if (i < 2) Spacer(Modifier.width(3.dp))
+                        }
+                    }
                 }
             }
         }
@@ -1262,8 +1268,14 @@ fun LiveVisionScreen(
             }
         }
 
-        // ── V11 Voice-First Result Overlay ──
+        // ── V11 Phase 5: Enhanced Result Card with Agent Attribution ──
         if (liveResult.isNotBlank()) {
+            val isProactive = liveResult.startsWith("\u26A1")
+            val displayResult = if (isProactive) liveResult.removePrefix("\u26A1 ").removePrefix("\u26A1") else liveResult
+            val borderColor by animateColorAsState(
+                targetValue = if (isProactive) Color(0xFFFFD54F) else Color.White.copy(alpha = 0.1f),
+                animationSpec = tween(400), label = "border"
+            )
             Box(
                 modifier = Modifier
                     .align(Alignment.Center)
@@ -1273,7 +1285,7 @@ fun LiveVisionScreen(
                 Surface(
                     color = Color.Black.copy(alpha = 0.4f),
                     shape = RoundedCornerShape(24.dp),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+                    border = BorderStroke(if (isProactive) 2.dp else 1.dp, borderColor),
                     modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp, max = 300.dp)
                 ) {
                     Column(
@@ -1282,18 +1294,35 @@ fun LiveVisionScreen(
                             .verticalScroll(rememberScrollState()),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
+                        // Agent attribution header
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                            Icon(Icons.Filled.AutoAwesome, "AI", tint = Color(0xFFF5A623), modifier = Modifier.size(16.dp))
+                            Icon(
+                                if (isProactive) Icons.Filled.Bolt else Icons.Filled.AutoAwesome,
+                                "Agent",
+                                tint = if (isProactive) Color(0xFFFFD54F) else Color(0xFFF5A623),
+                                modifier = Modifier.size(16.dp)
+                            )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("E.M.M.A. Voz", fontSize = 13.sp, color = Color(0xFFF5A623), fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                            if (selectedPersonality.id != "default") {
+                            Column {
+                                Text(
+                                    if (isProactive) "E.M.M.A. Observacion" else "E.M.M.A. Interlocutor",
+                                    fontSize = 12.sp,
+                                    color = if (isProactive) Color(0xFFFFD54F) else Color(0xFFF5A623),
+                                    fontWeight = FontWeight.Bold, letterSpacing = 1.sp
+                                )
+                                Text(
+                                    if (isProactive) "Deteccion automatica" else "En respuesta a tu voz",
+                                    fontSize = 9.sp, color = Color.White.copy(alpha = 0.4f)
+                                )
+                            }
+                            if (!isProactive && selectedPersonality.id != "default") {
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("${selectedPersonality.emoji} ${selectedPersonality.name}", fontSize = 12.sp, color = Color.White.copy(alpha = 0.5f))
+                                Text(selectedPersonality.name, fontSize = 10.sp, color = Color.White.copy(alpha = 0.4f))
                             }
                         }
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            liveResult,
+                            displayResult,
                             fontSize = 18.sp,
                             color = Color.White,
                             textAlign = TextAlign.Center,
@@ -1418,10 +1447,10 @@ fun LiveVisionScreen(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Mic (V3) -- R3-1 FIX: Derived state from voiceController, pulse animation
+            // V11: Mic Mute (independent — mutes YOUR mic, E.M.M.A. can still talk to you)
             Box {
                 // Pulse ring behind button when listening
-                if (isListening) {
+                if (isListening && !isMicMuted) {
                     val pulseAlpha by rememberInfiniteTransition(label = "micPulse").animateFloat(
                         initialValue = 0.2f,
                         targetValue = 0.6f,
@@ -1436,41 +1465,43 @@ fun LiveVisionScreen(
                             .size(52.dp)
                             .align(Alignment.Center)
                             .clip(CircleShape)
-                            .background(Color(0xFFFF1744).copy(alpha = pulseAlpha))
+                            .background(Color(0xFF4CAF50).copy(alpha = pulseAlpha))
                     )
                 }
                 ControlButton(
-                    icon = if (isListening) Icons.Filled.MicOff else Icons.Filled.Mic,
-                    label = if (isListening) "Escuchando" else "Mic",
-                    isActive = isListening,
-                    activeColor = Color(0xFFFF1744),
+                    icon = if (isMicMuted) Icons.Filled.MicOff else Icons.Filled.Mic,
+                    label = if (isMicMuted) "Mic Off" else if (isListening) "Escuchando" else "Mic",
+                    isActive = !isMicMuted && isLiveActive,
+                    activeColor = if (isMicMuted) Color(0xFFFF1744) else Color(0xFF4CAF50),
                     onClick = {
-                        if (isListening) {
-                            voiceController.stopListening()
+                        if (!hasAudioPermission) {
+                            audioPermLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                            liveResult = "Permiso de microfono requerido"
                         } else {
-                            if (!hasAudioPermission) {
-                                audioPermLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                                liveResult = "Permiso de microfono requerido"
-                            } else {
-                                val started = voiceController.startListening()
-                                if (!started) {
-                                    liveResult = "No se pudo iniciar el microfono"
-                                }
+                            isMicMuted = !isMicMuted
+                            // When mic is muted, stop the ConversationEngine's listening
+                            // When unmuted, the engine's auto-listen will pick up on next cycle
+                            if (isMicMuted && conversationEngine.isActive()) {
+                                voiceManager.stopListening()
                             }
                         }
                     }
                 )
             }
-            // Mute
+            // V11: Speaker Mute (independent — mutes E.M.M.A.'s voice, but text still shows on screen)
             ControlButton(
-                icon = if (isMuted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
-                label = if (isMuted) "Muted" else "Audio",
-                isActive = !isMuted,
+                icon = if (isSpeakerMuted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
+                label = if (isSpeakerMuted) "Silencio" else "Audio",
+                isActive = !isSpeakerMuted,
                 onClick = {
-                    isMuted = voiceController.toggleMute()
+                    isSpeakerMuted = !isSpeakerMuted
+                    isMuted = isSpeakerMuted // Legacy compat
+                    if (isSpeakerMuted) {
+                        voiceManager.stopSpeaking() // Instant silence
+                    }
                 }
             )
-            // Play/Pause (main button)
+            // Play/Pause (main button — starts/stops the entire Triad)
             FloatingActionButton(
                 onClick = {
                     if (isLiveActive) {
@@ -1647,6 +1678,7 @@ fun LiveVisionScreen(
         ) {
             SettingsPanel(
                 selectedModel = selectedModel,
+                selectedVoiceModel = selectedVoiceModel,
                 customPrompt = customPrompt,
                 intervalSeconds = intervalSeconds,
                 isNarrationEnabled = isNarrationEnabled,
@@ -1654,6 +1686,10 @@ fun LiveVisionScreen(
                 onModelChange = { id ->
                     selectedModel = id
                     prefs.edit().putString("vision_model", id).apply()
+                },
+                onVoiceModelChange = { id ->
+                    selectedVoiceModel = id
+                    prefs.edit().putString("vision_voice_model", id).apply()
                 },
                 onPromptChange = { customPrompt = it },
                 onIntervalChange = { intervalSeconds = it },
@@ -1699,10 +1735,55 @@ fun LiveVisionScreen(
             }
         }
 
-        // ── Processing indicator ──
+        // V11 Phase 5: Data Sources Badge (bottom-left)
+        var expandedSources by remember { mutableStateOf(false) }
+        val gpsActive = currentGpsData.address.isNotBlank()
+        val hasVisionLogs = isLiveActive && frameCount > 0
+        val hasWeather = weatherInfo.isNotBlank()
+        val activeSourceCount = listOf(
+            gpsActive, true /* Overpass always attempts */, true /* Wiki */,
+            true /* Web */, hasWeather, true /* Memory */, hasVisionLogs
+        ).count { it }
+
+        Surface(
+            onClick = { expandedSources = !expandedSources },
+            color = Color.Black.copy(alpha = 0.55f),
+            shape = RoundedCornerShape(8.dp),
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .navigationBarsPadding()
+                .padding(start = 12.dp, bottom = 72.dp)
+        ) {
+            if (!expandedSources) {
+                Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.CellTower, "Sources", tint = Color.White, modifier = Modifier.size(12.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("$activeSourceCount/7", fontSize = 10.sp, color = Color.White)
+                }
+            } else {
+                Column(Modifier.padding(10.dp).width(130.dp)) {
+                    Text("Fuentes activas", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(4.dp))
+                    SourceRow(Icons.Filled.GpsFixed, "GPS", gpsActive)
+                    SourceRow(Icons.Filled.Map, "POIs", true)
+                    SourceRow(Icons.Filled.MenuBook, "Wikipedia", true)
+                    SourceRow(Icons.Filled.Search, "Web", true)
+                    SourceRow(Icons.Filled.WbSunny, "Clima", hasWeather)
+                    SourceRow(Icons.Filled.Memory, "Memoria", true)
+                    SourceRow(Icons.Filled.Visibility, "Vigia", hasVisionLogs)
+                }
+            }
+        }
+
+        // ── Processing indicator (tucked under top bar, above Speed/MiniMap) ──
         if (isLiveActive && captureLoop.isProcessing.get()) {
             LinearProgressIndicator(
-                modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter).statusBarsPadding().padding(top = 56.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(2.dp)
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 44.dp),
                 color = Color(0xFFF5A623),
                 trackColor = Color.Transparent
             )
@@ -1774,11 +1855,13 @@ private fun PermissionGateUI(
 @Composable
 private fun SettingsPanel(
     selectedModel: String,
+    selectedVoiceModel: String,
     customPrompt: String,
     intervalSeconds: Int,
     isNarrationEnabled: Boolean,
     selectedPersonality: NarratorPersonality,
     onModelChange: (String) -> Unit,
+    onVoiceModelChange: (String) -> Unit,
     onPromptChange: (String) -> Unit,
     onIntervalChange: (Int) -> Unit,
     onNarrationToggle: (Boolean) -> Unit,
@@ -1810,326 +1893,263 @@ private fun SettingsPanel(
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         modifier = Modifier.fillMaxWidth().fillMaxHeight(0.65f)
     ) {
-        Column(
-            modifier = Modifier.padding(20.dp).verticalScroll(rememberScrollState())
-        ) {
+        Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
+            // Header
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Configuración", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = colorScheme.onSurface)
+                Text("Configuracion", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = colorScheme.onSurface)
                 Spacer(modifier = Modifier.weight(1f))
-                IconButton(onClick = onDismiss) {
-                    Icon(Icons.Filled.Close, "Close", tint = colorScheme.onSurfaceVariant)
-                }
+                IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, "Close", tint = colorScheme.onSurfaceVariant) }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // ── V3: Narration toggle ──
-            Text("VOZ Y NARRACIÓN", fontSize = 10.sp, color = colorScheme.primary,
-                fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-            Spacer(modifier = Modifier.height(6.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Filled.RecordVoiceOver, "Narration", tint = colorScheme.primary, modifier = Modifier.size(20.dp))
-                Spacer(modifier = Modifier.width(10.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Narración automática", fontSize = 14.sp, color = colorScheme.onSurface)
-                    Text("E.M.M.A. lee en voz alta lo que ve", fontSize = 11.sp, color = colorScheme.onSurfaceVariant)
+            // V11 Phase 5: Tab navigation
+            var selectedTab by remember { mutableStateOf(0) }
+            val tabIcons = listOf(Icons.Filled.RecordVoiceOver, Icons.Filled.Visibility, Icons.Filled.Storage, Icons.Filled.Settings)
+            val tabLabels = listOf("Voz", "Vision", "Datos", "Sistema")
+            TabRow(selectedTabIndex = selectedTab, containerColor = Color.Transparent, contentColor = colorScheme.primary,
+                modifier = Modifier.padding(vertical = 4.dp)) {
+                tabLabels.forEachIndexed { index, title ->
+                    Tab(selected = selectedTab == index, onClick = { selectedTab = index },
+                        icon = { Icon(tabIcons[index], title, modifier = Modifier.size(18.dp)) },
+                        text = { Text(title, fontSize = 10.sp, maxLines = 1) })
                 }
-                Switch(
-                    checked = isNarrationEnabled,
-                    onCheckedChange = onNarrationToggle,
-                    colors = SwitchDefaults.colors(checkedTrackColor = colorScheme.primary)
-                )
             }
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // ── V3: Personality selector ──
-            if (isNarrationEnabled) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Text("PERSONALIDAD DEL NARRADOR", fontSize = 10.sp, color = colorScheme.primary,
-                    fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                Spacer(modifier = Modifier.height(6.dp))
-
-                NARRATOR_PERSONALITIES.forEach { p ->
-                    val isSelected = selectedPersonality.id == p.id
-                    Surface(
-                        onClick = { onPersonalityChange(p) },
-                        color = if (isSelected) colorScheme.primaryContainer else colorScheme.surfaceVariant,
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
-                    ) {
-                        Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(p.emoji, fontSize = 18.sp)
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(p.name, fontSize = 13.sp,
-                                color = if (isSelected) colorScheme.onPrimaryContainer else colorScheme.onSurface,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                modifier = Modifier.weight(1f))
-                            if (isSelected) Icon(Icons.Filled.CheckCircle, "Selected", tint = colorScheme.primary, modifier = Modifier.size(16.dp))
+            // Tab content (scrollable)
+            Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f)) {
+                when (selectedTab) {
+                    0 -> { // ═══ VOZ ═══
+                        Text("VOZ Y NARRACION", fontSize = 10.sp, color = colorScheme.primary, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                        Spacer(Modifier.height(6.dp))
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.RecordVoiceOver, "Narration", tint = colorScheme.primary, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("Narracion automatica", fontSize = 14.sp, color = colorScheme.onSurface)
+                                Text("E.M.M.A. lee en voz alta lo que ve", fontSize = 11.sp, color = colorScheme.onSurfaceVariant)
+                            }
+                            Switch(checked = isNarrationEnabled, onCheckedChange = onNarrationToggle,
+                                colors = SwitchDefaults.colors(checkedTrackColor = colorScheme.primary))
+                        }
+                        if (isNarrationEnabled) {
+                            Spacer(Modifier.height(12.dp))
+                            Text("PERSONALIDAD", fontSize = 10.sp, color = colorScheme.primary, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                            Spacer(Modifier.height(6.dp))
+                            NARRATOR_PERSONALITIES.forEach { p ->
+                                val isSel = selectedPersonality.id == p.id
+                                Surface(onClick = { onPersonalityChange(p) },
+                                    color = if (isSel) colorScheme.primaryContainer else colorScheme.surfaceVariant,
+                                    shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                                    Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Filled.Person, p.name, tint = colorScheme.tertiary, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(10.dp))
+                                        Text(p.name, fontSize = 13.sp,
+                                            color = if (isSel) colorScheme.onPrimaryContainer else colorScheme.onSurface,
+                                            fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
+                                            modifier = Modifier.weight(1f))
+                                        if (isSel) Icon(Icons.Filled.CheckCircle, "Sel", tint = colorScheme.primary, modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(16.dp))
+                        Text("MODELO DE CONVERSACION", fontSize = 10.sp, color = colorScheme.primary, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                        Spacer(Modifier.height(4.dp))
+                        Text("E.M.M.A. usa este modelo para hablar", fontSize = 11.sp, color = colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.height(8.dp))
+                        val allConvModels = remember {
+                            val m = mutableListOf<ModelRegistry.ModelEntry>()
+                            m.addAll(ModelRegistry.OPENROUTER); m.addAll(ModelRegistry.OLLAMA_CLOUD)
+                            ModelRegistry.LOCAL.filter { com.beemovil.llm.local.LocalModelManager.isModelDownloaded(it.id) }.let { m.addAll(it) }
+                            m
+                        }
+                        allConvModels.groupBy { it.provider }.forEach { (prov, models) ->
+                            val pl = when(prov) { "openrouter" -> "OpenRouter"; "ollama" -> "Ollama Cloud"; "local" -> "Local (Offline)"; else -> prov }
+                            Text("-- $pl --", fontSize = 9.sp, color = colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(top = 6.dp, bottom = 2.dp))
+                            models.sortedByDescending { it.free }.forEach { model ->
+                                val isSel = selectedVoiceModel == model.id
+                                Surface(onClick = { onVoiceModelChange(model.id) },
+                                    color = if (isSel) colorScheme.primaryContainer else colorScheme.surfaceVariant,
+                                    shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                                    Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Filled.RecordVoiceOver, "V", tint = colorScheme.tertiary, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(8.dp))
+                                        Column(Modifier.weight(1f)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(model.name, fontSize = 13.sp,
+                                                    color = if (isSel) colorScheme.onPrimaryContainer else colorScheme.onSurface,
+                                                    fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal)
+                                                if (model.free) { Spacer(Modifier.width(4.dp)); Text("FREE", fontSize = 8.sp, color = Color(0xFF00E676), fontWeight = FontWeight.Bold) }
+                                            }
+                                            Text("${model.sizeLabel} | ${model.category.label}", fontSize = 10.sp, color = colorScheme.onSurfaceVariant)
+                                        }
+                                        if (isSel) Icon(Icons.Filled.CheckCircle, "Sel", tint = colorScheme.primary, modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            }
                         }
                     }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-            Text("INTERVALO DE CAPTURA", fontSize = 10.sp, color = colorScheme.primary,
-                fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-            Spacer(modifier = Modifier.height(4.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("${intervalSeconds}s", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = colorScheme.onSurface)
-                Spacer(modifier = Modifier.width(12.dp))
-                Slider(
-                    value = intervalSeconds.toFloat(),
-                    onValueChange = { onIntervalChange(it.toInt()) },
-                    valueRange = 2f..15f,
-                    steps = 12,
-                    modifier = Modifier.weight(1f),
-                    colors = SliderDefaults.colors(
-                        thumbColor = colorScheme.primary,
-                        activeTrackColor = colorScheme.primary
-                    )
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Custom prompt
-            Text("PROMPT PERSONALIZADO", fontSize = 10.sp, color = colorScheme.primary,
-                fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-            Spacer(modifier = Modifier.height(4.dp))
-            OutlinedTextField(
-                value = customPrompt,
-                onValueChange = onPromptChange,
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 2,
-                maxLines = 4,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = colorScheme.primary,
-                    unfocusedBorderColor = colorScheme.outline,
-                    focusedTextColor = colorScheme.onSurface,
-                    unfocusedTextColor = colorScheme.onSurface,
-                    cursorColor = colorScheme.primary
-                )
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Vision model selector — R2-8 FIX: Dynamic + Refresh
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text("MODELO DE VISIÓN", fontSize = 10.sp, color = colorScheme.primary,
-                        fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                    Text("${displayModels.size} modelos ($currentProvider)",
-                        fontSize = 9.sp, color = colorScheme.onSurfaceVariant)
-                }
-                IconButton(
-                    onClick = {
-                        isRefreshing = true
-                        scope.launch {
-                            val fresh = DynamicModelFetcher.getVisionModels(context, currentProvider)
-                            if (fresh.isNotEmpty()) visionModels = fresh
-                            isRefreshing = false
+                    1 -> { // ═══ VISION ═══
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Column {
+                                Text("MODELO DE VISION", fontSize = 10.sp, color = colorScheme.primary, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                                Text("${displayModels.size} modelos ($currentProvider)", fontSize = 9.sp, color = colorScheme.onSurfaceVariant)
+                            }
+                            IconButton(onClick = {
+                                isRefreshing = true
+                                scope.launch { val f = DynamicModelFetcher.getVisionModels(context, currentProvider); if (f.isNotEmpty()) visionModels = f; isRefreshing = false }
+                            }, modifier = Modifier.size(32.dp)) {
+                                if (isRefreshing) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp, color = colorScheme.primary)
+                                else Icon(Icons.Filled.Refresh, "Refresh", tint = colorScheme.primary, modifier = Modifier.size(16.dp))
+                            }
                         }
-                    },
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    if (isRefreshing) {
-                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = colorScheme.primary)
-                    } else {
-                        Icon(Icons.Filled.Refresh, "Refresh", tint = colorScheme.primary, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.height(6.dp))
+                        displayModels.forEach { model ->
+                            val isSel = selectedModel == model.id
+                            Surface(onClick = { onModelChange(model.id) },
+                                color = if (isSel) colorScheme.primaryContainer else colorScheme.surfaceVariant,
+                                shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                                Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.Visibility, "V", tint = colorScheme.primary, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(model.name, fontSize = 13.sp,
+                                            color = if (isSel) colorScheme.onPrimaryContainer else colorScheme.onSurface,
+                                            fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal)
+                                        Text("${model.provider} | ${model.sizeLabel}", fontSize = 10.sp, color = colorScheme.onSurfaceVariant)
+                                    }
+                                    if (isSel) Icon(Icons.Filled.CheckCircle, "Sel", tint = colorScheme.primary, modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(16.dp))
+                        Text("INTERVALO DE CAPTURA", fontSize = 10.sp, color = colorScheme.primary, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                        Spacer(Modifier.height(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("${intervalSeconds}s", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = colorScheme.onSurface)
+                            Spacer(Modifier.width(12.dp))
+                            Slider(value = intervalSeconds.toFloat(), onValueChange = { onIntervalChange(it.toInt()) },
+                                valueRange = 2f..15f, steps = 12, modifier = Modifier.weight(1f),
+                                colors = SliderDefaults.colors(thumbColor = colorScheme.primary, activeTrackColor = colorScheme.primary))
+                        }
+                        Spacer(Modifier.height(16.dp))
+                        Text("PROMPT PERSONALIZADO", fontSize = 10.sp, color = colorScheme.primary, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                        Spacer(Modifier.height(4.dp))
+                        OutlinedTextField(value = customPrompt, onValueChange = onPromptChange,
+                            modifier = Modifier.fillMaxWidth(), minLines = 2, maxLines = 4,
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = colorScheme.primary,
+                                unfocusedBorderColor = colorScheme.outline, focusedTextColor = colorScheme.onSurface,
+                                unfocusedTextColor = colorScheme.onSurface, cursorColor = colorScheme.primary))
                     }
-                }
-            }
-            Spacer(modifier = Modifier.height(6.dp))
-
-            displayModels.forEach { model ->
-                val isSelected = selectedModel == model.id
-                Surface(
-                    onClick = { onModelChange(model.id) },
-                    color = if (isSelected) colorScheme.primaryContainer else colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
-                ) {
-                    Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.Visibility, "Vision", tint = colorScheme.primary, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(model.name, fontSize = 13.sp,
-                                color = if (isSelected) colorScheme.onPrimaryContainer else colorScheme.onSurface,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
-                            Text("${model.provider} · ${model.sizeLabel}", fontSize = 10.sp, color = colorScheme.onSurfaceVariant)
+                    2 -> { // ═══ DATOS ═══
+                        if (onPlacesClick != null) {
+                            Text("LUGARES", fontSize = 10.sp, color = colorScheme.primary, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                            Spacer(Modifier.height(6.dp))
+                            Surface(onClick = { onPlacesClick() }, color = colorScheme.surfaceVariant,
+                                shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
+                                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.Place, "P", tint = colorScheme.primary, modifier = Modifier.size(20.dp))
+                                    Spacer(Modifier.width(10.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text("Mis Lugares", fontSize = 14.sp, color = colorScheme.onSurface)
+                                        Text("Ver lugares visitados y navegar", fontSize = 11.sp, color = colorScheme.onSurfaceVariant)
+                                    }
+                                    Icon(Icons.Filled.ChevronRight, "Open", tint = colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                                }
+                            }
                         }
-                        if (isSelected) Icon(Icons.Filled.CheckCircle, "Selected", tint = colorScheme.primary, modifier = Modifier.size(16.dp))
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // R3-4: Mis Lugares button
-            if (onPlacesClick != null) {
-                Text("DATOS Y LUGARES", fontSize = 10.sp, color = colorScheme.primary,
-                    fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                Spacer(modifier = Modifier.height(6.dp))
-                Surface(
-                    onClick = { onPlacesClick() },
-                    color = colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.Place, "Places", tint = colorScheme.primary, modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Mis Lugares", fontSize = 14.sp, color = colorScheme.onSurface)
-                            Text("Ver lugares visitados y navegar", fontSize = 11.sp, color = colorScheme.onSurfaceVariant)
-                        }
-                        Icon(Icons.Filled.ChevronRight, "Open", tint = colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
-                    }
-                }
-            }
-
-            // R3-7: Cache management
-            if (offlineCache != null) {
-                Spacer(modifier = Modifier.height(12.dp))
-                val cacheEntries = remember { offlineCache.entryCount() }
-                val cacheSizeKb = remember { offlineCache.dbSizeBytes() / 1024 }
-                var showPurgeConfirm by remember { mutableStateOf(false) }
-
-                Surface(
-                    color = colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.Storage, "Cache", tint = colorScheme.primary, modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Cache Offline", fontSize = 14.sp, color = colorScheme.onSurface)
-                            Text("$cacheEntries entradas | ${cacheSizeKb}KB", fontSize = 11.sp, color = colorScheme.onSurfaceVariant)
-                        }
-                        TextButton(onClick = { showPurgeConfirm = true }) {
-                            Text("Limpiar", fontSize = 12.sp, color = Color(0xFFFF6B6B))
+                        if (offlineCache != null) {
+                            Spacer(Modifier.height(12.dp))
+                            val cacheEntries = remember { offlineCache.entryCount() }
+                            val cacheSizeKb = remember { offlineCache.dbSizeBytes() / 1024 }
+                            var showPurgeConfirm by remember { mutableStateOf(false) }
+                            Surface(color = colorScheme.surfaceVariant, shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
+                                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.Storage, "C", tint = colorScheme.primary, modifier = Modifier.size(20.dp))
+                                    Spacer(Modifier.width(10.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text("Cache Offline", fontSize = 14.sp, color = colorScheme.onSurface)
+                                        Text("$cacheEntries entradas | ${cacheSizeKb}KB", fontSize = 11.sp, color = colorScheme.onSurfaceVariant)
+                                    }
+                                    TextButton(onClick = { showPurgeConfirm = true }) { Text("Limpiar", fontSize = 12.sp, color = Color(0xFFFF6B6B)) }
+                                }
+                            }
+                            if (showPurgeConfirm) {
+                                AlertDialog(onDismissRequest = { showPurgeConfirm = false },
+                                    title = { Text("Limpiar cache?") },
+                                    text = { Text("Esto borrara $cacheEntries entradas de cache offline.") },
+                                    confirmButton = { TextButton(onClick = { offlineCache.purgeAll(); showPurgeConfirm = false }) { Text("Limpiar", color = Color(0xFFFF6B6B)) } },
+                                    dismissButton = { TextButton(onClick = { showPurgeConfirm = false }) { Text("Cancelar") } })
+                            }
                         }
                     }
-                }
-
-                if (showPurgeConfirm) {
-                    AlertDialog(
-                        onDismissRequest = { showPurgeConfirm = false },
-                        title = { Text("Limpiar cache?") },
-                        text = { Text("Esto borrara $cacheEntries entradas de cache offline. Los datos de memoria (BeeMemory) se mantienen.") },
-                        confirmButton = {
-                            TextButton(onClick = {
-                                offlineCache.purgeAll()
-                                showPurgeConfirm = false
-                            }) { Text("Limpiar", color = Color(0xFFFF6B6B)) }
-                        },
-                        dismissButton = {
-                            TextButton(onClick = { showPurgeConfirm = false }) { Text("Cancelar") }
+                    3 -> { // ═══ SISTEMA ═══
+                        if (emergencyProtocol != null) {
+                            Text("CONTACTO DE EMERGENCIA", fontSize = 10.sp, color = Color(0xFFFF1744), fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                            Spacer(Modifier.height(6.dp))
+                            var emergencyConfig by remember { mutableStateOf(emergencyProtocol.loadConfig()) }
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.Warning, "SOS", tint = Color(0xFFFF1744), modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(10.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text("Activar emergencia", fontSize = 14.sp, color = colorScheme.onSurface)
+                                    Text("Boton SOS + auto-deteccion", fontSize = 11.sp, color = colorScheme.onSurfaceVariant)
+                                }
+                                Switch(checked = emergencyConfig.enabled,
+                                    onCheckedChange = { emergencyConfig = emergencyConfig.copy(enabled = it); emergencyProtocol.saveConfig(emergencyConfig) },
+                                    colors = SwitchDefaults.colors(checkedTrackColor = Color(0xFFFF1744)))
+                            }
+                            if (emergencyConfig.enabled) {
+                                Spacer(Modifier.height(8.dp))
+                                OutlinedTextField(value = emergencyConfig.contactName,
+                                    onValueChange = { emergencyConfig = emergencyConfig.copy(contactName = it); emergencyProtocol.saveConfig(emergencyConfig) },
+                                    label = { Text("Nombre del contacto") }, placeholder = { Text("Ej: Mama, Esposa") },
+                                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+                                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color(0xFFFF1744),
+                                        unfocusedBorderColor = colorScheme.outline, focusedTextColor = colorScheme.onSurface, unfocusedTextColor = colorScheme.onSurface))
+                                Spacer(Modifier.height(6.dp))
+                                OutlinedTextField(value = emergencyConfig.contactNumber,
+                                    onValueChange = { emergencyConfig = emergencyConfig.copy(contactNumber = it); emergencyProtocol.saveConfig(emergencyConfig) },
+                                    label = { Text("Telefono (con codigo pais)") }, placeholder = { Text("+507XXXXXXXX") },
+                                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+                                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color(0xFFFF1744),
+                                        unfocusedBorderColor = colorScheme.outline, focusedTextColor = colorScheme.onSurface, unfocusedTextColor = colorScheme.onSurface))
+                                Spacer(Modifier.height(6.dp))
+                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                    Text("Metodo: ", fontSize = 13.sp, color = colorScheme.onSurface)
+                                    EmergencyProtocol.SendMethod.entries.forEach { method ->
+                                        val isSel = emergencyConfig.sendMethod == method
+                                        Surface(onClick = { emergencyConfig = emergencyConfig.copy(sendMethod = method); emergencyProtocol.saveConfig(emergencyConfig) },
+                                            color = if (isSel) Color(0xFFFF1744).copy(alpha = 0.2f) else colorScheme.surfaceVariant,
+                                            shape = RoundedCornerShape(6.dp), modifier = Modifier.padding(horizontal = 2.dp)) {
+                                            Text(method.name, fontSize = 11.sp,
+                                                color = if (isSel) Color(0xFFFF1744) else colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                                        }
+                                    }
+                                }
+                            }
                         }
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // V9: Emergency config section
-            if (emergencyProtocol != null) {
-                Text("CONTACTO DE EMERGENCIA", fontSize = 10.sp, color = Color(0xFFFF1744),
-                    fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                Spacer(modifier = Modifier.height(6.dp))
-
-                var emergencyConfig by remember {
-                    mutableStateOf(emergencyProtocol.loadConfig())
-                }
-
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.Warning, "SOS", tint = Color(0xFFFF1744), modifier = Modifier.size(20.dp))
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Activar emergencia", fontSize = 14.sp, color = colorScheme.onSurface)
-                        Text("Botón SOS + auto-detección", fontSize = 11.sp, color = colorScheme.onSurfaceVariant)
-                    }
-                    Switch(
-                        checked = emergencyConfig.enabled,
-                        onCheckedChange = {
-                            emergencyConfig = emergencyConfig.copy(enabled = it)
-                            emergencyProtocol.saveConfig(emergencyConfig)
-                        },
-                        colors = SwitchDefaults.colors(checkedTrackColor = Color(0xFFFF1744))
-                    )
-                }
-
-                if (emergencyConfig.enabled) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = emergencyConfig.contactName,
-                        onValueChange = {
-                            emergencyConfig = emergencyConfig.copy(contactName = it)
-                            emergencyProtocol.saveConfig(emergencyConfig)
-                        },
-                        label = { Text("Nombre del contacto") },
-                        placeholder = { Text("Ej: Mamá, Esposa") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFFFF1744),
-                            unfocusedBorderColor = colorScheme.outline,
-                            focusedTextColor = colorScheme.onSurface,
-                            unfocusedTextColor = colorScheme.onSurface
-                        )
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    OutlinedTextField(
-                        value = emergencyConfig.contactNumber,
-                        onValueChange = {
-                            emergencyConfig = emergencyConfig.copy(contactNumber = it)
-                            emergencyProtocol.saveConfig(emergencyConfig)
-                        },
-                        label = { Text("Teléfono (con código país)") },
-                        placeholder = { Text("+507XXXXXXXX") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFFFF1744),
-                            unfocusedBorderColor = colorScheme.outline,
-                            focusedTextColor = colorScheme.onSurface,
-                            unfocusedTextColor = colorScheme.onSurface
-                        )
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Método: ", fontSize = 13.sp, color = colorScheme.onSurface)
-                        EmergencyProtocol.SendMethod.entries.forEach { method ->
-                            val isSelected = emergencyConfig.sendMethod == method
-                            Surface(
-                                onClick = {
-                                    emergencyConfig = emergencyConfig.copy(sendMethod = method)
-                                    emergencyProtocol.saveConfig(emergencyConfig)
-                                },
-                                color = if (isSelected) Color(0xFFFF1744).copy(alpha = 0.2f) else colorScheme.surfaceVariant,
-                                shape = RoundedCornerShape(6.dp),
-                                modifier = Modifier.padding(horizontal = 2.dp)
-                            ) {
-                                Text(method.name, fontSize = 11.sp,
-                                    color = if (isSelected) Color(0xFFFF1744) else colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                        Spacer(Modifier.height(16.dp))
+                        Surface(color = colorScheme.surfaceVariant, shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
+                            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.Info, "Ver", tint = colorScheme.primary, modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(10.dp))
+                                Column {
+                                    Text("E.M.M.A. Vision V11", fontSize = 14.sp, color = colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
+                                    Text("Phase 5 - Triad Architecture", fontSize = 11.sp, color = colorScheme.onSurfaceVariant)
+                                }
                             }
                         }
                     }
                 }
+                Spacer(Modifier.height(24.dp))
             }
-
-            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
+
 
 /** V10: Get current battery level (0-100) */
 private fun getBatteryLevel(context: android.content.Context): Int {
@@ -2138,4 +2158,39 @@ private fun getBatteryLevel(context: android.content.Context): Int {
     val level = batteryStatus?.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) ?: -1
     val scale = batteryStatus?.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1) ?: -1
     return if (level >= 0 && scale > 0) (level * 100 / scale) else 100
+}
+
+// V11 Phase 5: PulsingDot — animated status dot for agent indicators
+@Composable
+private fun PulsingDot(color: Color, active: Boolean) {
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = if (active) 0.4f else 0.3f,
+        targetValue = if (active) 1f else 0.3f,
+        animationSpec = infiniteRepeatable(
+            tween(800), RepeatMode.Reverse
+        ),
+        label = "pulseAlpha"
+    )
+    Box(
+        modifier = Modifier
+            .size(6.dp)
+            .clip(CircleShape)
+            .background(color.copy(alpha = if (active) alpha else 0.3f))
+    )
+}
+
+// V11 Phase 5: SourceRow — data source status for DataSourcesBadge
+@Composable
+private fun SourceRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, active: Boolean) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, label, tint = if (active) Color(0xFF00E676) else Color.Gray, modifier = Modifier.size(10.dp))
+        Spacer(Modifier.width(4.dp))
+        Text(label, fontSize = 9.sp, color = if (active) Color.White else Color.Gray)
+        Spacer(Modifier.weight(1f))
+        Box(Modifier.size(5.dp).clip(CircleShape).background(if (active) Color(0xFF00E676) else Color.Gray))
+    }
 }

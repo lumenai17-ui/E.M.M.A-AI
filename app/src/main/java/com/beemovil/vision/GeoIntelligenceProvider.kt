@@ -75,7 +75,7 @@ class GeoIntelligenceProvider(private val offlineCache: OfflineContextCache? = n
               node["amenity"~"$amenities"](around:$radiusMeters,$lat,$lng);
               node["tourism"~"hotel|museum|attraction|viewpoint"](around:$radiusMeters,$lat,$lng);
             );
-            out body 10;
+            out body 20;
         """.trimIndent()
 
         try {
@@ -111,7 +111,7 @@ class GeoIntelligenceProvider(private val offlineCache: OfflineContextCache? = n
             val elements = obj.optJSONArray("elements") ?: return ""
 
             val pois = mutableListOf<String>()
-            for (i in 0 until minOf(elements.length(), 8)) {
+            for (i in 0 until minOf(elements.length(), 15)) { // V11-P4: expanded from 8
                 val el = elements.getJSONObject(i)
                 val tags = el.optJSONObject("tags") ?: continue
                 val name = tags.optString("name", "")

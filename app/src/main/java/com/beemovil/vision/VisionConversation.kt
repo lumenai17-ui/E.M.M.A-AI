@@ -391,7 +391,7 @@ class VisionConversation {
         if (webContext.isNotBlank() && !webContext.startsWith("Error") && !webContext.startsWith("No se encontraron")) {
             appendLine()
             appendLine("DATOS DE LA ZONA (usa estos para enriquecer tu respuesta):")
-            appendLine(webContext.take(400))
+            appendLine(webContext.take(800)) // V11-P4: expanded from 400 for Overpass POIs
         }
 
         // R5: Session context from SessionState (replaces old truncated history)
@@ -414,7 +414,7 @@ class VisionConversation {
         if (memoryContext.isNotBlank()) {
             appendLine()
             appendLine("MEMORIAS RELEVANTES:")
-            appendLine(memoryContext.take(300))
+            appendLine(memoryContext.take(500)) // V11-P4: expanded from 300 for richer place memory
         }
 
         // R7: Cross-system context (Tasks, Email, Calendar, user instructions)

@@ -41,6 +41,11 @@ class ConversationEngine(
     private var conversationJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var turnCount = 0
+    // V11 Phase 4: Proactivity tracking
+    private var silenceCount = 0
+    private var lastProactiveTime = 0L
+    private val PROACTIVE_SILENCE_THRESHOLD = 3  // 3 silence timeouts (~15s at 5s each)
+    private val PROACTIVE_COOLDOWN_MS = 30_000L  // Don't be proactive more than every 30s
 
     // --- Available backends ---
     val backends: List<ConversationBackend> by lazy {
@@ -195,17 +200,61 @@ class ConversationEngine(
                 Log.i(TAG, "User said: ${transcript.take(80)}...")
                 onFinalTranscript?.invoke(transcript)
                 turnCount++
+                silenceCount = 0 // V11-P4: Reset silence counter on user speech
 
                 // Process through LLM
                 processUserTurn(transcript)
             },
             onError = { error ->
                 Log.w(TAG, "STT error: $error")
-                onError?.invoke(error)
+                // V11 FIX: Filter non-critical STT errors
+                // Error 6 = SPEECH_TIMEOUT, Error 7 = NO_MATCH — normal when user hasn't spoken
+                val isNonCritical = error.contains("Error: 7") || error.contains("Error: 6") ||
+                                    error.contains("Error:7") || error.contains("Error:6")
+                if (!isNonCritical) {
+                    onError?.invoke(error)
+                }
                 // On error, try to re-listen if auto mode
                 if (config.autoListenAfterTTS && state != ConversationState.IDLE) {
+                    // V11 Phase 4: Track silence and trigger proactivity
+                    if (isNonCritical) {
+                        silenceCount++
+                        val backend = activeBackend
+                        val now = System.currentTimeMillis()
+                        if (silenceCount >= PROACTIVE_SILENCE_THRESHOLD &&
+                            backend is ProactiveBackend &&
+                            now - lastProactiveTime > PROACTIVE_COOLDOWN_MS) {
+                            // Sustained silence + proactive backend → check for proactive content
+                            silenceCount = 0
+                            scope.launch {
+                                try {
+                                    val proactive = withContext(Dispatchers.IO) {
+                                        backend.evaluateProactivity()
+                                    }
+                                    if (!proactive.isNullOrBlank() && state != ConversationState.IDLE) {
+                                        lastProactiveTime = System.currentTimeMillis()
+                                        Log.i(TAG, "Proactive: ${proactive.take(60)}...")
+                                        onResponse?.invoke("⚡ $proactive")
+                                        if (config.speakResponses) {
+                                            speakResponse(proactive)
+                                        } else {
+                                            beginListening()
+                                        }
+                                    } else {
+                                        delay(200)
+                                        if (state != ConversationState.IDLE) beginListening()
+                                    }
+                                } catch (e: Exception) {
+                                    Log.w(TAG, "Proactive eval failed: ${e.message}")
+                                    delay(200)
+                                    if (state != ConversationState.IDLE) beginListening()
+                                }
+                            }
+                            return@startListening // Don't re-listen here, the proactive branch handles it
+                        }
+                    }
                     scope.launch {
-                        delay(500) // Brief pause before retry
+                        delay(if (isNonCritical) 200 else 500)
                         if (state != ConversationState.IDLE) {
                             beginListening()
                         }

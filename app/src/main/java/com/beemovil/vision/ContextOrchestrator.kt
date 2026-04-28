@@ -23,7 +23,7 @@ class ContextOrchestrator(private val context: Context) {
 
     companion object {
         private const val TAG = "ContextOrchestrator"
-        private const val MAX_CONTEXT_CHARS = 1800 // ~1200 tokens budget for all context (v7.2 expanded for ambient APIs)
+        private const val MAX_CONTEXT_CHARS = 3000 // V11-P4: expanded from 1800 for richer geo data
         private const val ZONE_CHANGE_THRESHOLD_METERS = 2000.0 // ~2km = new zone
     }
 
@@ -106,7 +106,7 @@ class ContextOrchestrator(private val context: Context) {
             }
 
             // Use cached intel (from search or offline cache)
-            val intelText = cachedIntel.toPromptText(350)
+            val intelText = cachedIntel.toPromptText(600) // V11-P4: expanded from 350
             if (intelText.isNotBlank()) {
                 block.locationContext = intelText
             } else {

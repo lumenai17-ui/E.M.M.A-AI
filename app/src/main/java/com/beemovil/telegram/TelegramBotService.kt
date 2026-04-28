@@ -15,6 +15,7 @@ import com.beemovil.R
 import com.beemovil.core.engine.EmmaEngine
 import com.beemovil.llm.LlmFactory
 import com.beemovil.security.SecurePrefs
+import androidx.core.content.edit
 import kotlinx.coroutines.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -53,6 +54,7 @@ class TelegramBotService : Service() {
         const val EXTRA_MODEL = "EXTRA_MODEL"
         const val EXTRA_API_KEY = "EXTRA_API_KEY"
         const val PREF_ALLOWED_CHATS = "telegram_allowed_chats"
+        const val PREF_ALLOWED_USERS = "telegram_allowed_users"
 
         /** Callback for SettingsScreen to receive status updates */
         var onStatusChange: ((status: String, botName: String, messageCount: Int) -> Unit)? = null
@@ -211,7 +213,9 @@ class TelegramBotService : Service() {
         val text: String,
         val fromUsername: String,
         val firstName: String,
-        val messageId: Long
+        val messageId: Long,
+        val chatType: String,       // "private", "group", "supergroup", "channel"
+        val fromUserId: Long        // Telegram user ID (always present, unlike username)
     )
 
     private fun getUpdates(offset: Long, timeout: Int): List<TelegramUpdate> {
@@ -239,7 +243,9 @@ class TelegramBotService : Service() {
                 text = message.optString("text", ""),
                 fromUsername = from?.optString("username", "")?.lowercase() ?: "",
                 firstName = from?.optString("first_name", "Usuario") ?: "Usuario",
-                messageId = message.optLong("message_id", 0)
+                messageId = message.optLong("message_id", 0),
+                chatType = chat.optString("type", "private"),
+                fromUserId = from?.optLong("id", 0L) ?: 0L
             ))
         }
         return updates
@@ -369,9 +375,9 @@ class TelegramBotService : Service() {
         if (update.text.isBlank()) return
 
         // Security: Check if sender is authorized
-        if (!isAuthorized(update.fromUsername, update.chatId)) {
-            Log.w(TAG, "Unauthorized message from @${update.fromUsername} (chat ${update.chatId})")
-            sendMessage(update.chatId, "⛔ No autorizado. Contacta al administrador del bot.")
+        if (!isAuthorized(update)) {
+            Log.w(TAG, "Unauthorized message from @${update.fromUsername} userId=${update.fromUserId} (chat ${update.chatId} ${update.chatType})")
+            sendMessage(update.chatId, "⛔ No autorizado (ID: ${update.fromUserId}). Contacta al administrador del bot.")
             return
         }
 
@@ -444,41 +450,67 @@ class TelegramBotService : Service() {
         }
     }
 
-    private fun isAuthorized(username: String, chatId: Long): Boolean {
-        // Reject if no owner is configured
-        if (ownerUsername.isBlank()) {
-            Log.w(TAG, "Auth DENIED: No owner configured. chatId=$chatId")
-            return false
-        }
+    /**
+     * 3-Layer Authorization System:
+     *  Layer 1: First-Contact Rule — if no owner AND no allowlist, first user auto-registers as owner
+     *  Layer 2: Owner username match — normalized comparison with auto-registration
+     *  Layer 3: Allowlist — chatId (groups+private) and userId checks
+     */
+    private fun isAuthorized(update: TelegramUpdate): Boolean {
+        val prefs = getSharedPreferences("beemovil", Context.MODE_PRIVATE)
+        val allowedChatStr = prefs.getString(PREF_ALLOWED_CHATS, "") ?: ""
+        val allowedChatIds = if (allowedChatStr.isNotBlank()) {
+            allowedChatStr.split(",").mapNotNull { it.trim().toLongOrNull() }.toSet()
+        } else emptySet()
 
-        // Normalize both usernames for robust comparison
-        val normalizedOwner = ownerUsername.removePrefix("@").trim().lowercase()
-        val normalizedSender = username.removePrefix("@").trim().lowercase()
+        val allowedUserStr = prefs.getString(PREF_ALLOWED_USERS, "") ?: ""
+        val allowedUserIds = if (allowedUserStr.isNotBlank()) {
+            allowedUserStr.split(",").mapNotNull { it.trim().toLongOrNull() }.toSet()
+        } else emptySet()
 
-        Log.d(TAG, "Auth check: owner='$normalizedOwner' vs sender='$normalizedSender' chatId=$chatId")
+        Log.d(TAG, "Auth check: owner='$ownerUsername' sender='@${update.fromUsername}' userId=${update.fromUserId} chatId=${update.chatId} type=${update.chatType} allowedChats=${allowedChatIds.size} allowedUsers=${allowedUserIds.size}")
 
-        // Check owner username (normalized)
-        if (normalizedSender.isNotBlank() && normalizedSender == normalizedOwner) {
-            // Auto-register this chat ID for future messages (even if username changes)
-            autoRegisterChatId(chatId)
+        // ── Layer 1: First-Contact Rule ──
+        // If no owner AND no one in any allowlist, the first user that sends /start auto-registers
+        if (ownerUsername.isBlank() && allowedChatIds.isEmpty() && allowedUserIds.isEmpty()) {
+            Log.i(TAG, "First-contact: auto-registering owner @${update.fromUsername} (userId=${update.fromUserId}, chatId=${update.chatId})")
+            val securePrefs = SecurePrefs.get(this)
+            if (update.fromUsername.isNotBlank()) {
+                securePrefs.edit().putString("telegram_owner_username", update.fromUsername.removePrefix("@").trim().lowercase()).apply()
+                ownerUsername = update.fromUsername.removePrefix("@").trim().lowercase()
+            }
+            autoRegisterChatId(update.chatId)
+            autoRegisterUserId(update.fromUserId)
             return true
         }
 
-        // Check allowed chat IDs (covers cases where username is empty or changed)
-        val prefs = getSharedPreferences("beemovil", Context.MODE_PRIVATE)
-        val allowedStr = prefs.getString(PREF_ALLOWED_CHATS, "") ?: ""
-        if (allowedStr.isNotBlank()) {
-            val allowedIds = allowedStr.split(",").mapNotNull { it.trim().toLongOrNull() }
-            if (chatId in allowedIds) {
-                Log.d(TAG, "Auth: Allowed by chat ID $chatId")
+        // ── Layer 2: Owner username match ──
+        if (ownerUsername.isNotBlank()) {
+            val normalizedOwner = ownerUsername.removePrefix("@").trim().lowercase()
+            val normalizedSender = update.fromUsername.removePrefix("@").trim().lowercase()
+            if (normalizedSender.isNotBlank() && normalizedSender == normalizedOwner) {
+                autoRegisterChatId(update.chatId)
+                autoRegisterUserId(update.fromUserId)
                 return true
             }
         }
 
-        Log.w(TAG, "Auth DENIED: '$normalizedSender' != '$normalizedOwner' and chatId=$chatId not in allowlist")
+        // ── Layer 3: Allowlist (chat IDs + user IDs) ──
+        if (update.chatId in allowedChatIds) {
+            Log.d(TAG, "Auth OK: chatId=${update.chatId} in chat allowlist")
+            return true
+        }
+        if (update.fromUserId in allowedUserIds) {
+            Log.d(TAG, "Auth OK: userId=${update.fromUserId} in user allowlist")
+            // Authorized user in a new group → auto-register the group too
+            autoRegisterChatId(update.chatId)
+            return true
+        }
+
+        Log.w(TAG, "Auth DENIED: @${update.fromUsername} userId=${update.fromUserId} chatId=${update.chatId} (${update.chatType}) not in any allowlist")
         return false
     }
-    
+
     private fun autoRegisterChatId(chatId: Long) {
         val prefs = getSharedPreferences("beemovil", Context.MODE_PRIVATE)
         val allowedStr = prefs.getString(PREF_ALLOWED_CHATS, "") ?: ""
@@ -487,6 +519,18 @@ class TelegramBotService : Service() {
             existingIds.add(chatId)
             prefs.edit().putString(PREF_ALLOWED_CHATS, existingIds.joinToString(",")).apply()
             Log.i(TAG, "Auto-registered chatId=$chatId for future authorization")
+        }
+    }
+
+    private fun autoRegisterUserId(userId: Long) {
+        if (userId == 0L) return
+        val prefs = getSharedPreferences("beemovil", Context.MODE_PRIVATE)
+        val existing = prefs.getString(PREF_ALLOWED_USERS, "")?.split(",")
+            ?.mapNotNull { it.trim().toLongOrNull() }?.toMutableSet() ?: mutableSetOf()
+        if (userId !in existing) {
+            existing.add(userId)
+            prefs.edit().putString(PREF_ALLOWED_USERS, existing.joinToString(",")).apply()
+            Log.i(TAG, "Auto-registered userId=$userId for future authorization")
         }
     }
 

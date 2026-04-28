@@ -10,6 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import com.beemovil.telegram.TelegramBotService
 
 /**
  * SelfConfigPlugin — Project Autonomía Phase S2
@@ -40,18 +41,24 @@ class SelfConfigPlugin(private val context: Context) : EmmaPlugin {
                             .put("get_agents_list")
                             .put("get_vision_config")
                             .put("get_voice_config")
+                            .put("get_telegram_allowlist")
                             .put("update_api_key")
                             .put("change_model")
                             .put("toggle_feature")
+                            .put("add_telegram_access")
+                            .put("remove_telegram_access")
                         )
                         put("description", """Operaciones disponibles:
                             LECTURA (🟢):
                             - get_current_model, get_api_keys_status, get_all_settings
                             - get_agents_list, get_vision_config, get_voice_config
+                            - get_telegram_allowlist: Ver quién tiene acceso al bot de Telegram
                             ESCRITURA:
                             - update_api_key: Guardar/actualizar un API key (🔴 requiere confirmación)
                             - change_model: Cambiar provider y modelo LLM activo (🟡)
-                            - toggle_feature: Activar/desactivar una feature (🟡)""".trimIndent())
+                            - toggle_feature: Activar/desactivar una feature (🟡)
+                            - add_telegram_access: Añadir usuario o grupo al bot de Telegram (🟡)
+                            - remove_telegram_access: Quitar acceso de usuario o grupo (🔴)""".trimIndent())
                     })
                     put("provider_name", JSONObject().apply {
                         put("type", "string")
@@ -77,6 +84,15 @@ class SelfConfigPlugin(private val context: Context) : EmmaPlugin {
                         put("type", "string")
                         put("description", "(Para toggle_feature) Nuevo valor. Para booleanos: 'true'/'false'. Para theme: 'light'/'dark'/'system'.")
                     })
+                    put("telegram_id", JSONObject().apply {
+                        put("type", "string")
+                        put("description", "(Para add/remove_telegram_access) El ID numérico del chat o usuario de Telegram. Grupos tienen IDs negativos (ej: -100123456). Usuarios tienen IDs positivos.")
+                    })
+                    put("telegram_id_type", JSONObject().apply {
+                        put("type", "string")
+                        put("enum", JSONArray().put("chat").put("user"))
+                        put("description", "(Para add/remove_telegram_access) Tipo de ID: 'chat' para grupos/canales, 'user' para usuarios individuales.")
+                    })
                 })
                 put("required", JSONArray().put("operation"))
             }
@@ -100,6 +116,10 @@ class SelfConfigPlugin(private val context: Context) : EmmaPlugin {
                     "update_api_key" -> updateApiKey(args)
                     "change_model" -> changeModel(args)
                     "toggle_feature" -> toggleFeature(args)
+                    // Telegram allowlist ops
+                    "get_telegram_allowlist" -> getTelegramAllowlist()
+                    "add_telegram_access" -> addTelegramAccess(args)
+                    "remove_telegram_access" -> removeTelegramAccess(args)
                     else -> "Operación desconocida: $operation"
                 }
             } catch (e: Exception) {
@@ -374,5 +394,115 @@ class SelfConfigPlugin(private val context: Context) : EmmaPlugin {
             }
             else -> "Feature no reconocida: $featureName. Válidas: deepgram_stt, deepgram_tts, theme"
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // TELEGRAM ALLOWLIST OPERATIONS
+    // ═══════════════════════════════════════════════════════════
+
+    private fun getTelegramAllowlist(): String = buildString {
+        val prefs = context.getSharedPreferences("beemovil", Context.MODE_PRIVATE)
+        val securePrefs = SecurePrefs.get(context)
+
+        val ownerUsername = securePrefs.getString("telegram_owner_username", "") ?: ""
+        val chatStr = prefs.getString(TelegramBotService.PREF_ALLOWED_CHATS, "") ?: ""
+        val userStr = prefs.getString(TelegramBotService.PREF_ALLOWED_USERS, "") ?: ""
+
+        val chatIds = if (chatStr.isNotBlank()) chatStr.split(",").mapNotNull { it.trim().toLongOrNull() } else emptyList()
+        val userIds = if (userStr.isNotBlank()) userStr.split(",").mapNotNull { it.trim().toLongOrNull() } else emptyList()
+
+        appendLine("═══ TELEGRAM BOT — ACCESO AUTORIZADO ═══")
+        appendLine()
+        appendLine("👤 Owner: ${if (ownerUsername.isNotBlank()) "@$ownerUsername" else "(no configurado — first-contact rule activa)"}")
+        appendLine()
+
+        appendLine("📋 Chat IDs autorizados (${chatIds.size}):")
+        if (chatIds.isEmpty()) {
+            appendLine("  (ninguno)")
+        } else {
+            chatIds.forEach { id ->
+                val type = if (id < 0) "grupo/supergrupo" else "chat privado"
+                appendLine("  • $id ($type)")
+            }
+        }
+
+        appendLine()
+        appendLine("👥 User IDs autorizados (${userIds.size}):")
+        if (userIds.isEmpty()) {
+            appendLine("  (ninguno)")
+        } else {
+            userIds.forEach { id ->
+                appendLine("  • $id")
+            }
+        }
+
+        appendLine()
+        appendLine("ℹ️ Los usuarios autorizados pueden interactuar con el bot en cualquier grupo. El grupo se auto-registra cuando un usuario autorizado habla ahí.")
+    }
+
+    private suspend fun addTelegramAccess(args: Map<String, Any>): String {
+        val idStr = args["telegram_id"] as? String ?: return "Falta 'telegram_id'. Proporciona el ID numérico del chat o usuario."
+        val idType = (args["telegram_id_type"] as? String)?.lowercase() ?: "chat"
+
+        val id = idStr.toLongOrNull() ?: return "'$idStr' no es un ID numérico válido."
+
+        val prefKey = when (idType) {
+            "user" -> TelegramBotService.PREF_ALLOWED_USERS
+            else -> TelegramBotService.PREF_ALLOWED_CHATS
+        }
+        val label = if (idType == "user") "usuario" else "chat/grupo"
+
+        // SecurityGate: YELLOW
+        val op = SecurityGate.yellow(this@SelfConfigPlugin.id, "add_telegram_access", "Añadir $label $id a la allowlist de Telegram")
+        if (!SecurityGate.evaluate(op)) {
+            return "Operación cancelada."
+        }
+
+        val prefs = context.getSharedPreferences("beemovil", Context.MODE_PRIVATE)
+        val existing = prefs.getString(prefKey, "")?.split(",")
+            ?.mapNotNull { it.trim().toLongOrNull() }?.toMutableSet() ?: mutableSetOf()
+
+        if (id in existing) {
+            return "El $label $id ya está en la allowlist."
+        }
+
+        existing.add(id)
+        prefs.edit().putString(prefKey, existing.joinToString(",")).apply()
+        Log.i(TAG, "Telegram access added: $label $id")
+
+        return "✅ $label $id añadido a la allowlist de Telegram. Total ${existing.size} ${label}s autorizados."
+    }
+
+    private suspend fun removeTelegramAccess(args: Map<String, Any>): String {
+        val idStr = args["telegram_id"] as? String ?: return "Falta 'telegram_id'. Proporciona el ID numérico del chat o usuario."
+        val idType = (args["telegram_id_type"] as? String)?.lowercase() ?: "chat"
+
+        val id = idStr.toLongOrNull() ?: return "'$idStr' no es un ID numérico válido."
+
+        val prefKey = when (idType) {
+            "user" -> TelegramBotService.PREF_ALLOWED_USERS
+            else -> TelegramBotService.PREF_ALLOWED_CHATS
+        }
+        val label = if (idType == "user") "usuario" else "chat/grupo"
+
+        // SecurityGate: RED — removing access is a sensitive operation
+        val op = SecurityGate.red(this@SelfConfigPlugin.id, "remove_telegram_access", "Quitar $label $id de la allowlist de Telegram")
+        if (!SecurityGate.evaluate(op)) {
+            return "Operación cancelada."
+        }
+
+        val prefs = context.getSharedPreferences("beemovil", Context.MODE_PRIVATE)
+        val existing = prefs.getString(prefKey, "")?.split(",")
+            ?.mapNotNull { it.trim().toLongOrNull() }?.toMutableSet() ?: mutableSetOf()
+
+        if (id !in existing) {
+            return "El $label $id no está en la allowlist."
+        }
+
+        existing.remove(id)
+        prefs.edit().putString(prefKey, existing.joinToString(",")).apply()
+        Log.i(TAG, "Telegram access removed: $label $id")
+
+        return "🗑️ $label $id eliminado de la allowlist de Telegram. Quedan ${existing.size} ${label}s autorizados."
     }
 }

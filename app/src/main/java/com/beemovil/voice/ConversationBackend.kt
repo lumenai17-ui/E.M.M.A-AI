@@ -57,6 +57,25 @@ interface ConversationBackend {
 }
 
 /**
+ * ProactiveBackend — V11 Phase 4
+ *
+ * Optional interface that ConversationBackends can implement to provide
+ * proactive responses during periods of user silence.
+ * The ConversationEngine calls evaluateProactivity() after detecting
+ * sustained silence, allowing the backend to decide if it has something
+ * worth saying (e.g., vision alerts, context changes, etc.).
+ */
+interface ProactiveBackend {
+    /**
+     * Evaluate whether the backend has something proactive to say.
+     * Called by ConversationEngine during silence periods.
+     *
+     * @return A proactive response text, or null if nothing to say
+     */
+    suspend fun evaluateProactivity(): String?
+}
+
+/**
  * Configuration for a conversation session.
  */
 data class ConversationConfig(

@@ -65,7 +65,8 @@ fun SettingsScreen(
     val botName = viewModel.telegramBotName.value
 
     // Telegram allowlist
-    val allowedChatsStr = prefs.getString(TelegramBotService.PREF_ALLOWED_CHATS, "") ?: ""
+    var allowedChatsStr by remember { mutableStateOf(prefs.getString(TelegramBotService.PREF_ALLOWED_CHATS, "") ?: "") }
+    var allowedUsersStr by remember { mutableStateOf(prefs.getString(TelegramBotService.PREF_ALLOWED_USERS, "") ?: "") }
     var telegramUsername by remember { mutableStateOf(securePrefs.getString("telegram_owner_username", "") ?: "") }
 
     // Register status callback
@@ -767,7 +768,7 @@ fun SettingsScreen(
                     colors = fieldColors()
                 )
                 Text(
-                    "Solo responderá a mensajes de este usuario. Déjalo vacío para modo abierto.",
+                    "Solo responderá a mensajes de este usuario. Si lo dejas vacío, el primer usuario que escriba se registrará como owner.",
                     fontSize = 9.sp, color = textSecondary.copy(alpha = 0.7f)
                 )
 
@@ -874,10 +875,168 @@ fun SettingsScreen(
                         Text(
                             "1. Abre Telegram → busca @BotFather → /newbot\n" +
                             "2. Copia el token → pégalo arriba\n" +
-                            "3. Pon tu @username para que solo tú puedas usarlo\n" +
+                            "3. Pon tu @username (o deja vacío — el primer /start se auto-registra)\n" +
                             "4. Toca 'Iniciar Bot' → ¡listo! Háblale a tu bot.",
                             fontSize = 11.sp, color = textSecondary
                         )
+                    }
+                }
+
+                // ── Allowlist Management ──
+                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                    color = if (isDark) Color(0xFF1A2636) else Color(0xFFF0F4F8),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text("Acceso Autorizado", fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp, color = textPrimary)
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // Chat IDs
+                        val chatIds = if (allowedChatsStr.isNotBlank())
+                            allowedChatsStr.split(",").mapNotNull { it.trim().toLongOrNull() } else emptyList()
+                        val userIds = if (allowedUsersStr.isNotBlank())
+                            allowedUsersStr.split(",").mapNotNull { it.trim().toLongOrNull() } else emptyList()
+
+                        if (chatIds.isEmpty() && userIds.isEmpty()) {
+                            Text(
+                                "Sin accesos registrados. El primer usuario que escriba /start se registrará automáticamente.",
+                                fontSize = 11.sp, color = textSecondary
+                            )
+                        } else {
+                            if (chatIds.isNotEmpty()) {
+                                Text("Chats (${chatIds.size})", fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold, color = textSecondary)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                @OptIn(ExperimentalLayoutApi::class)
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    chatIds.forEach { id ->
+                                        InputChip(
+                                            selected = false,
+                                            onClick = {},
+                                            label = {
+                                                val label = if (id < 0) "Grupo $id" else "Chat $id"
+                                                Text(label, fontSize = 10.sp)
+                                            },
+                                            trailingIcon = {
+                                                IconButton(
+                                                    onClick = {
+                                                        val updated = chatIds.filter { it != id }
+                                                        val newStr = updated.joinToString(",")
+                                                        prefs.edit().putString(TelegramBotService.PREF_ALLOWED_CHATS, newStr).apply()
+                                                        allowedChatsStr = newStr
+                                                        Toast.makeText(context, "Chat $id eliminado", Toast.LENGTH_SHORT).show()
+                                                    },
+                                                    modifier = Modifier.size(16.dp)
+                                                ) {
+                                                    Icon(Icons.Filled.Close, "Remove", modifier = Modifier.size(12.dp), tint = Color(0xFFF44336))
+                                                }
+                                            },
+                                            modifier = Modifier.height(28.dp),
+                                            shape = RoundedCornerShape(6.dp),
+                                            colors = InputChipDefaults.inputChipColors(
+                                                containerColor = if (id < 0) Color(0xFF2196F3).copy(alpha = 0.15f) else Color(0xFF4CAF50).copy(alpha = 0.15f)
+                                            )
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                            }
+
+                            if (userIds.isNotEmpty()) {
+                                Text("Usuarios (${userIds.size})", fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold, color = textSecondary)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                @OptIn(ExperimentalLayoutApi::class)
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    userIds.forEach { id ->
+                                        InputChip(
+                                            selected = false,
+                                            onClick = {},
+                                            label = { Text("User $id", fontSize = 10.sp) },
+                                            trailingIcon = {
+                                                IconButton(
+                                                    onClick = {
+                                                        val updated = userIds.filter { it != id }
+                                                        val newStr = updated.joinToString(",")
+                                                        prefs.edit().putString(TelegramBotService.PREF_ALLOWED_USERS, newStr).apply()
+                                                        allowedUsersStr = newStr
+                                                        Toast.makeText(context, "User $id eliminado", Toast.LENGTH_SHORT).show()
+                                                    },
+                                                    modifier = Modifier.size(16.dp)
+                                                ) {
+                                                    Icon(Icons.Filled.Close, "Remove", modifier = Modifier.size(12.dp), tint = Color(0xFFF44336))
+                                                }
+                                            },
+                                            modifier = Modifier.height(28.dp),
+                                            shape = RoundedCornerShape(6.dp),
+                                            colors = InputChipDefaults.inputChipColors(
+                                                containerColor = Color(0xFFFF9800).copy(alpha = 0.15f)
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Manual add ID
+                        Spacer(modifier = Modifier.height(8.dp))
+                        var newIdInput by remember { mutableStateOf("") }
+                        var addAsUser by remember { mutableStateOf(false) }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = newIdInput,
+                                onValueChange = { newIdInput = it },
+                                placeholder = { Text("ID numérico", color = textSecondary, fontSize = 11.sp) },
+                                modifier = Modifier.weight(1f).height(44.dp),
+                                singleLine = true,
+                                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp),
+                                colors = fieldColors(),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            FilterChip(
+                                selected = addAsUser,
+                                onClick = { addAsUser = !addAsUser },
+                                label = { Text(if (addAsUser) "User" else "Chat", fontSize = 10.sp) },
+                                modifier = Modifier.height(28.dp),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Color(0xFFFF9800).copy(alpha = 0.3f),
+                                    selectedLabelColor = Color(0xFFFF9800)
+                                )
+                            )
+                            IconButton(
+                                onClick = {
+                                    val id = newIdInput.trim().toLongOrNull()
+                                    if (id == null) {
+                                        Toast.makeText(context, "ID no válido", Toast.LENGTH_SHORT).show()
+                                        return@IconButton
+                                    }
+                                    val prefKey = if (addAsUser) TelegramBotService.PREF_ALLOWED_USERS else TelegramBotService.PREF_ALLOWED_CHATS
+                                    val currentStr = prefs.getString(prefKey, "") ?: ""
+                                    val existing = currentStr.split(",").mapNotNull { it.trim().toLongOrNull() }.toMutableSet()
+                                    existing.add(id)
+                                    val newStr = existing.joinToString(",")
+                                    prefs.edit().putString(prefKey, newStr).apply()
+                                    if (addAsUser) allowedUsersStr = newStr else allowedChatsStr = newStr
+                                    newIdInput = ""
+                                    Toast.makeText(context, "${if (addAsUser) "User" else "Chat"} $id añadido", Toast.LENGTH_SHORT).show()
+                                }
+                            ) {
+                                Icon(Icons.Filled.Add, "Add", tint = Color(0xFF4CAF50), modifier = Modifier.size(20.dp))
+                            }
+                        }
                     }
                 }
             }
