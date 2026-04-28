@@ -90,6 +90,7 @@ fun LiveVisionScreen(
     var isSpeakerMuted by remember { mutableStateOf(false) }  // V11: Independent speaker mute
     var isMuted by remember { mutableStateOf(false) }  // Legacy compat (mapped to isSpeakerMuted)
     var liveResult by remember { mutableStateOf("") }
+    var statusMessage by remember { mutableStateOf("") } // Transient status (retries, throttle) — NOT shown in result card
     var frameCount by remember { mutableIntStateOf(0) }
     var intervalSeconds by remember { mutableIntStateOf(5) }
     var showSettings by remember { mutableStateOf(false) }
@@ -317,7 +318,12 @@ fun LiveVisionScreen(
             }
         }
         captureLoop.onError = { error ->
-            liveResult = "⚠️ $error"
+            // Bug 4+5 FIX: Retry/throttle messages go to statusMessage (transient), not liveResult
+            if (error.startsWith("RETRY:") || error.startsWith("ALERTA:")) {
+                statusMessage = error.removePrefix("RETRY: ").removePrefix("ALERTA: ")
+            } else {
+                liveResult = "⚠️ $error"
+            }
         }
         captureLoop.onFrameProcessed = { count ->
             frameCount = count
@@ -357,6 +363,12 @@ fun LiveVisionScreen(
 
         // Capture loop
         while (isLiveActive && captureLoop.sessionId.get() == mySessionId) {
+            // Bug 6 FIX: Skip capture in Pocket mode — PocketVisionService handles narration
+            if (selectedMode == VisionMode.POCKET) {
+                kotlinx.coroutines.delay(1000)
+                continue
+            }
+
             // V10: Adaptive interval based on battery
             val batteryPct = getBatteryLevel(context)
             val adaptiveDelay = captureLoop.getAdaptiveInterval(intervalSeconds, batteryPct)
@@ -465,7 +477,17 @@ fun LiveVisionScreen(
             liveResult = emmaText
         }
         conversationEngine.onError = { error ->
-            liveResult = "Error: $error"
+            // Bug 5 FIX: Filter transient network errors from display
+            val isTransient = error.contains("timeout", ignoreCase = true) ||
+                              error.contains("429", ignoreCase = true) ||
+                              error.contains("502", ignoreCase = true) ||
+                              error.contains("503", ignoreCase = true) ||
+                              error.contains("ECONNRESET", ignoreCase = true)
+            if (isTransient) {
+                statusMessage = error.take(60)
+            } else {
+                liveResult = "Error: $error"
+            }
         }
 
         // Wire the VisionConversationBackend's context providers
@@ -856,6 +878,8 @@ fun LiveVisionScreen(
         }
 
         // ── V4: Navigation HUD (below top bar) ──
+        // Bug 1 FIX: Push nav HUD down when conversation banner is visible
+        val navTopPadding = if (bannerVisible) 88.dp else 60.dp
         val nav = navUpdate
         if (isNavigating && nav != null && nav.phase != NavPhase.IDLE) {
             Surface(
@@ -866,7 +890,7 @@ fun LiveVisionScreen(
                     .align(Alignment.TopCenter)
                     .statusBarsPadding()
                     .padding(
-                        top = 60.dp,
+                        top = navTopPadding,
                         // In DASHCAM: narrow to fit between speed badge (left) and minimap (right)
                         start = if (selectedMode == VisionMode.DASHCAM) 80.dp else 16.dp,
                         end = if (selectedMode == VisionMode.DASHCAM) 140.dp else 16.dp
@@ -1222,8 +1246,8 @@ fun LiveVisionScreen(
 
         // ── BUG-3 FIX: Dashcam HUD — MiniMap + Speed badge (only in DASHCAM mode) ──
         if (selectedMode == VisionMode.DASHCAM) {
-            // MiniMapPIP — already built, just needs to be rendered
-            if (currentGpsData.latitude != 0.0) {
+            // Bug 3 FIX: Hide MiniMap when Dashboard overlay is showing (same TopEnd position)
+            if (currentGpsData.latitude != 0.0 && !showDashboard) {
                 MiniMapPIP(
                     gpsData = currentGpsData,
                     navigator = gpsNavigator,
@@ -1761,7 +1785,8 @@ fun LiveVisionScreen(
                     Text("$activeSourceCount/7", fontSize = 10.sp, color = Color.White)
                 }
             } else {
-                Column(Modifier.padding(10.dp).width(130.dp)) {
+                // Bug 2 FIX: Limit expanded height to prevent overlapping controls bar
+                Column(Modifier.padding(10.dp).width(130.dp).heightIn(max = 180.dp)) {
                     Text("Fuentes activas", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(4.dp))
                     SourceRow(Icons.Filled.GpsFixed, "GPS", gpsActive)
