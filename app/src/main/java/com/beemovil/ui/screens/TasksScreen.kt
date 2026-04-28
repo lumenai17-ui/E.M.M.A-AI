@@ -483,15 +483,25 @@ fun TasksScreen(viewModel: ChatViewModel) {
                                                     .clickable {
                                                         try {
                                                             val file = java.io.File(att.filePath)
+                                                            if (!file.exists()) {
+                                                                android.widget.Toast.makeText(context, "Archivo no encontrado", android.widget.Toast.LENGTH_SHORT).show()
+                                                                return@clickable
+                                                            }
                                                             val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
                                                             val intent = Intent(Intent.ACTION_VIEW).apply { setDataAndType(uri, att.mimeType ?: "*/*"); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }
                                                             context.startActivity(intent)
-                                                        } catch (_: Exception) {}
+                                                        } catch (e: Exception) {
+                                                            android.widget.Toast.makeText(context, "No se pudo abrir: ${e.message?.take(40)}", android.widget.Toast.LENGTH_SHORT).show()
+                                                        }
                                                     })
                                                 // Share individual file
                                                 IconButton(onClick = {
                                                     try {
                                                         val file = java.io.File(att.filePath)
+                                                        if (!file.exists()) {
+                                                            android.widget.Toast.makeText(context, "Archivo no encontrado", android.widget.Toast.LENGTH_SHORT).show()
+                                                            return@IconButton
+                                                        }
                                                         val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
                                                         val intent = Intent(Intent.ACTION_SEND).apply {
                                                             type = att.mimeType ?: "*/*"
@@ -499,7 +509,9 @@ fun TasksScreen(viewModel: ChatViewModel) {
                                                             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                                         }
                                                         context.startActivity(Intent.createChooser(intent, "Enviar archivo"))
-                                                    } catch (_: Exception) {}
+                                                    } catch (e: Exception) {
+                                                        android.widget.Toast.makeText(context, "No se pudo compartir: ${e.message?.take(40)}", android.widget.Toast.LENGTH_SHORT).show()
+                                                    }
                                                 }, modifier = Modifier.size(28.dp)) {
                                                     Icon(Icons.Filled.Share, "Share", tint = accent, modifier = Modifier.size(16.dp))
                                                 }

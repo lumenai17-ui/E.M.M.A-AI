@@ -8,4 +8,8 @@
     <cache-path name="emma_cache" path="." />
     <!-- Acceso al directorio público Downloads/EMMA/ donde se guardan archivos generados -->
     <external-path name="emma_downloads" path="Download/EMMA/" />
+    <!-- Adjuntos de tareas copiados a almacenamiento interno (context.filesDir) -->
+    <files-path name="task_attachments" path="task_attachments/" />
+    <!-- Fallback: cualquier archivo en filesDir (para attachments de plugins) -->
+    <files-path name="internal_files" path="." />
 </paths>
