@@ -188,12 +188,7 @@ fun DashboardScreen(
                 icon = Icons.Filled.TaskAlt,
                 onClick = { viewModel.currentScreen.value = "tasks" }
             )
-            MainModuleCard(
-                title = "Correo",
-                subtitle = "Revisa tu bandeja de entrada",
-                icon = Icons.Filled.Email,
-                onClick = { viewModel.currentScreen.value = "email_inbox" }
-            )
+
 
             val recientes = viewModel.allThreads
                 .filter { it.threadId != "main" && it.threadId != "default_session" }
